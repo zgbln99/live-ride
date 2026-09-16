@@ -17,7 +17,7 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 45
     env:
-      ASSEMBLED: ${{ runner.temp }}/wanderer-live-ride
+      ASSEMBLED: /tmp/wanderer-live-ride
 
     steps:
       - name: Checkout Live Ride overlay
