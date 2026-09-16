@@ -1,0 +1,80 @@
+name: Assemble Live Ride
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: assemble-live-ride
+  cancel-in-progress: true
+
+jobs:
+  assemble-and-test:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    env:
+      ASSEMBLED: ${{ runner.temp }}/wanderer-live-ride
+
+    steps:
+      - name: Checkout Live Ride overlay
+        uses: actions/checkout@v4
+
+      - name: Assemble pinned Wanderer + Live Ride
+        run: bash scripts/assemble.sh "$ASSEMBLED"
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+
+      - name: Check SvelteKit web app
+        working-directory: ${{ env.ASSEMBLED }}/web
+        run: |
+          npm ci
+          npm run check
+
+      - name: Setup Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: '1.25.0'
+
+      - name: Test PocketBase backend
+        working-directory: ${{ env.ASSEMBLED }}/db
+        run: go test ./...
+
+      - name: Setup Flutter
+        uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+          cache: true
+
+      - name: Resolve Flutter dependencies
+        working-directory: ${{ env.ASSEMBLED }}/app
+        run: flutter pub get
+
+      - name: Analyze Live Ride mobile code
+        working-directory: ${{ env.ASSEMBLED }}/app
+        run: flutter analyze lib/live_ride lib/heart_rate lib/routes/navigation_screen.dart
+
+      - name: Test BLE heart-rate parser
+        working-directory: ${{ env.ASSEMBLED }}/app
+        run: flutter test test/heart_rate/ble_heart_rate_parser_test.dart
+
+      - name: Publish full assembled branch
+        if: success()
+        working-directory: ${{ env.ASSEMBLED }}
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPOSITORY: ${{ github.repository }}
+        run: |
+          git config user.name "live-ride-bot"
+          git config user.email "live-ride-bot@users.noreply.github.com"
+          git switch -c assembled
+          git add -A
+          git commit -m "feat: assemble Live Ride on Wanderer ${GITHUB_SHA::12}"
+          git remote set-url origin "https://x-access-token:${GH_TOKEN}@github.com/${GH_REPOSITORY}.git"
+          git push --force origin assembled
