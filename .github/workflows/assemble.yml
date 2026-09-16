@@ -44,7 +44,13 @@ jobs:
 
       - name: Test PocketBase backend
         working-directory: ${{ env.ASSEMBLED }}/db
-        run: go test ./...
+        run: |
+          # Upstream feature/app currently opens this seed relative to the
+          # permissions package cwd. Mirror the real seed into that cwd so the
+          # complete upstream test suite can run instead of skipping it.
+          mkdir -p tests/permissions/migrations/initial_data
+          ln -sf ../../../../migrations/initial_data/regions_seed.json tests/permissions/migrations/initial_data/regions_seed.json
+          go test ./...
 
       - name: Setup Flutter
         uses: subosito/flutter-action@v2
