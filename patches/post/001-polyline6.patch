@@ -1,0 +1,12 @@
+diff --git a/web/src/routes/live/[token]/+page.svelte b/web/src/routes/live/[token]/+page.svelte
+--- a/web/src/routes/live/[token]/+page.svelte
++++ b/web/src/routes/live/[token]/+page.svelte
+@@ -53,7 +53,7 @@
+     };
+ 
+ 
+-    function decodePolyline(encoded: string, precision = 5): [number, number][] {
++    function decodePolyline(encoded: string, precision = 6): [number, number][] {
+         const coordinates: [number, number][] = [];
+         const factor = Math.pow(10, precision);
+         let index = 0;
