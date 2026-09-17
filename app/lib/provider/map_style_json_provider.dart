@@ -1,3 +1,6 @@
+import 'dart:convert';
+
+import 'package:dio/dio.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart' show rootBundle;
 import 'package:riverpod_annotation/riverpod_annotation.dart';
@@ -25,8 +28,25 @@ part 'map_style_json_provider.g.dart';
 @Riverpod(keepAlive: true)
 Future<String> mapStyleJson(Ref ref) async {
   final mode = ref.watch(themeModeProvider);
-  final sources = await ref.watch(mapStyleSourcesProvider.future);
   final brightness = effectiveBrightness(mode);
+
+  // Live Ride defaults to OpenFreeMap for the online basemap. It is a
+  // MapLibre-native, keyless OpenMapTiles service, so a fresh self-hosted
+  // Wanderer instance doesn't render an empty map just because the operator
+  // hasn't provisioned a Protomaps API key yet.
+  final openFreeMapStyle = brightness == Brightness.dark
+      ? 'https://tiles.openfreemap.org/styles/dark'
+      : 'https://tiles.openfreemap.org/styles/liberty';
+  try {
+    final response = await Dio().get<Object?>(openFreeMapStyle);
+    final data = response.data;
+    if (data is String && data.isNotEmpty) return data;
+    if (data is Map) return jsonEncode(data);
+  } catch (_) {
+    // Fall through to the operator-provided/bundled Wanderer style below.
+  }
+
+  final sources = await ref.watch(mapStyleSourcesProvider.future);
   final assetPath = brightness == Brightness.dark
       ? 'assets/map/wanderer_dark.json'
       : 'assets/map/wanderer_light.json';
