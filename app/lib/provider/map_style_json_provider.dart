@@ -1,10 +1,10 @@
 import 'dart:convert';
 
-import 'package:dio/dio.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart' show rootBundle;
 import 'package:riverpod_annotation/riverpod_annotation.dart';
 import 'package:wanderer/provider/local_settings_provider.dart';
+import 'package:wanderer/provider/api_provider.dart';
 import 'package:wanderer/provider/map_style_sources_provider.dart';
 
 part 'map_style_json_provider.g.dart';
@@ -30,20 +30,23 @@ Future<String> mapStyleJson(Ref ref) async {
   final mode = ref.watch(themeModeProvider);
   final brightness = effectiveBrightness(mode);
 
-  // Live Ride defaults to OpenFreeMap for the online basemap. It is a
-  // MapLibre-native, keyless OpenMapTiles service, so a fresh self-hosted
-  // Wanderer instance doesn't render an empty map just because the operator
-  // hasn't provisioned a Protomaps API key yet.
-  final openFreeMapStyle = brightness == Brightness.dark
-      ? 'https://tiles.openfreemap.org/styles/dark'
-      : 'https://tiles.openfreemap.org/styles/liberty';
+  // Live Ride fetches the keyless OpenFreeMap style through our own server.
+  // Keeping this request on the instance origin avoids iOS/client-specific
+  // blocking by third-party style endpoints and gives us one place to cache
+  // or swap the map provider later.
   try {
-    final response = await Dio().get<Object?>(openFreeMapStyle);
+    final api = ref.watch(apiProvider);
+    final response = await api.get(
+      '/map/style',
+      queryParameters: {
+        'theme': brightness == Brightness.dark ? 'dark' : 'liberty',
+      },
+    );
     final data = response.data;
     if (data is String && data.isNotEmpty) return data;
     if (data is Map) return jsonEncode(data);
   } catch (_) {
-    // Fall through to the operator-provided/bundled Wanderer style below.
+    // Keep Wanderer's operator-configured style as a defensive fallback.
   }
 
   final sources = await ref.watch(mapStyleSourcesProvider.future);
