@@ -80,6 +80,11 @@ jobs:
           git config user.name "live-ride-bot"
           git config user.email "live-ride-bot@users.noreply.github.com"
           git switch -c assembled
+          # The upstream repository carries its own Actions workflows. The
+          # GitHub App token intentionally has contents:write but not the much
+          # broader workflows permission, so don't republish upstream CI files
+          # on this generated branch. The Live Ride CI remains on main.
+          rm -rf .github/workflows
           git add -A
           git commit -m "feat: assemble Live Ride on Wanderer ${GITHUB_SHA::12}"
           git remote set-url origin "https://x-access-token:${GH_TOKEN}@github.com/${GH_REPOSITORY}.git"
