@@ -1,0 +1,18 @@
+diff --git a/app/ios/Runner/Info.plist b/app/ios/Runner/Info.plist
+--- a/app/ios/Runner/Info.plist
++++ b/app/ios/Runner/Info.plist
+@@ -82,6 +82,8 @@
+ 		</dict>
+ 	</dict>
++	<key>NSBluetoothAlwaysUsageDescription</key>
++	<string>Live Ride uses Bluetooth to receive live heart-rate data from your WHOOP while you ride.</string>
+ 	<key>NSCameraUsageDescription</key>
+ 	<string>Wanderer needs camera access so you can take a new profile photo.</string>
+ 	<key>NSLocationAlwaysAndWhenInUseUsageDescription</key>
+@@ -119,6 +121,7 @@
+ 	<key>UIBackgroundModes</key>
+ 	<array>
++		<string>bluetooth-central</string>
+ 		<string>location</string>
+ 	</array>
+ 	<key>UILaunchStoryboardName</key>
