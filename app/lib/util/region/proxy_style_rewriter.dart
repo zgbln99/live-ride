@@ -53,6 +53,17 @@ Map<String, dynamic> rewriteStyleForProxy(
 
   final out = jsonDecode(jsonEncode(style)) as Map<String, dynamic>;
 
+  // OpenFreeMap uses the OpenMapTiles schema while Wanderer's downloaded
+  // regional PMTiles/proxy pipeline currently uses the Protomaps basemap
+  // schema. Rewriting this style to the Protomaps proxy would mismatch source
+  // layers (for example `transportation` vs `roads`) and render a blank map.
+  // Until offline packs support OpenMapTiles too, keep this keyless online
+  // style on its native endpoints.
+  final originalSources = out['sources'];
+  if (originalSources is Map && originalSources.containsKey('openmaptiles')) {
+    return out;
+  }
+
   out['glyphs'] = '$proxyBaseUrl/glyphs/{fontstack}/{range}.pbf';
   out['sprite'] = '$proxyBaseUrl/sprite/${dark ? 'dark' : 'light'}';
 
