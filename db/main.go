@@ -205,6 +205,15 @@ func onBeforeServeHandler(client meilisearch.ServiceManager) func(se *core.Serve
 func registerRoutes(se *core.ServeEvent, client meilisearch.ServiceManager) {
 	se.Router.GET("/health", routes.Health)
 
+	// Live Ride: authenticated riders write telemetry; spectators only need
+	// possession of the random share token embedded in the public URL.
+	se.Router.POST("/live-rides", routes.LiveRideCreate).Bind(apis.RequireAuth())
+	se.Router.POST("/live-rides/join", routes.LiveRideJoin).Bind(apis.RequireAuth())
+	se.Router.POST("/live-rides/{id}/telemetry", routes.LiveRideTelemetry).Bind(apis.RequireAuth())
+	se.Router.POST("/live-rides/{id}/stop", routes.LiveRideStop).Bind(apis.RequireAuth())
+	se.Router.GET("/live/{token}", routes.LiveRidePublicSnapshot)
+	se.Router.GET("/live/{token}/route", routes.LiveRidePublicRoute)
+
 	se.Router.POST("/auth/token", routes.AuthToken)
 	se.Router.POST("/user/email", routes.UserEmailChange)
 	se.Router.POST("/waypoint/cluster", routes.WaypointCluster)

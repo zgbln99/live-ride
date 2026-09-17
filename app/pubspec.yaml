@@ -7,6 +7,7 @@ environment:
   sdk: ^3.11.5
 
 dependencies:
+  bluetooth_low_energy: ^6.2.1
   collection: ^1.19.1
   cookie_jar: ^4.0.9
   dio: ^5.9.2

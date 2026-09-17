@@ -26,6 +26,7 @@ import 'package:wanderer/models/navigate_response.dart';
 import 'package:wanderer/models/trail.dart';
 import 'package:wanderer/models/waypoint.dart';
 import 'package:wanderer/provider/auth_provider.dart';
+import 'package:wanderer/provider/api_provider.dart';
 import 'package:wanderer/provider/foreground_position_stream_provider.dart';
 import 'package:wanderer/provider/local_settings_provider.dart';
 import 'package:wanderer/provider/map_style_json_provider.dart';
@@ -49,6 +50,10 @@ import 'package:wanderer/util/route/track_position_matcher.dart';
 import 'package:wanderer/models/route_travel_bucket.dart';
 import 'package:wanderer/actions/resolve_track_save_options.dart';
 import 'package:wanderer/services/tracelet_position_source.dart';
+import 'package:wanderer/heart_rate/ble_heart_rate_source.dart';
+import 'package:wanderer/live_ride/live_ride_api.dart';
+import 'package:wanderer/live_ride/live_ride_control_sheet.dart';
+import 'package:wanderer/live_ride/live_ride_coordinator.dart';
 import 'package:wanderer/actions/import_trail_file.dart';
 import 'package:wanderer/util/route/valhalla.dart';
 
@@ -140,6 +145,11 @@ class _NavigationScreenState extends ConsumerState<NavigationScreen>
   late final TraceletPositionSource _positionSource;
   late final Stream<geo.Position> _positionStream;
   StreamSubscription<geo.Position>? _sub;
+
+  /// Live Ride consumes the SAME Tracelet position stream as navigation.
+  /// Starting live sharing therefore never creates a second GPS session.
+  late final BleHeartRateSource _heartRateSource;
+  late final LiveRideCoordinator _liveRideCoordinator;
 
   /// Drives `NavigationStatsNotifier.setStationary` from tracelet's native
   /// speed-motion engine (via [TraceletPositionSource.isMovingStream]), so
@@ -481,6 +491,13 @@ class _NavigationScreenState extends ConsumerState<NavigationScreen>
 
     _positionSource = TraceletPositionSource();
     _positionStream = _positionSource.stream;
+    _heartRateSource = BleHeartRateSource();
+    _liveRideCoordinator = LiveRideCoordinator(
+      api: LiveRideApi(ref.read(apiProvider)),
+      positions: _positionStream,
+      statsSnapshot: () => ref.read(_statsProviderInstance),
+      heartRate: _heartRateSource,
+    );
     // Couples tracelet's native speed-motion engine to the stats notifier:
     // stationary → freeze timer/GPS-power/stats; moving → auto-resume. The
     // notifier never computes motion itself, it only reacts to this stream.
@@ -867,6 +884,7 @@ class _NavigationScreenState extends ConsumerState<NavigationScreen>
     _liveTrackMeters.dispose();
     _sheetController.dispose();
     _waypointSheetController.dispose();
+    unawaited(_disposeLiveRideResources());
     super.dispose();
   }
 
@@ -2199,6 +2217,39 @@ class _NavigationScreenState extends ConsumerState<NavigationScreen>
     );
   }
 
+  Future<void> _disposeLiveRideResources() async {
+    await _liveRideCoordinator.dispose();
+    await _heartRateSource.dispose();
+  }
+
+  Future<void> _openLiveRideSheet() async {
+    await showLiveRideControlSheet(
+      context,
+      coordinator: _liveRideCoordinator,
+      heartRate: _heartRateSource,
+      trailId: widget.isRecording ? null : widget.id,
+    );
+    if (mounted) setState(() {});
+  }
+
+  Widget _buildLiveRideFab() {
+    final active = _liveRideCoordinator.isActive;
+    return FloatingActionButton.small(
+      heroTag: 'nav_live_ride',
+      tooltip: active ? 'Live Ride is active' : 'Start or join Live Ride',
+      elevation: 2,
+      shape: const StadiumBorder(),
+      backgroundColor: active
+          ? Colors.redAccent
+          : Theme.of(context).colorScheme.surface,
+      onPressed: _openLiveRideSheet,
+      child: Icon(
+        Icons.sensors,
+        color: active ? Colors.white : Theme.of(context).colorScheme.onSurface,
+      ),
+    );
+  }
+
   Widget _buildButtonRow(BuildContext context, AppLocalizations localizations) {
     if (widget.isRecording) {
       return Padding(
@@ -2233,6 +2284,9 @@ class _NavigationScreenState extends ConsumerState<NavigationScreen>
                   : const FaIcon(FontAwesomeIcons.stop),
             ),
 
+            // Share this session's existing GPS/stats/HR with spectators.
+            _buildLiveRideFab(),
+
             // Right — toggle between additional stats and elevation profile.
             _buildElevationFab(localizations),
           ],
@@ -2262,6 +2316,9 @@ class _NavigationScreenState extends ConsumerState<NavigationScreen>
 
           // Center — dominant Pause/Resume.
           _buildPauseFab(localizations),
+
+          // Live Ride — create/join a shared tracking session and connect HR.
+          _buildLiveRideFab(),
 
           // Right — toggle between additional stats and elevation profile.
           _buildElevationFab(localizations),

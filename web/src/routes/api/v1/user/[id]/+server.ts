@@ -37,6 +37,22 @@ export async function GET(event: RequestEvent) {
     try {
         const r = await show<User>(event, Collection.users)
 
+        // PocketBase returns reverse relations (`*_via_*`) as arrays even
+        // when this model has a strict 1:1 relationship. The mobile User model
+        // expects a single Actor/Settings object, so normalise the expanded
+        // payload at the API boundary. Without this, Dart attempts to cast a
+        // List<dynamic> to Map<String, dynamic> immediately after login.
+        if (r.expand) {
+            const actor = r.expand.activitypub_actors_via_user;
+            const settings = r.expand.settings_via_user;
+            if (Array.isArray(actor)) {
+                r.expand.activitypub_actors_via_user = actor[0] ?? null;
+            }
+            if (Array.isArray(settings)) {
+                r.expand.settings_via_user = settings[0] ?? null;
+            }
+        }
+
         return json(r)
     } catch (e: any) {
         return handleError(e);
