@@ -21,6 +21,7 @@ class WandererLayout extends ConsumerWidget {
     final router = ref.watch(routerProvider);
     final user = ref.watch(authProvider).value;
     final isOnline = ref.watch(onlineStatusProvider);
+    final l10n = AppLocalizations.of(context)!;
 
     final int selectedIndex = _calculateSelectedIndex(router.state.uri.path);
     final unselectedColor = Theme.of(
@@ -53,7 +54,7 @@ class WandererLayout extends ConsumerWidget {
     return Scaffold(
       extendBody: true,
       floatingActionButtonLocation: FloatingActionButtonLocation.centerDocked,
-      floatingActionButton: FloatingActionButton(
+      floatingActionButton: FloatingActionButton.extended(
         heroTag: 'new_trail',
         shape: const StadiumBorder(),
         elevation: 2,
@@ -61,8 +62,9 @@ class WandererLayout extends ConsumerWidget {
             ? Theme.of(context).colorScheme.secondaryContainer
             : Theme.of(context).colorScheme.surface,
         foregroundColor: Theme.of(context).colorScheme.onSurface,
-        onPressed: () => router.pushReplacement('/trail/create'),
-        child: const FaIcon(FontAwesomeIcons.plus, size: 18),
+        onPressed: () => router.push('/trail/create'),
+        icon: const FaIcon(FontAwesomeIcons.plus, size: 16),
+        label: Text(l10n.new_trail),
       ),
       bottomNavigationBar: BottomAppBar(
         shape: const CircularNotchedRectangle(),
@@ -95,7 +97,7 @@ class WandererLayout extends ConsumerWidget {
                 unselectedColor: unselectedColor,
                 onTap: () => onTap(1),
               ),
-              const SizedBox(width: kBottomNavigationBarHeight - 16),
+              const SizedBox(width: 128),
               _NavItem(
                 icon: const FaIcon(FontAwesomeIcons.bookAtlas),
                 label: AppLocalizations.of(context)!.library,
