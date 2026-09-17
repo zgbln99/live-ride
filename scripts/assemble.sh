@@ -10,7 +10,10 @@ DEST="${1:-$ROOT/.work/assembled}"
 rm -rf "$DEST"
 mkdir -p "$(dirname "$DEST")"
 
-git clone --filter=blob:none --no-checkout "$UPSTREAM_REPO" "$DEST"
+# Use a complete clone. The previous blob-filtered clone passed all builds but
+# failed when CI tried to push the assembled branch because Git could not
+# materialize a promised upstream object from the source remote.
+git clone --no-checkout "$UPSTREAM_REPO" "$DEST"
 git -C "$DEST" fetch origin feature/app
 git -C "$DEST" checkout --detach "$UPSTREAM_REF"
 
