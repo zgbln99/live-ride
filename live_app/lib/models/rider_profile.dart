@@ -14,6 +14,9 @@ class RiderProfile {
     this.keepScreenAwake = true,
     this.weatherEnabled = true,
     this.autoLive = false,
+    this.autoPause = true,
+    this.autoPauseSpeedKmh = 3.0,
+    this.autoPauseDelaySeconds = 5,
     this.bio = '',
     this.location = '',
     this.avatarPath = '',
@@ -40,6 +43,16 @@ class RiderProfile {
   final bool keepScreenAwake;
   final bool weatherEnabled;
   final bool autoLive;
+
+  /// Automatyczna pauza na światłach i postojach.
+  final bool autoPause;
+
+  /// Poniżej tej prędkości zawodnik liczy się jako stojący.
+  final double autoPauseSpeedKmh;
+
+  /// Ile sekund postoju, zanim licznik się zatrzyma. Zero sekund robiłoby
+  /// pauzę na każdym hamowaniu przed zakrętem.
+  final int autoPauseDelaySeconds;
 
   /// Krótki opis pokazywany na profilu i w widoku LIVE.
   final String bio;
@@ -132,6 +145,9 @@ class RiderProfile {
     bool? keepScreenAwake,
     bool? weatherEnabled,
     bool? autoLive,
+    bool? autoPause,
+    double? autoPauseSpeedKmh,
+    int? autoPauseDelaySeconds,
     String? bio,
     String? location,
     String? avatarPath,
@@ -152,6 +168,9 @@ class RiderProfile {
     keepScreenAwake: keepScreenAwake ?? this.keepScreenAwake,
     weatherEnabled: weatherEnabled ?? this.weatherEnabled,
     autoLive: autoLive ?? this.autoLive,
+    autoPause: autoPause ?? this.autoPause,
+    autoPauseSpeedKmh: autoPauseSpeedKmh ?? this.autoPauseSpeedKmh,
+    autoPauseDelaySeconds: autoPauseDelaySeconds ?? this.autoPauseDelaySeconds,
     bio: bio ?? this.bio,
     location: location ?? this.location,
     avatarPath: avatarPath ?? this.avatarPath,
@@ -178,6 +197,9 @@ class RiderProfile {
     'keep_screen_awake': keepScreenAwake,
     'weather_enabled': weatherEnabled,
     'auto_live': autoLive,
+    'auto_pause': autoPause,
+    'auto_pause_speed': autoPauseSpeedKmh,
+    'auto_pause_delay': autoPauseDelaySeconds,
     'bio': bio,
     'location': location,
     'avatar_path': avatarPath,
@@ -211,6 +233,9 @@ class RiderProfile {
       keepScreenAwake: json['keep_screen_awake'] as bool? ?? true,
       weatherEnabled: json['weather_enabled'] as bool? ?? true,
       autoLive: json['auto_live'] as bool? ?? false,
+      autoPause: json['auto_pause'] as bool? ?? true,
+      autoPauseSpeedKmh: (json['auto_pause_speed'] as num?)?.toDouble() ?? 3.0,
+      autoPauseDelaySeconds: (json['auto_pause_delay'] as num?)?.toInt() ?? 5,
       bio: json['bio'] as String? ?? '',
       location: json['location'] as String? ?? '',
       avatarPath: json['avatar_path'] as String? ?? '',

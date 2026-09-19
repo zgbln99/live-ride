@@ -14,6 +14,8 @@ class WeatherSnapshot {
     this.precipitationProbability,
     this.precipitationMm,
     this.locationLabel,
+    this.sunrise,
+    this.sunset,
   });
 
   final double temperatureCelsius;
@@ -26,6 +28,19 @@ class WeatherSnapshot {
   final int? precipitationProbability;
   final double? precipitationMm;
   final String? locationLabel;
+
+  /// Wschód i zachód słońca na dziś w miejscu zawodnika. Null, gdy serwis
+  /// ich nie podał — wtedy aplikacja nic o zmroku nie mówi.
+  final DateTime? sunrise;
+  final DateTime? sunset;
+
+  /// Ile minut do zmroku. Null po zachodzie i bez danych.
+  int? get minutesToSunset {
+    final dusk = sunset;
+    if (dusk == null) return null;
+    final minutes = dusk.difference(DateTime.now()).inMinutes;
+    return minutes < 0 ? null : minutes;
+  }
 
   bool get isStale =>
       DateTime.now().difference(observedAt) > const Duration(minutes: 90);
@@ -40,6 +55,8 @@ class WeatherSnapshot {
     'observed_at': observedAt.toIso8601String(),
     'precip_probability': precipitationProbability,
     'precip_mm': precipitationMm,
+    'sunrise': sunrise?.toIso8601String(),
+    'sunset': sunset?.toIso8601String(),
   };
 
   factory WeatherSnapshot.fromJson(Map<String, dynamic> json) =>
@@ -60,6 +77,8 @@ class WeatherSnapshot {
             DateTime.now(),
         precipitationProbability: (json['precip_probability'] as num?)?.toInt(),
         precipitationMm: (json['precip_mm'] as num?)?.toDouble(),
+        sunrise: DateTime.tryParse(json['sunrise'] as String? ?? ''),
+        sunset: DateTime.tryParse(json['sunset'] as String? ?? ''),
       );
 }
 

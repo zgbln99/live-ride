@@ -106,6 +106,7 @@ class WeatherService extends ChangeNotifier {
             'temperature_2m,apparent_temperature,is_day,precipitation,'
             'weather_code,wind_speed_10m,wind_direction_10m',
         'hourly': 'precipitation_probability',
+        'daily': 'sunrise,sunset',
         'forecast_days': 1,
         'timezone': 'auto',
         'wind_speed_unit': 'kmh',
@@ -135,7 +136,17 @@ class WeatherService extends ChangeNotifier {
       observedAt: DateTime.now(),
       precipitationProbability: _currentProbability(data['hourly']),
       precipitationMm: _number(current['precipitation']),
+      sunrise: _firstDailyTime(data['daily'], 'sunrise'),
+      sunset: _firstDailyTime(data['daily'], 'sunset'),
     );
+  }
+
+  /// Pierwszy wpis z bloku dziennego — dziś, bo pytamy o jeden dzień.
+  DateTime? _firstDailyTime(Object? daily, String key) {
+    if (daily is! Map) return null;
+    final values = daily[key];
+    if (values is! List || values.isEmpty) return null;
+    return DateTime.tryParse('${values.first}');
   }
 
   /// Open-Meteo reports probability hourly; pick the bucket covering now.

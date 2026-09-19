@@ -17,6 +17,9 @@ import 'local_store.dart';
 import 'location_service.dart';
 import 'profile_service.dart';
 import 'ride_storage_service.dart';
+import 'alert_controller.dart';
+import 'alert_engine.dart';
+import 'climb_tracker.dart';
 import 'sensor_hub.dart';
 import 'weather_service.dart';
 
@@ -33,6 +36,7 @@ class RideRecorder extends ChangeNotifier {
     required this.storage,
     required this.heartRate,
     required this.sensors,
+    required this.alerts,
     required this.live,
     required this.weather,
     required this.profile,
@@ -43,6 +47,10 @@ class RideRecorder extends ChangeNotifier {
   final RideStorageService storage;
   final HeartRateService heartRate;
   final SensorHub sensors;
+  final AlertController alerts;
+
+  /// Gdzie zawodnik jest względem podjazdów na trasie.
+  final ClimbTracker climbs = ClimbTracker();
   final LiveSessionController live;
   final WeatherService weather;
   final ProfileService profile;
@@ -116,9 +124,15 @@ class RideRecorder extends ChangeNotifier {
     _points.clear();
     _route = route;
     _plan = plan;
+    climbs.attach(route);
     _progress = null;
     _pausedTotal = Duration.zero;
     _pausedAt = null;
+    _autoPaused = false;
+    _slowSince = null;
+    _rawSpeedKmh = null;
+    _lastRawSample = null;
+    alerts.reset();
     _startedAt = DateTime.now();
     _state = RideState.recording;
     _metrics = _accumulator.build(
@@ -157,6 +171,8 @@ class RideRecorder extends ChangeNotifier {
     );
 
     _ticker = Timer.periodic(const Duration(seconds: 1), (_) {
+      _evaluateAutoPause();
+      _feedAlerts();
       if (_state != RideState.recording) return;
       _publish();
     });
@@ -165,8 +181,47 @@ class RideRecorder extends ChangeNotifier {
     if (first != null) _onPosition(first);
   }
 
+  /// Prędkość prosto z fixa, liczona także na pauzie.
+  ///
+  /// Akumulator na pauzie nie przyjmuje próbek, więc jego prędkość zastyga na
+  /// ostatniej wartości sprzed postoju — gdyby to nią decydować o wznowieniu,
+  /// licznik ruszyłby natychmiast albo nie ruszył nigdy.
+  double? _rawSpeedKmh;
+  RideSample? _lastRawSample;
+
+  void _trackRawSpeed(RideSample sample) {
+    final reported = sample.speedMps;
+    if (reported != null && reported >= 0 && reported < 35) {
+      _rawSpeedKmh = reported * 3.6;
+    } else {
+      final previous = _lastRawSample;
+      if (previous != null) {
+        final seconds =
+            sample.timestamp.difference(previous.timestamp).inMilliseconds /
+            1000;
+        if (seconds > 0.2 && seconds < 30) {
+          final meters = haversineMeters(previous.point, sample.point);
+          _rawSpeedKmh = meters / seconds * 3.6;
+        }
+      }
+    }
+    _lastRawSample = sample;
+  }
+
+  /// Czy licznik stoi dlatego, że zawodnik stanął — a nie dlatego, że sam
+  /// nacisnął pauzę. Ręczna pauza nigdy nie wznawia się sama.
+  bool _autoPaused = false;
+  DateTime? _slowSince;
+
+  bool get isAutoPaused => _autoPaused;
+
   void pause() {
     if (_state != RideState.recording) return;
+    _autoPaused = false;
+    _pauseInternal();
+  }
+
+  void _pauseInternal() {
     _state = RideState.paused;
     _pausedAt = DateTime.now();
     _accumulator.breakContinuity();
@@ -174,6 +229,7 @@ class RideRecorder extends ChangeNotifier {
   }
 
   void resume() {
+    _autoPaused = false;
     if (_state != RideState.paused) return;
     final pausedAt = _pausedAt;
     if (pausedAt != null) {
@@ -302,6 +358,7 @@ class RideRecorder extends ChangeNotifier {
 
     // The marker always follows the raw fix so it stays geographically
     // truthful, even when the sample is not counted towards distance.
+    _trackRawSpeed(sample);
     _position = sample.point;
     _error = null;
 
@@ -326,10 +383,24 @@ class RideRecorder extends ChangeNotifier {
     }
 
     _updateProgress(sample.point);
+    _updateClimb(sample.point);
     _publish();
 
     unawaited(_pushTelemetry(position));
     unawaited(weather.refreshFor(sample.point));
+  }
+
+  /// Stan aktualnego podjazdu albo null, gdy zawodnik na żadnym nie jest.
+  ClimbProgress? get climbProgress => climbs.progress;
+
+  void _updateClimb(GeoPoint point) {
+    if (_route == null) return;
+    climbs.update(
+      point,
+      averageSpeedKmh: _accumulator.speedKmh,
+      heartRate: _metrics.averageHeartRate,
+      powerWatts: _metrics.power?.average,
+    );
   }
 
   void _updateProgress(GeoPoint point) {
@@ -365,6 +436,85 @@ class RideRecorder extends ChangeNotifier {
       );
     }
     _accumulator.setSensorSpeed(snapshot.speedKmh);
+  }
+
+  /// Zatrzymuje i wznawia licznik na postoju.
+  ///
+  /// Próg i opóźnienie są w profilu, bo „stoję" znaczy co innego na światłach
+  /// w mieście i co innego na podjeździe, gdzie 3 km/h to wciąż jazda.
+  void _evaluateAutoPause() {
+    final settings = profile.profile;
+    if (!settings.autoPause) return;
+    if (_position == null) return;
+
+    final now = DateTime.now();
+
+    if (_state == RideState.recording) {
+      final speed = _accumulator.speedKmh;
+      if (speed >= settings.autoPauseSpeedKmh) {
+        _slowSince = null;
+        return;
+      }
+      final since = _slowSince ??= now;
+      if (now.difference(since).inSeconds >= settings.autoPauseDelaySeconds) {
+        _slowSince = null;
+        _autoPaused = true;
+        _pauseInternal();
+      }
+      return;
+    }
+
+    if (_state == RideState.paused && _autoPaused) {
+      // Ruszenie wznawia od razu: czekanie na potwierdzenie zabrałoby
+      // zawodnikowi pierwsze metry po każdych światłach. Margines nad progiem
+      // to histereza — bez niej drgania GPS na postoju mrugałyby licznikiem.
+      final speed = _rawSpeedKmh ?? 0;
+      if (speed >= settings.autoPauseSpeedKmh + 1) {
+        _autoPaused = false;
+        resume();
+      }
+    }
+  }
+
+  /// Podaje silnikowi powiadomień stan jazdy raz na sekundę.
+  ///
+  /// Wszystko, czego nie da się stwierdzić, idzie jako null — silnik wtedy
+  /// po prostu o tym milczy, zamiast zgadywać.
+  void _feedAlerts() {
+    if (!isActive) return;
+    final sensorSnapshot = sensors.snapshot;
+    final lowest = sensors.connected
+        .map((device) => device.batteryPercent)
+        .whereType<int>()
+        .fold<int?>(null, (lowest, value) {
+          return lowest == null || value < lowest ? value : lowest;
+        });
+    final lowestDevice = lowest == null
+        ? null
+        : sensors.connected
+              .where((device) => device.batteryPercent == lowest)
+              .firstOrNull;
+    final forecast = weather.current;
+
+    alerts.feed(
+      AlertContext(
+        now: DateTime.now(),
+        elapsed: elapsed,
+        distanceMeters: _accumulator.distanceMeters,
+        metric: profile.profile.metricUnits,
+        heartRate: _metrics.heartRate,
+        powerWatts: sensorSnapshot.powerWatts,
+        cadenceRpm: sensorSnapshot.cadenceRpm,
+        offRoute: _progress?.offRoute ?? false,
+        climbAheadMeters: climbs.metersToUpcoming,
+        climbLabel: climbs.upcomingClimb?.category.label,
+        lowestSensorBatteryPercent: lowest,
+        lowBatterySensorName: lowestDevice?.name,
+        rainProbability: forecast?.precipitationProbability,
+        minutesToSunset: forecast?.minutesToSunset,
+        paused: _state != RideState.recording,
+      ),
+    );
   }
 
   void _publish() {

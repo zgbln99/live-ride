@@ -16,9 +16,11 @@ import '../services/app_services.dart';
 import '../services/location_service.dart';
 import '../services/ride_recorder.dart';
 import '../widgets/chrome_fade.dart';
+import '../widgets/climb_pro_panel.dart';
 import '../widgets/lr_common.dart';
 import '../widgets/navigation_header.dart';
 import '../widgets/ride_controls.dart';
+import '../widgets/ride_alert_overlay.dart';
 import '../widgets/ride_page_view.dart';
 import '../widgets/ride_map.dart';
 import '../widgets/weather_field.dart';
@@ -136,6 +138,7 @@ class _RideComputerScreenState extends State<RideComputerScreen> {
         services.weather,
         services.live,
         services.spotify,
+        services.alerts,
         _chrome,
       ]),
       builder: (context, _) {
@@ -176,6 +179,22 @@ class _RideComputerScreenState extends State<RideComputerScreen> {
                             )
                           else
                             _freeRideHeader(recorder),
+                          // ClimbPro wchodzi tylko wtedy, gdy zawodnik jest
+                          // na wykrytym podjeździe; poza nim nie zabiera
+                          // mapie ani piksela.
+                          if (recorder.climbProgress != null)
+                            ClimbProPanel(
+                              progress: recorder.climbProgress!,
+                              profile:
+                                  recorder.route?.analysis.profile ?? const [],
+                              metric: profile.metricUnits,
+                            ),
+                          // Powiadomienie wjeżdża nad mapę, nigdy nad pola
+                          // danych ani nad pauzę.
+                          RideAlertOverlay(
+                            alert: services.alerts.current,
+                            onDismiss: services.alerts.dismiss,
+                          ),
                           Expanded(child: _mapArea(recorder)),
                           RidePageView(
                             key: _pagesKey,

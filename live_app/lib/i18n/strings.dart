@@ -239,6 +239,27 @@ class Strings {
   String get rideAfternoon => 'Popołudniowa jazda';
   String get rideEvening => 'Wieczorna jazda';
 
+  String get alerts => 'Powiadomienia';
+  String get haptics => 'Wibracje';
+  String get hapticsHint =>
+      'Krótka wibracja przy powiadomieniu — czytelna nawet w rękawiczkach.';
+  String get everyMinutes => 'Co ile minut';
+  String get everyKilometers => 'Co ile km';
+  String get threshold => 'Próg';
+  String get needsPowerMeter => 'wymaga miernika mocy';
+  String get needsCadenceSensor => 'wymaga czujnika kadencji';
+  String get needsHeartRateStrap => 'wymaga paska na klatę';
+  String get autoPauseTitle => 'Automatyczna pauza';
+  String get autoPauseHint =>
+      'Licznik zatrzymuje się na postoju i rusza, gdy ruszysz.';
+
+  String get climbInProgress => 'PODJAZD';
+  String get climbDone => 'PODJAZD ZALICZONY';
+  String get remainingClimb => 'DO SZCZYTU';
+  String get remainingAscent => 'W PIONIE';
+  String get gradientNow => 'NACHYLENIE';
+  String climbAhead(String distance) => 'Za $distance podjazd';
+
   // ------------------------------------------------------- briefing trasy
   String get briefing => 'Briefing';
   String get briefingTitle => 'Przed startem';

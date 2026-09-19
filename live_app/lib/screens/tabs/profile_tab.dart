@@ -7,11 +7,13 @@ import '../../core/api_client.dart';
 import '../../core/formatters.dart';
 import '../../core/lr_theme.dart';
 import '../../i18n/strings.dart';
+import '../../models/ride_alert.dart';
 import '../../services/app_services.dart';
 import '../../services/spotify_service.dart';
 import '../../services/weather_service.dart';
 import '../../widgets/lr_common.dart';
 import '../data_field_editor.dart';
+import '../alert_settings_screen.dart';
 import '../sensors_screen.dart';
 import '../whoop_screen.dart';
 
@@ -108,15 +110,54 @@ class _ProfileTabState extends State<ProfileTab> {
                 children: [
                   ListTile(
                     leading: const Icon(Icons.grid_view),
-                    title: const Text('Data fields'),
+                    title: Text(S.dataFields),
                     subtitle: Text(
-                      '${profile.layout.label} · '
-                      '${profile.activeFields.map((field) => field.label).join(', ')}',
+                      profile.ridePages
+                          .map(
+                            (page) =>
+                                '${page.name} (${page.layout.fieldCount})',
+                          )
+                          .join(' · '),
                       maxLines: 2,
                       overflow: TextOverflow.ellipsis,
                     ),
                     trailing: const Icon(Icons.chevron_right),
                     onTap: () => showDataFieldEditor(context, services),
+                  ),
+                  const Divider(height: 1),
+                  ListTile(
+                    leading: const Icon(Icons.notifications_active_outlined),
+                    title: Text(S.alerts),
+                    subtitle: Text(
+                      AlertKind.values
+                          .where(services.alerts.settings.isEnabled)
+                          .map((kind) => kind.label)
+                          .join(', '),
+                      maxLines: 2,
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                    trailing: const Icon(Icons.chevron_right),
+                    onTap: () => Navigator.of(context).push(
+                      MaterialPageRoute<void>(
+                        builder: (_) => const AlertSettingsScreen(),
+                      ),
+                    ),
+                  ),
+                  const Divider(height: 1),
+                  SwitchListTile(
+                    secondary: const Icon(Icons.pause_circle_outline),
+                    title: Text(S.autoPauseTitle),
+                    subtitle: Text(
+                      profile.autoPause
+                          ? '${S.autoPauseHint} '
+                                '(<${profile.autoPauseSpeedKmh.round()} km/h, '
+                                '${profile.autoPauseDelaySeconds} s)'
+                          : S.autoPauseHint,
+                    ),
+                    value: profile.autoPause,
+                    onChanged: (value) => profileService.update(
+                      profile.copyWith(autoPause: value),
+                    ),
                   ),
                   const Divider(height: 1),
                   SwitchListTile(

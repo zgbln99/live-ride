@@ -7,6 +7,7 @@ import '../data/database.dart';
 import '../data/ride_dao.dart';
 import '../data/route_dao.dart';
 import '../data/settings_dao.dart';
+import 'alert_controller.dart';
 import 'geocoding_service.dart';
 import 'gpx_service.dart';
 import 'heart_rate_service.dart';
@@ -41,6 +42,7 @@ class AppServices {
     required this.routeWeather,
     required this.heartRate,
     required this.sensors,
+    required this.alerts,
     required this.live,
     required this.location,
     required this.routing,
@@ -57,6 +59,7 @@ class AppServices {
     final heartRate = HeartRateService();
     final settings = SettingsDao(db);
     final sensors = SensorHub(heartRate: heartRate, settings: settings);
+    final alerts = AlertController(settings: settings);
     final live = LiveSessionController(api, heartRate, profile);
     final rides = RideStorageService(gpx, RideDao(db));
     final weather = WeatherService();
@@ -75,6 +78,7 @@ class AppServices {
       routeWeather: RouteWeatherService(),
       heartRate: heartRate,
       sensors: sensors,
+      alerts: alerts,
       live: live,
       location: location,
       routing: RoutingService(api),
@@ -86,6 +90,7 @@ class AppServices {
         storage: rides,
         heartRate: heartRate,
         sensors: sensors,
+        alerts: alerts,
         live: live,
         weather: weather,
         profile: profile,
@@ -110,6 +115,9 @@ class AppServices {
 
   /// Sensory rowerowe: kadencja, prędkość, moc, trenażer.
   final SensorHub sensors;
+
+  /// Powiadomienia w czasie jazdy.
+  final AlertController alerts;
   final LiveSessionController live;
   final LocationService location;
   final RoutingService routing;
@@ -130,6 +138,7 @@ class AppServices {
     unawaited(spotify.restore());
     unawaited(heartRate.restore());
     unawaited(sensors.restore());
+    unawaited(alerts.restore());
   }
 
   Future<void> dispose() async {
