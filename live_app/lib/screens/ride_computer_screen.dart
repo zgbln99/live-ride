@@ -23,6 +23,7 @@ import '../widgets/ride_map.dart';
 import '../widgets/weather_field.dart';
 import 'data_field_editor.dart';
 import 'live_sheet.dart';
+import 'music_sheet.dart';
 import 'ride_summary_screen.dart';
 
 /// The Live Ride cycling computer.
@@ -133,6 +134,7 @@ class _RideComputerScreenState extends State<RideComputerScreen> {
         services.profile,
         services.weather,
         services.live,
+        services.spotify,
         _chrome,
       ]),
       builder: (context, _) {
@@ -364,6 +366,15 @@ class _RideComputerScreenState extends State<RideComputerScreen> {
                   active: services.live.isActive,
                   onPressed: _openLiveSheet,
                 ),
+                if (services.spotify.isConnected) ...[
+                  const SizedBox(height: 8),
+                  LrMapButton(
+                    icon: Icons.graphic_eq,
+                    tooltip: 'Music',
+                    active: services.spotify.nowPlaying?.isPlaying ?? false,
+                    onPressed: _openMusicSheet,
+                  ),
+                ],
               ],
             ),
           ),
@@ -544,6 +555,11 @@ class _RideComputerScreenState extends State<RideComputerScreen> {
       ),
     ),
   );
+
+  Future<void> _openMusicSheet() async {
+    await _holdChrome(() => showMusicSheet(context, _services));
+    if (mounted) setState(() {});
+  }
 
   Future<void> _openLiveSheet() async {
     await _holdChrome(() => showLiveSheet(context, _services));

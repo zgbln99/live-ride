@@ -5,6 +5,16 @@ cd "$(dirname "$0")"
 TMP="$(mktemp -d)"
 trap 'rm -rf "$TMP"' EXIT
 
+# The Lock Screen Live Activity needs an extra Xcode target. Skip it with
+# --no-live-activity if you want the plainest possible project.
+LIVE_ACTIVITY=1
+for arg in "$@"; do
+  case "$arg" in
+    --no-live-activity) LIVE_ACTIVITY=0 ;;
+    *) echo "Unknown option: $arg" >&2; exit 2 ;;
+  esac
+done
+
 cp pubspec.yaml "$TMP/pubspec.yaml"
 cp -R lib "$TMP/lib"
 
@@ -36,6 +46,27 @@ p['UISupportedInterfaceOrientations'] = [
 ]
 modes = list(dict.fromkeys([*(p.get('UIBackgroundModes') or []), 'location', 'bluetooth-central']))
 p['UIBackgroundModes'] = modes
+
+# Lock Screen / Dynamic Island ride card.
+p['NSSupportsLiveActivities'] = True
+p['NSSupportsLiveActivitiesFrequentUpdates'] = True
+
+# Spotify signs in through ASWebAuthenticationSession and returns to this
+# scheme. It must match the redirect URI registered in the Spotify dashboard
+# and SpotifyService.redirectUri exactly.
+url_types = [t for t in (p.get('CFBundleURLTypes') or [])
+             if 'liveride' not in (t.get('CFBundleURLSchemes') or [])]
+url_types.append({
+    'CFBundleTypeRole': 'Editor',
+    'CFBundleURLName': 'pl.marekpiatak.liveride',
+    'CFBundleURLSchemes': ['liveride'],
+})
+p['CFBundleURLTypes'] = url_types
+
+# Lets Live Ride tell whether the Spotify app is installed.
+p['LSApplicationQueriesSchemes'] = sorted(
+    set([*(p.get('LSApplicationQueriesSchemes') or []), 'spotify'])
+)
 with plist_path.open('wb') as f:
     plistlib.dump(p, f)
 
@@ -68,13 +99,108 @@ perms = '''    <uses-permission android:name="android.permission.ACCESS_FINE_LOC
 if 'android.permission.BLUETOOTH_SCAN' not in text:
     text = text.replace('<manifest xmlns:android="http://schemas.android.com/apk/res/android">', '<manifest xmlns:android="http://schemas.android.com/apk/res/android">\n' + perms)
 text = re.sub(r'android:label="[^"]*"', 'android:label="Live Ride"', text)
+
+# Spotify's PKCE callback needs an activity to come back to on Android; iOS
+# handles the same scheme through ASWebAuthenticationSession.
+callback = '''        <activity
+            android:name="com.linusu.flutter_web_auth_2.CallbackActivity"
+            android:exported="true">
+            <intent-filter android:label="flutter_web_auth_2">
+                <action android:name="android.intent.action.VIEW" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <category android:name="android.intent.category.BROWSABLE" />
+                <data android:scheme="liveride" />
+            </intent-filter>
+        </activity>
+'''
+if 'flutter_web_auth_2.CallbackActivity' not in text:
+    text = text.replace('    </application>', callback + '    </application>')
+
 manifest.write_text(text)
+
+# --- native iOS sources -------------------------------------------------
+import shutil
+
+native = Path('ios_native')
+if native.exists():
+    Path('ios/LiveRideWidgets').mkdir(parents=True, exist_ok=True)
+    for name in ['LiveRideWidgetBundle.swift', 'RideLiveActivity.swift', 'Info.plist']:
+        shutil.copy(native / 'LiveRideWidgets' / name, Path('ios/LiveRideWidgets') / name)
+    # The attributes file is compiled into both targets, so it is copied twice
+    # rather than referenced across directories.
+    shutil.copy(native / 'Shared' / 'RideActivityAttributes.swift',
+                Path('ios/LiveRideWidgets/RideActivityAttributes.swift'))
+    shutil.copy(native / 'Shared' / 'RideActivityAttributes.swift',
+                Path('ios/Runner/RideActivityAttributes.swift'))
+    shutil.copy(native / 'Runner' / 'LiveRideActivityBridge.swift',
+                Path('ios/Runner/LiveRideActivityBridge.swift'))
+
+# --- register the bridge in AppDelegate ---------------------------------
+delegate_path = Path('ios/Runner/AppDelegate.swift')
+delegate = delegate_path.read_text()
+if 'LiveRideActivityBridge' not in delegate:
+    delegate = delegate.replace(
+        'class AppDelegate: FlutterAppDelegate',
+        'class AppDelegate: FlutterAppDelegate',
+    )
+    # Hold a strong reference: the bridge owns the method channel handler.
+    delegate = re.sub(
+        r'(@objc class AppDelegate: [^\n]*\{\n)',
+        r'\1  /// Live Ride: keeps the Lock Screen activity channel alive.\n'
+        r'  private var liveActivityBridge: LiveRideActivityBridge?\n\n',
+        delegate,
+        count=1,
+    )
+
+    if 'didInitializeImplicitFlutterEngine' in delegate:
+        # Flutter's current template wires plugins through the implicit engine.
+        delegate = delegate.replace(
+            'GeneratedPluginRegistrant.register(with: engineBridge.pluginRegistry)',
+            'GeneratedPluginRegistrant.register(with: engineBridge.pluginRegistry)\n'
+            '    if let registrar = engineBridge.pluginRegistry.registrar(\n'
+            '      forPlugin: "LiveRideActivityBridge"\n'
+            '    ) {\n'
+            '      liveActivityBridge = LiveRideActivityBridge.register(\n'
+            '        with: registrar.messenger()\n'
+            '      )\n'
+            '    }',
+        )
+    else:
+        delegate = delegate.replace(
+            'return super.application(application, didFinishLaunchingWithOptions: launchOptions)',
+            'let started = super.application(\n'
+            '      application, didFinishLaunchingWithOptions: launchOptions)\n'
+            '    if let controller = window?.rootViewController as? FlutterViewController {\n'
+            '      liveActivityBridge = LiveRideActivityBridge.register(\n'
+            '        with: controller.binaryMessenger\n'
+            '      )\n'
+            '    }\n'
+            '    return started',
+        )
+    delegate_path.write_text(delegate)
 PY
+
+if [ "$LIVE_ACTIVITY" = "1" ]; then
+  if ruby -e 'require "xcodeproj"' >/dev/null 2>&1; then
+    ruby ios_native/scripts/add_live_activity_target.rb ios pl.marekpiatak.liveride
+  else
+    echo
+    echo "WARNING: the 'xcodeproj' gem is missing, so the Live Activity widget"
+    echo "target was not added. It ships with CocoaPods; install it with:"
+    echo "    sudo gem install xcodeproj"
+    echo "then re-run ./bootstrap.sh. Everything else still works."
+  fi
+fi
 
 flutter pub get
 
 echo
 echo "Live Ride native shells created."
 echo "iOS bundle: pl.marekpiatak.liveride"
-echo "Configured: location (incl. background), Bluetooth, foreground service, wake lock."
-echo "Next: open ios/Runner.xcworkspace, choose your Personal Team, then flutter run --release"
+echo "Configured: location (incl. background), Bluetooth, foreground service,"
+echo "            wake lock, Live Activities, liveride:// callback for Spotify."
+if [ "$LIVE_ACTIVITY" = "1" ]; then
+  echo "Widget extension: pl.marekpiatak.liveride.LiveRideWidgets (iOS 16.2+)"
+fi
+echo "Next: open ios/Runner.xcworkspace, choose your Personal Team for BOTH"
+echo "      targets, then flutter run --release"

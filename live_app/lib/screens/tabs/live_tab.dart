@@ -11,6 +11,7 @@ import '../../services/heart_rate_service.dart';
 import '../../services/live_service.dart';
 import '../../widgets/lr_common.dart';
 import '../live_sheet.dart';
+import '../whoop_screen.dart';
 
 /// LIVE session status, the spectator link, and heart-rate sensors.
 class LiveTab extends StatefulWidget {
@@ -21,8 +22,6 @@ class LiveTab extends StatefulWidget {
 }
 
 class _LiveTabState extends State<LiveTab> {
-  bool _scanning = false;
-
   @override
   Widget build(BuildContext context) {
     final services = AppServices.of(context);
@@ -165,72 +164,61 @@ class _LiveTabState extends State<LiveTab> {
     );
   }
 
-  Widget _heartRatePanel(AppServices services) => LrPanel(
-    padding: const EdgeInsets.all(18),
-    child: Column(
-      crossAxisAlignment: CrossAxisAlignment.stretch,
-      children: [
-        StreamBuilder<int>(
-          stream: services.heartRate.bpm,
-          initialData: services.heartRate.latestBpm,
-          builder: (context, snapshot) => Row(
-            children: [
-              const Icon(Icons.favorite, color: LR.alert, size: 26),
-              const SizedBox(width: 12),
-              Text(snapshot.data?.toString() ?? '--', style: LR.fieldValue(34)),
-              const SizedBox(width: 6),
-              Text('bpm', style: LR.fieldUnit),
-              const Spacer(),
-              Text(
-                services.heartRate.connectedId == null
-                    ? 'Not connected'
-                    : 'Connected',
-                style: LR.fieldLabel.copyWith(fontSize: 10),
-              ),
-            ],
-          ),
-        ),
-        const SizedBox(height: 14),
-        Text(
-          'Live Ride reads the standard Bluetooth Heart Rate service. On WHOOP, '
-          'enable Broadcast Heart Rate in the WHOOP app first.',
-          style: LR.body.copyWith(fontSize: 12.5, height: 1.4),
-        ),
-        const SizedBox(height: 14),
-        OutlinedButton.icon(
-          onPressed: _scanning ? null : () => _scan(services),
-          icon: const Icon(Icons.bluetooth_searching, size: 18),
-          label: Text(_scanning ? 'SCANNING…' : 'SCAN FOR SENSORS'),
-        ),
-        StreamBuilder<List<HeartRateDevice>>(
-          stream: services.heartRate.devices,
-          builder: (context, snapshot) {
-            final devices = snapshot.data ?? const <HeartRateDevice>[];
-            if (devices.isEmpty) return const SizedBox.shrink();
-            return Column(
+  /// A summary that answers "is my strap working" and opens the full
+  /// heart-rate screen for anything more.
+  Widget _heartRatePanel(AppServices services) {
+    final hr = services.heartRate;
+    return AnimatedBuilder(
+      animation: hr,
+      builder: (context, _) => LrPanel(
+        padding: const EdgeInsets.fromLTRB(18, 16, 14, 16),
+        accentEdge: hr.isConnected && !hr.isStale,
+        onTap: () => Navigator.of(
+          context,
+        ).push(MaterialPageRoute<void>(builder: (_) => const WhoopScreen())),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            Row(
               children: [
-                const Divider(height: 26),
-                for (final device in devices.take(12))
-                  ListTile(
-                    contentPadding: EdgeInsets.zero,
-                    dense: true,
-                    leading: Icon(
-                      device.likelyHeartRate ? Icons.favorite : Icons.bluetooth,
-                      color: device.likelyHeartRate ? LR.alert : LR.muted,
-                      size: 20,
-                    ),
-                    title: Text(device.name),
-                    subtitle: Text('${device.rssi} dBm'),
-                    trailing: const Icon(Icons.link, size: 18),
-                    onTap: () => _connect(services, device),
-                  ),
+                Icon(
+                  Icons.favorite,
+                  color: hr.latestBpm == null ? LR.lineStrong : LR.alert,
+                  size: 26,
+                ),
+                const SizedBox(width: 12),
+                Text(
+                  hr.latestBpm?.toString() ?? '--',
+                  style: LR.fieldValue(34),
+                ),
+                const SizedBox(width: 6),
+                Text('bpm', style: LR.fieldUnit),
+                const Spacer(),
+                Text(switch (hr.status) {
+                  HeartRateStatus.streaming => hr.isStale ? 'NO BEAT' : 'LIVE',
+                  HeartRateStatus.waiting => 'CONNECTED',
+                  HeartRateStatus.connecting => 'CONNECTING',
+                  HeartRateStatus.reconnecting => 'RECONNECTING',
+                  HeartRateStatus.scanning => 'SCANNING',
+                  HeartRateStatus.idle => 'NOT CONNECTED',
+                }, style: LR.fieldLabel.copyWith(fontSize: 10)),
+                const SizedBox(width: 6),
+                const Icon(Icons.chevron_right, size: 18, color: LR.muted),
               ],
-            );
-          },
+            ),
+            const SizedBox(height: 12),
+            Text(
+              hr.isConnected
+                  ? '${hr.connectedName ?? 'Sensor'} connected'
+                        '${hr.batteryPercent == null ? '' : ' · ${hr.batteryPercent}% battery'}'
+                  : 'Connect a WHOOP strap or any Bluetooth heart-rate sensor.',
+              style: LR.body.copyWith(fontSize: 12.5, height: 1.4),
+            ),
+          ],
         ),
-      ],
-    ),
-  );
+      ),
+    );
+  }
 
   Widget _copyRow(String label, String value) => LrPanel(
     color: LR.panel,
@@ -270,34 +258,5 @@ class _LiveTabState extends State<LiveTab> {
   Future<void> _openSheet(AppServices services) async {
     await showLiveSheet(context, services);
     if (mounted) setState(() {});
-  }
-
-  Future<void> _scan(AppServices services) async {
-    setState(() => _scanning = true);
-    try {
-      await services.heartRate.startScan();
-      // Bluetooth scanning is battery-hungry, so it stops on its own.
-      Timer(const Duration(seconds: 20), () async {
-        await services.heartRate.stopScan();
-        if (mounted) setState(() => _scanning = false);
-      });
-    } catch (e) {
-      if (mounted) {
-        setState(() => _scanning = false);
-        showLrMessage(context, e.toString(), error: true);
-      }
-    }
-  }
-
-  Future<void> _connect(AppServices services, HeartRateDevice device) async {
-    try {
-      await services.heartRate.connect(device.id);
-      if (mounted) {
-        setState(() => _scanning = false);
-        showLrMessage(context, 'Connected to ${device.name}');
-      }
-    } catch (e) {
-      if (mounted) showLrMessage(context, e.toString(), error: true);
-    }
   }
 }

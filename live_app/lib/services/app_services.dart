@@ -1,14 +1,18 @@
+import 'dart:async';
+
 import 'package:flutter/widgets.dart';
 
 import '../core/api_client.dart';
 import 'gpx_service.dart';
 import 'heart_rate_service.dart';
+import 'live_activity_service.dart';
 import 'live_service.dart';
 import 'location_service.dart';
 import 'profile_service.dart';
 import 'ride_recorder.dart';
 import 'ride_storage_service.dart';
 import 'route_library_service.dart';
+import 'spotify_service.dart';
 import 'weather_service.dart';
 
 /// The single place every long-lived service is created.
@@ -26,6 +30,8 @@ class AppServices {
     required this.heartRate,
     required this.live,
     required this.location,
+    required this.spotify,
+    required this.liveActivity,
     required this.recorder,
   });
 
@@ -37,6 +43,7 @@ class AppServices {
     final rides = RideStorageService(gpx);
     final weather = WeatherService();
     final location = LocationService();
+    final liveActivity = LiveActivityService();
     return AppServices._(
       api: api,
       gpx: gpx,
@@ -47,6 +54,8 @@ class AppServices {
       heartRate: heartRate,
       live: live,
       location: location,
+      spotify: SpotifyService(),
+      liveActivity: liveActivity,
       recorder: RideRecorder(
         location: location,
         storage: rides,
@@ -54,6 +63,7 @@ class AppServices {
         live: live,
         weather: weather,
         profile: profile,
+        liveActivity: liveActivity,
       ),
     );
   }
@@ -67,10 +77,16 @@ class AppServices {
   final HeartRateService heartRate;
   final LiveSessionController live;
   final LocationService location;
+  final SpotifyService spotify;
+  final LiveActivityService liveActivity;
   final RideRecorder recorder;
 
   Future<void> warmUp() async {
     await profile.load();
+    // These reach the filesystem and the Bluetooth radio, so they run in the
+    // background rather than holding up the first frame.
+    unawaited(spotify.restore());
+    unawaited(heartRate.restore());
   }
 
   Future<void> dispose() async {
@@ -78,6 +94,7 @@ class AppServices {
     live.dispose();
     weather.dispose();
     profile.dispose();
+    spotify.dispose();
     await heartRate.dispose();
   }
 

@@ -24,6 +24,11 @@ dependencies:
   # Keeps the ride computer readable on a handlebar mount without the rider
   # tapping the screen every 30 seconds.
   wakelock_plus: ^1.5.2
+  # Spotify sign-in runs in ASWebAuthenticationSession on iOS, which is what
+  # Spotify's PKCE flow expects and what keeps the session cookie out of the app.
+  flutter_web_auth_2: ^5.1.0
+  # PKCE code challenge.
+  crypto: ^3.0.7
 
 dev_dependencies:
   flutter_test:

@@ -64,6 +64,26 @@ like, wind speed and direction, precipitation probability and condition, shown
 as a map widget and as data fields. Weather is never awaited on a path that
 matters; when it fails the fields read `--`.
 
+**WHOOP and heart rate** — A dedicated sensor screen: live BPM with a trace,
+battery, signal strength, skin-contact state, and the four WHOOP steps that
+actually matter (a WHOOP strap does not advertise heart rate until Broadcast
+Heart Rate is switched on, which is why it looks missing). The connection is
+owned by a service, not a screen, so it survives navigation and reconnects by
+itself with backoff when the strap drops out mid-ride.
+
+**Music** — Spotify sign-in with Authorization Code + PKCE, running in
+`ASWebAuthenticationSession` on iOS, so no client secret is compiled in and the
+Spotify cookie is never handed to Live Ride. Now playing with live progress,
+transport controls sized for a gloved thumb, device switching, shuffle, volume,
+and your recently played and playlists to start from. A compact music sheet is
+one tap from the ride screen.
+
+**Lock Screen Live Activity** — A real WidgetKit extension with ActivityKit, so
+a ride shows speed, distance, elapsed, heart rate and the next turn on the Lock
+Screen and in the Dynamic Island. It starts and ends with the ride, not with a
+screen. Every value is preformatted in Dart, so the widget has no unit logic of
+its own to disagree with the handlebar.
+
 **Profile** — Display name, username, units, heading-up, screen-awake, weather
 and the data field layout. The display name falls back to the account username,
 and is what LIVE spectators and saved rides show. "Rider" appears only when the
@@ -92,11 +112,19 @@ lib/
              client, theme, formatters
   models/    route, navigation plan, ride record, metrics, profile, weather
   services/  gpx, route library, ride recorder, storage, profile, weather,
-             live, heart rate, location, local store, service container
+             live, heart rate, spotify, live activity, location, local
+             store, service container
   screens/   ride computer, home shell + tabs, route detail, ride summary,
-             login, live sheet, data field editor
+             login, WHOOP, live sheet, music sheet, data field editor
   widgets/   navigation header, ride map, data grid, controls, chrome fade,
-             weather field, track preview, elevation profile, primitives
+             weather field, music controls, bpm trace, track preview,
+             elevation profile, primitives
+
+ios_native/  Swift sources copied into the generated ios/ by bootstrap.sh
+  Shared/            RideActivityAttributes.swift (app + widget)
+  Runner/            LiveRideActivityBridge.swift (method channel)
+  LiveRideWidgets/   widget bundle, Lock Screen UI, extension Info.plist
+  scripts/           add_live_activity_target.rb (adds the Xcode target)
 ```
 
 Persistence is plain JSON and GPX files under the app documents directory:
@@ -135,6 +163,7 @@ flutter run --release
 | `LIVE_RIDE_SERVER` | `https://ride.76-13-3-214.sslip.io` | Live Ride server origin |
 | `LIVE_RIDE_WEATHER_URL` | `https://api.open-meteo.com/v1/forecast` | Weather endpoint |
 | `LIVE_RIDE_WEATHER_KEY` | *(empty)* | Only for providers that need a key |
+| `LIVE_RIDE_SPOTIFY_CLIENT_ID` | *(empty)* | Optional; can also be pasted in the app |
 
 No secret is compiled in. The default weather provider needs no key; supply one
 only if you point the app at a paid or self-hosted endpoint:
@@ -145,8 +174,68 @@ flutter run --release \
   --dart-define=LIVE_RIDE_WEATHER_KEY=…
 ```
 
+## Spotify setup
+
+Spotify requires every app to use its own client ID, so Live Ride ships without
+one. Setting it up takes a minute and does not need a rebuild — the Music tab
+has a field for it.
+
+1. Open [developer.spotify.com/dashboard](https://developer.spotify.com/dashboard)
+   and create an app (the free tier is enough).
+2. Add this redirect URI **exactly**:
+
+   ```
+   liveride://spotify-callback
+   ```
+
+3. Tick **Web API** and save.
+4. Paste the client ID into the Music tab, or build with
+   `--dart-define=LIVE_RIDE_SPOTIFY_CLIENT_ID=…`.
+
+Playback control needs Spotify **Premium** — that is Spotify's rule for any
+third-party app, not a Live Ride limitation. Reading what is playing works on
+free accounts. Spotify also needs one active device: start a track in the
+Spotify app once and Live Ride takes the controls from there.
+
+## Testing on a real iPhone
+
+```bash
+cd live_app
+./bootstrap.sh            # add --no-live-activity to skip the widget target
+open ios/Runner.xcworkspace
+```
+
+In Xcode, select **your team** under Signing & Capabilities for **both**
+`Runner` **and** `LiveRideWidgets`, then:
+
+```bash
+flutter run --release
+```
+
+What to check, in order:
+
+| # | Where | What you should see |
+| --- | --- | --- |
+| 1 | Launch | Login screen on the dark Live Ride wordmark. Create an account or sign in; your username becomes the rider name. |
+| 2 | Every tab | One visual system: white instrument panels, hairline rules, black type, one cyan accent. |
+| 3 | LIVE tab → heart rate card | The WHOOP screen. With Broadcast Heart Rate on in the WHOOP app, the strap appears with a WHOOP badge; connecting shows live BPM, a trace, battery and signal. |
+| 4 | Music tab | The Spotify setup card, then sign-in in the system browser sheet, then now playing with working transport controls. |
+| 5 | START RIDE | The ride computer. After five seconds untouched, the controls retire; one tap brings them back. |
+| 6 | Lock the phone during a ride | The Live Activity: speed, distance, elapsed, HR — and the next turn when navigating. Long-press the Dynamic Island for the expanded view. |
+
+If the Lock Screen card does not appear, check Settings → Live Ride → Live
+Activities. The Profile tab reports whether iOS has them enabled.
+
 ## Known limits
 
+- The Swift sources were written and contract-tested but **not compiled** in
+  the environment that produced them: no iOS SDK. They compile on your Mac, and
+  a mismatch between the Dart and Swift ends of the Live Activity is covered by
+  `test/live_activity_contract_test.dart`, but the first real build is yours.
+- The Live Activity needs iOS 16.2+. Below that the Profile tab says so and
+  rides work exactly as before.
+- Spotify playback control needs Premium and one active Spotify device, both
+  of which are Spotify's rules for third-party apps.
 - Quiet mode hides Live Ride's own controls, not the operating system status
   bar. Hiding that too is a one-line change if you would rather see nothing but
   the instrument, at the cost of the clock and the battery indicator.

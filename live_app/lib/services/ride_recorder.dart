@@ -10,6 +10,7 @@ import '../models/ride_metrics.dart';
 import '../models/ride_record.dart';
 import '../models/ride_route.dart';
 import 'heart_rate_service.dart';
+import 'live_activity_service.dart';
 import 'live_service.dart';
 import 'local_store.dart';
 import 'location_service.dart';
@@ -32,6 +33,7 @@ class RideRecorder extends ChangeNotifier {
     required this.live,
     required this.weather,
     required this.profile,
+    required this.liveActivity,
   });
 
   final LocationService location;
@@ -40,6 +42,7 @@ class RideRecorder extends ChangeNotifier {
   final LiveSessionController live;
   final WeatherService weather;
   final ProfileService profile;
+  final LiveActivityService liveActivity;
 
   final RideMetricsAccumulator _accumulator = RideMetricsAccumulator();
   final List<RecordedRidePoint> _points = [];
@@ -176,6 +179,7 @@ class RideRecorder extends ChangeNotifier {
     _heartRateSub = null;
     _ticker?.cancel();
     _ticker = null;
+    unawaited(liveActivity.end());
 
     final started = _startedAt ?? DateTime.now();
     final finalElapsed = elapsed;
@@ -230,6 +234,7 @@ class RideRecorder extends ChangeNotifier {
     _heartRateSub = null;
     _ticker?.cancel();
     _ticker = null;
+    unawaited(liveActivity.end());
     _accumulator.reset();
     _points.clear();
     _state = RideState.idle;
@@ -335,6 +340,15 @@ class RideRecorder extends ChangeNotifier {
       elapsed: elapsed,
       pointCount: _points.length,
       hasFix: _position != null,
+    );
+    unawaited(
+      liveActivity.update(
+        metrics: _metrics,
+        paused: _state == RideState.paused,
+        live: live.isActive,
+        metric: profile.profile.metricUnits,
+        progress: _progress,
+      ),
     );
     notifyListeners();
   }

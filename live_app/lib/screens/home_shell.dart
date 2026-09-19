@@ -9,6 +9,7 @@ import '../widgets/lr_common.dart';
 import 'ride_computer_screen.dart';
 import 'tabs/history_tab.dart';
 import 'tabs/live_tab.dart';
+import 'tabs/music_tab.dart';
 import 'tabs/profile_tab.dart';
 import 'tabs/ride_tab.dart';
 import 'tabs/routes_tab.dart';
@@ -29,6 +30,7 @@ class _HomeShellState extends State<HomeShell> {
   static const List<({IconData icon, IconData active, String label})> _tabs = [
     (icon: Icons.play_circle_outline, active: Icons.play_circle, label: 'RIDE'),
     (icon: Icons.route_outlined, active: Icons.route, label: 'ROUTES'),
+    (icon: Icons.graphic_eq, active: Icons.graphic_eq, label: 'MUSIC'),
     (icon: Icons.history, active: Icons.history, label: 'HISTORY'),
     (icon: Icons.sensors_outlined, active: Icons.sensors, label: 'LIVE'),
     (icon: Icons.person_outline, active: Icons.person, label: 'PROFILE'),
@@ -51,9 +53,13 @@ class _HomeShellState extends State<HomeShell> {
                 children: [
                   RideTab(onOpenTab: (index) => setState(() => _tab = index)),
                   const RoutesTab(),
+                  const MusicTab(),
                   const HistoryTab(),
                   const LiveTab(),
-                  ProfileTab(onLogout: widget.onLogout),
+                  ProfileTab(
+                    onLogout: widget.onLogout,
+                    onOpenTab: (index) => setState(() => _tab = index),
+                  ),
                 ],
               ),
             ),
@@ -116,44 +122,59 @@ class _HomeShellState extends State<HomeShell> {
     ),
     child: SafeArea(
       top: false,
-      child: SizedBox(
-        height: 58,
-        child: Row(
-          children: [
-            for (var i = 0; i < _tabs.length; i++)
-              Expanded(
-                child: InkWell(
-                  onTap: () => setState(() => _tab = i),
-                  child: Column(
-                    mainAxisAlignment: MainAxisAlignment.center,
-                    children: [
-                      Icon(
-                        _tab == i ? _tabs[i].active : _tabs[i].icon,
-                        size: 21,
-                        color: _tab == i ? LR.ink : LR.muted,
-                      ),
-                      const SizedBox(height: 4),
-                      Text(
-                        _tabs[i].label,
-                        style: TextStyle(
-                          fontSize: 9,
-                          fontWeight: FontWeight.w900,
-                          letterSpacing: 0.7,
-                          color: _tab == i ? LR.ink : LR.muted,
+      child: LayoutBuilder(
+        builder: (context, constraints) {
+          // Six labelled tabs need about 56 pt each. On a narrow phone the
+          // labels go and the icons stay, rather than the labels colliding.
+          final showLabels = constraints.maxWidth / _tabs.length >= 56;
+          return SizedBox(
+            height: showLabels ? 58 : 50,
+            child: Row(
+              children: [
+                for (var i = 0; i < _tabs.length; i++)
+                  Expanded(
+                    child: Semantics(
+                      selected: _tab == i,
+                      button: true,
+                      label: _tabs[i].label,
+                      child: InkWell(
+                        onTap: () => setState(() => _tab = i),
+                        child: Column(
+                          mainAxisAlignment: MainAxisAlignment.center,
+                          children: [
+                            Icon(
+                              _tab == i ? _tabs[i].active : _tabs[i].icon,
+                              size: 21,
+                              color: _tab == i ? LR.ink : LR.muted,
+                            ),
+                            if (showLabels) ...[
+                              const SizedBox(height: 4),
+                              Text(
+                                _tabs[i].label,
+                                maxLines: 1,
+                                style: TextStyle(
+                                  fontSize: 8.5,
+                                  fontWeight: FontWeight.w900,
+                                  letterSpacing: 0.5,
+                                  color: _tab == i ? LR.ink : LR.muted,
+                                ),
+                              ),
+                            ],
+                            const SizedBox(height: 3),
+                            Container(
+                              height: 2,
+                              width: 20,
+                              color: _tab == i ? LR.accent : Colors.transparent,
+                            ),
+                          ],
                         ),
                       ),
-                      const SizedBox(height: 3),
-                      Container(
-                        height: 2,
-                        width: 22,
-                        color: _tab == i ? LR.accent : Colors.transparent,
-                      ),
-                    ],
+                    ),
                   ),
-                ),
-              ),
-          ],
-        ),
+              ],
+            ),
+          );
+        },
       ),
     ),
   );

@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:io';
 
 import 'package:flutter/material.dart';
 
@@ -6,15 +7,40 @@ import '../../core/api_client.dart';
 import '../../core/formatters.dart';
 import '../../core/lr_theme.dart';
 import '../../services/app_services.dart';
+import '../../services/spotify_service.dart';
 import '../../services/weather_service.dart';
 import '../../widgets/lr_common.dart';
 import '../data_field_editor.dart';
+import '../whoop_screen.dart';
 
 /// Rider identity and app preferences.
-class ProfileTab extends StatelessWidget {
-  const ProfileTab({super.key, required this.onLogout});
+class ProfileTab extends StatefulWidget {
+  const ProfileTab({
+    super.key,
+    required this.onLogout,
+    required this.onOpenTab,
+  });
 
   final VoidCallback onLogout;
+  final ValueChanged<int> onOpenTab;
+
+  @override
+  State<ProfileTab> createState() => _ProfileTabState();
+}
+
+class _ProfileTabState extends State<ProfileTab> {
+  bool? _liveActivitySupported;
+
+  @override
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addPostFrameCallback((_) async {
+      final supported = await AppServices.of(
+        context,
+      ).liveActivity.isSupported();
+      if (mounted) setState(() => _liveActivitySupported = supported);
+    });
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -135,6 +161,75 @@ class ProfileTab extends StatelessWidget {
               ),
             ),
             const SizedBox(height: 24),
+            const LrSectionHeader(title: 'Devices and services'),
+            LrPanel(
+              padding: EdgeInsets.zero,
+              child: Column(
+                children: [
+                  AnimatedBuilder(
+                    animation: services.heartRate,
+                    builder: (context, _) => ListTile(
+                      leading: const Icon(Icons.favorite_outline),
+                      title: const Text('WHOOP and heart rate'),
+                      subtitle: Text(
+                        services.heartRate.isConnected
+                            ? '${services.heartRate.connectedName ?? 'Sensor'} connected'
+                                  '${services.heartRate.latestBpm == null ? '' : ' · ${services.heartRate.latestBpm} bpm'}'
+                            : services.heartRate.rememberedName != null
+                            ? 'Last used ${services.heartRate.rememberedName}'
+                            : 'No sensor connected',
+                      ),
+                      trailing: const Icon(Icons.chevron_right),
+                      onTap: () => Navigator.of(context).push(
+                        MaterialPageRoute<void>(
+                          builder: (_) => const WhoopScreen(),
+                        ),
+                      ),
+                    ),
+                  ),
+                  const Divider(height: 1),
+                  AnimatedBuilder(
+                    animation: services.spotify,
+                    builder: (context, _) => ListTile(
+                      leading: const Icon(Icons.graphic_eq),
+                      title: const Text('Spotify'),
+                      subtitle: Text(switch (services.spotify.status) {
+                        SpotifyStatus.connected =>
+                          '${services.spotify.displayName ?? 'Account'} connected',
+                        SpotifyStatus.connecting => 'Connecting…',
+                        SpotifyStatus.signedOut => 'Not signed in',
+                        SpotifyStatus.unconfigured => 'Needs a client ID',
+                      }),
+                      trailing: const Icon(Icons.chevron_right),
+                      onTap: () => widget.onOpenTab(2),
+                    ),
+                  ),
+                  const Divider(height: 1),
+                  ListTile(
+                    leading: const Icon(Icons.lock_clock),
+                    title: const Text('Lock Screen Live Activity'),
+                    subtitle: Text(
+                      switch (_liveActivitySupported) {
+                        null => 'Checking…',
+                        true =>
+                          'Ready — starts automatically when a ride starts',
+                        false =>
+                          Platform.isIOS
+                              ? 'Turn Live Activities on for Live Ride in '
+                                    'iOS Settings'
+                              : 'iOS only',
+                      },
+                      style: TextStyle(
+                        color: _liveActivitySupported == false
+                            ? LR.alert
+                            : null,
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            const SizedBox(height: 24),
             const LrSectionHeader(title: 'Connection'),
             LrPanel(
               padding: EdgeInsets.zero,
@@ -221,6 +316,6 @@ class ProfileTab extends StatelessWidget {
     if (services.live.isActive) await services.live.stop();
     await services.api.logout();
     unawaited(services.heartRate.disconnect());
-    onLogout();
+    widget.onLogout();
   }
 }
