@@ -1,0 +1,29 @@
+name: live_ride
+description: Live Ride cycling navigation and live tracking
+publish_to: 'none'
+version: 0.1.0+1
+
+environment:
+  sdk: ^3.11.5
+
+dependencies:
+  flutter:
+    sdk: flutter
+  bluetooth_low_energy: ^6.2.1
+  cookie_jar: ^4.0.9
+  dio: ^5.9.2
+  dio_cookie_manager: ^3.4.0
+  file_picker: ^11.0.2
+  geolocator: ^14.0.0
+  gpx: ^2.3.0
+  maplibre: 0.3.5
+  path_provider: ^2.1.5
+  share_plus: ^12.0.2
+
+dev_dependencies:
+  flutter_test:
+    sdk: flutter
+  flutter_lints: ^6.0.0
+
+flutter:
+  uses-material-design: true
