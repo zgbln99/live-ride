@@ -55,8 +55,14 @@ void main() {
 
     test('bierze surowszy z dwóch limitów', () {
       // 10 % przebiegu, ale 100 % czasu.
+      //
+      // Data graniczna liczy się od montażu, a nie jest wpisana z palca:
+      // między dwiema datami kalendarzowymi potrafi wypaść zmiana czasu i
+      // wtedy `difference(...).inDays` obcina 151 dni bez godziny do 150,
+      // co w strefie z DST wywracało ten test przy poprawnej produkcji.
       final sealant = component(limitMeters: 10000000, limitDays: 151);
-      expect(sealant.wear(2000000, now), greaterThanOrEqualTo(1.0));
+      final dueDate = installed.add(const Duration(days: 151));
+      expect(sealant.wear(2000000, dueDate), greaterThanOrEqualTo(1.0));
     });
 
     test('nie cofa przebiegu, gdy licznik roweru zresetowano', () {
