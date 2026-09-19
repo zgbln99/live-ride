@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import '../core/lr_theme.dart';
+import '../i18n/strings.dart';
 import '../models/route/route_preferences.dart';
 import '../widgets/lr_common.dart';
 
@@ -46,7 +47,7 @@ class _PreferencesSheetState extends State<_PreferencesSheet> {
           controller: widget.scrollController,
           padding: const EdgeInsets.fromLTRB(20, 0, 20, 12),
           children: [
-            const LrSectionHeader(title: 'Rower'),
+            LrSectionHeader(title: S.bike),
             _chips<BikeProfile>(
               values: BikeProfile.values,
               selected: _value.profile,
@@ -55,7 +56,7 @@ class _PreferencesSheetState extends State<_PreferencesSheet> {
                   setState(() => _value = _value.copyWith(profile: profile)),
             ),
             const SizedBox(height: 22),
-            const LrSectionHeader(title: 'Charakter trasy'),
+            LrSectionHeader(title: S.routeCharacter),
             _chips<RouteMood>(
               values: RouteMood.values,
               selected: _value.mood,
@@ -71,7 +72,7 @@ class _PreferencesSheetState extends State<_PreferencesSheet> {
               RouteMood.quiet => 'Bocznymi drogami, nawet jeśli będzie dłużej.',
             }, style: LR.body.copyWith(fontSize: 12, height: 1.35)),
             const SizedBox(height: 22),
-            const LrSectionHeader(title: 'Nawierzchnia'),
+            LrSectionHeader(title: S.surface),
             _chips<SurfacePreference>(
               values: SurfacePreference.values,
               selected: _value.surface,
@@ -80,7 +81,7 @@ class _PreferencesSheetState extends State<_PreferencesSheet> {
                   setState(() => _value = _value.copyWith(surface: surface)),
             ),
             const SizedBox(height: 22),
-            const LrSectionHeader(title: 'Unikaj i preferuj'),
+            LrSectionHeader(title: S.avoidAndPrefer),
             LrPanel(
               padding: EdgeInsets.zero,
               child: Column(
@@ -119,7 +120,7 @@ class _PreferencesSheetState extends State<_PreferencesSheet> {
                   ),
                   const Divider(height: 1),
                   _toggle(
-                    'Unikaj tuneli',
+                    S.avoidTunnels,
                     _value.avoidTunnels,
                     (value) => _value = _value.copyWith(avoidTunnels: value),
                     subtitle:
@@ -150,7 +151,7 @@ class _PreferencesSheetState extends State<_PreferencesSheet> {
             padding: const EdgeInsets.fromLTRB(20, 10, 20, 12),
             child: FilledButton(
               onPressed: () => Navigator.pop(context, _value),
-              child: const Text('ZASTOSUJ'),
+              child: Text(S.apply),
             ),
           ),
         ),

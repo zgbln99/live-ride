@@ -6,6 +6,7 @@ import 'package:share_plus/share_plus.dart';
 
 import '../../core/formatters.dart';
 import '../../core/lr_theme.dart';
+import '../../i18n/strings.dart';
 import '../../services/app_services.dart';
 import '../../services/heart_rate_service.dart';
 import '../../services/live_service.dart';
@@ -41,7 +42,7 @@ class _LiveTabState extends State<LiveTab> {
         return ListView(
           padding: const EdgeInsets.fromLTRB(16, 16, 16, 28),
           children: [
-            const LrSectionHeader(title: 'Live tracking'),
+            LrSectionHeader(title: S.liveTracking),
             LrPanel(
               padding: const EdgeInsets.all(18),
               accentEdge: session != null,
@@ -53,14 +54,14 @@ class _LiveTabState extends State<LiveTab> {
                       Expanded(
                         child: Text(
                           session == null
-                              ? 'Not broadcasting'
-                              : live.title ?? 'LIVE',
+                              ? S.notBroadcasting
+                              : live.title ?? S.live,
                           style: LR.title.copyWith(fontSize: 19),
                         ),
                       ),
                       if (session != null)
                         LrStatusChip(
-                          label: live.lastPushFailed ? 'RECONNECTING' : 'LIVE',
+                          label: live.lastPushFailed ? S.reconnecting : S.live,
                           color: live.lastPushFailed ? LR.inkSoft : LR.alert,
                           filled: !live.lastPushFailed,
                         ),
@@ -69,33 +70,31 @@ class _LiveTabState extends State<LiveTab> {
                   const SizedBox(height: 10),
                   Text(
                     session == null
-                        ? 'Start a LIVE session and share one link. Anyone with '
-                              'it sees your position, speed, distance and heart '
-                              'rate on a full-screen map — no account needed.'
-                        : 'Riding as ${services.profile.riderName}. Telemetry '
-                              'is sent every ${LiveSessionController.telemetryInterval.inSeconds} '
-                              'seconds while a ride is '
-                              'recording.',
+                        ? S.liveDescription
+                        : S.ridingAsTelemetry(
+                            services.profile.riderName,
+                            LiveSessionController.telemetryInterval.inSeconds,
+                          ),
                     style: LR.body.copyWith(height: 1.45),
                   ),
                   if (session != null) ...[
                     const SizedBox(height: 16),
-                    _copyRow('JOIN CODE', session.joinToken),
+                    _copyRow(S.joinCode, session.joinToken),
                     const SizedBox(height: 10),
-                    _copyRow('SPECTATOR LINK', live.viewerUrl ?? ''),
+                    _copyRow(S.spectatorLink, live.viewerUrl ?? ''),
                     const SizedBox(height: 14),
                     Row(
                       children: [
                         Expanded(
                           child: LrStat(
-                            label: 'Speed',
+                            label: S.fieldSpeed,
                             value: Fmt.speed(metrics.speedKmh, metric: metric),
                             unit: Fmt.speedUnit(metric: metric),
                           ),
                         ),
                         Expanded(
                           child: LrStat(
-                            label: 'Distance',
+                            label: S.distance,
                             value: Fmt.distance(
                               metrics.distanceMeters,
                               metric: metric,
@@ -115,7 +114,7 @@ class _LiveTabState extends State<LiveTab> {
                     const SizedBox(height: 8),
                     Text(
                       live.lastAcceptedAt == null
-                          ? 'Waiting for the first telemetry upload…'
+                          ? S.waitingForFirstUpload
                           : 'Last update ${Fmt.clock(live.lastAcceptedAt!)}',
                       style: LR.fieldLabel.copyWith(fontSize: 10),
                     ),
@@ -125,18 +124,18 @@ class _LiveTabState extends State<LiveTab> {
                     FilledButton.icon(
                       onPressed: () => _openSheet(services),
                       icon: const Icon(Icons.sensors, size: 18),
-                      label: const Text('START OR JOIN LIVE'),
+                      label: Text(S.startOrJoinLive),
                     )
                   else ...[
                     FilledButton.icon(
                       onPressed: () => SharePlus.instance.share(
                         ShareParams(
                           text: live.viewerUrl ?? '',
-                          subject: 'Follow my ride on Live Ride',
+                          subject: S.followMyRide,
                         ),
                       ),
                       icon: const Icon(Icons.ios_share, size: 18),
-                      label: const Text('SHARE THE LINK'),
+                      label: Text(S.shareTheLink),
                     ),
                     const SizedBox(height: 10),
                     OutlinedButton.icon(
@@ -145,7 +144,7 @@ class _LiveTabState extends State<LiveTab> {
                         if (mounted) setState(() {});
                       },
                       icon: const Icon(Icons.stop_circle_outlined, size: 18),
-                      label: const Text('END LIVE'),
+                      label: Text(S.endLive),
                       style: OutlinedButton.styleFrom(
                         foregroundColor: LR.alert,
                         side: const BorderSide(color: LR.alert),
@@ -156,7 +155,7 @@ class _LiveTabState extends State<LiveTab> {
               ),
             ),
             const SizedBox(height: 24),
-            const LrSectionHeader(title: 'Heart rate'),
+            LrSectionHeader(title: S.heartRate),
             _heartRatePanel(services),
           ],
         );
@@ -195,12 +194,12 @@ class _LiveTabState extends State<LiveTab> {
                 Text('bpm', style: LR.fieldUnit),
                 const Spacer(),
                 Text(switch (hr.status) {
-                  HeartRateStatus.streaming => hr.isStale ? 'NO BEAT' : 'LIVE',
-                  HeartRateStatus.waiting => 'CONNECTED',
-                  HeartRateStatus.connecting => 'CONNECTING',
-                  HeartRateStatus.reconnecting => 'RECONNECTING',
-                  HeartRateStatus.scanning => 'SCANNING',
-                  HeartRateStatus.idle => 'NOT CONNECTED',
+                  HeartRateStatus.streaming => hr.isStale ? S.noBeat : S.live,
+                  HeartRateStatus.waiting => S.connected,
+                  HeartRateStatus.connecting => S.connecting,
+                  HeartRateStatus.reconnecting => S.reconnecting,
+                  HeartRateStatus.scanning => S.scanning,
+                  HeartRateStatus.idle => S.notConnected,
                 }, style: LR.fieldLabel.copyWith(fontSize: 10)),
                 const SizedBox(width: 6),
                 const Icon(Icons.chevron_right, size: 18, color: LR.muted),
@@ -209,9 +208,9 @@ class _LiveTabState extends State<LiveTab> {
             const SizedBox(height: 12),
             Text(
               hr.isConnected
-                  ? '${hr.connectedName ?? 'Sensor'} connected'
-                        '${hr.batteryPercent == null ? '' : ' · ${hr.batteryPercent}% battery'}'
-                  : 'Connect a WHOOP strap or any Bluetooth heart-rate sensor.',
+                  ? '${S.connectedTo(hr.connectedName ?? S.heartRateStrap)}'
+                        '${hr.batteryPercent == null ? '' : ' · ${S.sensorBattery(hr.batteryPercent!)}'}'
+                  : S.connectStrapHint,
               style: LR.body.copyWith(fontSize: 12.5, height: 1.4),
             ),
           ],
@@ -244,7 +243,7 @@ class _LiveTabState extends State<LiveTab> {
           ),
         ),
         IconButton(
-          tooltip: 'Copy',
+          tooltip: S.copy,
           icon: const Icon(Icons.copy, size: 17),
           onPressed: () async {
             await Clipboard.setData(ClipboardData(text: value));

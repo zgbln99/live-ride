@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 
 import '../core/api_client.dart';
 import '../core/lr_theme.dart';
+import '../i18n/strings.dart';
 import '../services/app_services.dart';
 import '../widgets/lr_common.dart';
 
@@ -77,7 +78,7 @@ class _LoginScreenState extends State<LoginScreen> {
                 const LrWordmark(dark: true),
                 const SizedBox(height: 26),
                 Text(
-                  _register ? 'Create your rider account' : 'Sign in to ride',
+                  _register ? S.registerTitle : S.signInTitle,
                   style: const TextStyle(
                     color: Colors.white,
                     fontSize: 27,
@@ -92,17 +93,17 @@ class _LoginScreenState extends State<LoginScreen> {
                   style: TextStyle(color: Color(0xFF7D93A4), fontSize: 12.5),
                 ),
                 const SizedBox(height: 28),
-                _field(_username, 'Username', autofocus: true),
+                _field(_username, S.username, autofocus: true),
                 if (_register) ...[
                   const SizedBox(height: 12),
                   _field(
                     _email,
-                    'Email',
+                    S.email,
                     keyboardType: TextInputType.emailAddress,
                   ),
                 ],
                 const SizedBox(height: 12),
-                _field(_password, 'Password', obscure: true),
+                _field(_password, S.password, obscure: true),
                 if (_error != null) ...[
                   const SizedBox(height: 16),
                   Container(
@@ -150,7 +151,7 @@ class _LoginScreenState extends State<LoginScreen> {
                             color: LR.ink,
                           ),
                         )
-                      : Text(_register ? 'CREATE ACCOUNT' : 'SIGN IN'),
+                      : Text(_register ? S.register : S.signIn),
                 ),
                 const SizedBox(height: 12),
                 TextButton(
@@ -161,9 +162,7 @@ class _LoginScreenState extends State<LoginScreen> {
                           _error = null;
                         }),
                   child: Text(
-                    _register
-                        ? 'I already have an account'
-                        : 'Create a new account',
+                    _register ? S.haveAccount : S.createAccount,
                     style: const TextStyle(color: LR.accent),
                   ),
                 ),

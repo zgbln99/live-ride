@@ -3,6 +3,7 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 
 import '../core/lr_theme.dart';
+import '../i18n/strings.dart';
 import '../services/app_services.dart';
 import '../services/spotify_service.dart';
 import '../widgets/lr_common.dart';
@@ -71,15 +72,14 @@ class _MusicSheetState extends State<_MusicSheet> {
             mainAxisSize: MainAxisSize.min,
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
-              const LrSectionHeader(title: 'Music'),
+              LrSectionHeader(title: S.music),
               if (track == null)
                 Padding(
                   padding: const EdgeInsets.symmetric(vertical: 10),
                   child: Text(
                     widget.spotify.isConnected
-                        ? 'Nothing is playing. Start a track in Spotify once '
-                              'and the controls below take over.'
-                        : 'Connect Spotify on the Music tab first.',
+                        ? S.nothingPlayingHint
+                        : S.connectSpotifyOnMusicTab,
                     style: LR.body.copyWith(height: 1.4),
                   ),
                 )

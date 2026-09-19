@@ -1,4 +1,6 @@
 import 'package:flutter/material.dart';
+
+import '../i18n/strings.dart';
 import 'package:flutter/scheduler.dart';
 
 import '../core/lr_theme.dart';
@@ -204,7 +206,7 @@ class TransportBar extends StatelessWidget {
           icon: Icons.skip_previous_rounded,
           onPressed: busy ? null : onPrevious,
           height: height,
-          semanticLabel: 'Previous track',
+          semanticLabel: S.previousTrack,
         ),
       ),
       const SizedBox(width: 10),
@@ -224,7 +226,7 @@ class TransportBar extends StatelessWidget {
           icon: Icons.skip_next_rounded,
           onPressed: busy ? null : onNext,
           height: height,
-          semanticLabel: 'Next track',
+          semanticLabel: S.nextTrack,
         ),
       ),
     ],

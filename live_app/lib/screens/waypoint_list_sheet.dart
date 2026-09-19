@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import '../core/lr_theme.dart';
+import '../i18n/strings.dart';
 import '../models/route/route_waypoint.dart';
 import '../services/route_builder_controller.dart';
 import '../widgets/lr_common.dart';
@@ -48,9 +49,9 @@ class _WaypointListState extends State<_WaypointList> {
           padding: const EdgeInsets.fromLTRB(20, 0, 12, 4),
           child: Row(
             children: [
-              const Expanded(
+              Expanded(
                 child: LrSectionHeader(
-                  title: 'Punkty trasy',
+                  title: S.waypoints,
                   padding: EdgeInsets.zero,
                 ),
               ),

@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
 import '../../core/lr_theme.dart';
+import '../../i18n/strings.dart';
 import '../../services/app_services.dart';
 import '../../services/spotify_service.dart';
 import '../../widgets/lr_common.dart';
@@ -75,42 +76,35 @@ class _MusicTabState extends State<MusicTab> {
   Widget _setupView() => ListView(
     padding: const EdgeInsets.fromLTRB(16, 16, 16, 28),
     children: [
-      _hero(
-        'Connect Spotify',
-        'Live Ride controls whatever Spotify is already playing — on this '
-            'phone, a speaker, or a head unit — so you can skip a track '
-            'without leaving the ride screen.',
-      ),
+      _hero(S.connectSpotify, S.spotifyIntro),
       const SizedBox(height: 22),
-      const LrSectionHeader(title: 'One-time setup'),
+      LrSectionHeader(title: S.oneTimeSetup),
       LrPanel(
         padding: const EdgeInsets.fromLTRB(18, 16, 18, 18),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
             Text(
-              'Spotify requires every app to use its own client ID. Live Ride '
-              'ships without one on purpose: no shared key, no rate limit you '
-              'do not control, nothing secret compiled into the app.',
+              S.spotifyClientIdIntro,
               style: LR.body.copyWith(height: 1.45, fontSize: 13),
             ),
             const SizedBox(height: 16),
-            _step(1, 'Open developer.spotify.com/dashboard and create an app.'),
-            _step(2, 'Add this exact redirect URI:'),
+            _step(1, S.spotifyStep1),
+            _step(2, S.spotifyStep2),
             Padding(
               padding: const EdgeInsets.fromLTRB(32, 2, 0, 12),
               child: _copyRow(SpotifyService.redirectUri),
             ),
-            _step(3, 'Tick the Web API box and save.'),
-            _step(4, 'Copy the client ID and paste it below.'),
+            _step(3, S.spotifyStep3),
+            _step(4, S.spotifyStep4),
             const SizedBox(height: 10),
             TextField(
               controller: _clientIdField,
               autocorrect: false,
               enableSuggestions: false,
-              decoration: const InputDecoration(
-                labelText: 'Spotify client ID',
-                hintText: '32 characters',
+              decoration: InputDecoration(
+                labelText: S.spotifyClientId,
+                hintText: S.spotifyClientIdHint,
               ),
             ),
             const SizedBox(height: 14),
@@ -121,7 +115,7 @@ class _MusicTabState extends State<MusicTab> {
                       await _spotify.setClientId(_clientIdField.text);
                       if (_spotify.isConfigured) await _spotify.connect();
                     }),
-              child: const Text('SAVE AND CONNECT'),
+              child: Text(S.saveAndConnect),
             ),
           ],
         ),
@@ -132,16 +126,12 @@ class _MusicTabState extends State<MusicTab> {
   Widget _signInView() => ListView(
     padding: const EdgeInsets.fromLTRB(16, 16, 16, 28),
     children: [
-      _hero(
-        'Connect Spotify',
-        'Sign in once. Live Ride only asks for what it needs to show the '
-            'track and work the transport controls.',
-      ),
+      _hero(S.connectSpotify, S.spotifySignInIntro),
       const SizedBox(height: 20),
       FilledButton.icon(
         onPressed: _busy ? null : () => _run(_spotify.connect),
         icon: const Icon(Icons.link, size: 18),
-        label: const Text('CONNECT SPOTIFY'),
+        label: Text(S.connectSpotifyButton),
       ),
       const SizedBox(height: 12),
       TextButton(
@@ -149,29 +139,28 @@ class _MusicTabState extends State<MusicTab> {
           await _spotify.setClientId('');
           if (mounted) setState(() {});
         },
-        child: const Text('Use a different client ID'),
+        child: Text(S.useDifferentClientId),
       ),
       if (_spotify.lastError != null) ...[
         const SizedBox(height: 16),
         _errorPanel(_spotify.lastError!),
       ],
       const SizedBox(height: 26),
-      const LrSectionHeader(title: 'What Live Ride asks for'),
+      LrSectionHeader(title: S.whatLiveRideAsksFor),
       LrPanel(
         padding: const EdgeInsets.all(18),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            _permission('Read what is playing', 'to show the track on screen'),
-            _permission('Control playback', 'play, pause, skip, shuffle'),
+            _permission(S.permissionReadPlayback, S.permissionReadPlaybackWhy),
             _permission(
-              'Read recently played and playlists',
-              'so there is something to start from',
+              S.permissionControlPlayback,
+              S.permissionControlPlaybackWhy,
             ),
+            _permission(S.permissionReadLibrary, S.permissionReadLibraryWhy),
             const SizedBox(height: 4),
             Text(
-              'Sign-in runs in the system browser sheet, so your Spotify '
-              'password is never seen by Live Ride.',
+              S.spotifyBrowserNote,
               style: LR.body.copyWith(fontSize: 12, height: 1.4),
             ),
           ],
@@ -208,17 +197,16 @@ class _MusicTabState extends State<MusicTab> {
                         child: Column(
                           crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
-                            const Text(
-                              'Nothing playing',
-                              style: TextStyle(
+                            Text(
+                              S.nothingPlaying,
+                              style: const TextStyle(
                                 fontSize: 16,
                                 fontWeight: FontWeight.w800,
                               ),
                             ),
                             const SizedBox(height: 5),
                             Text(
-                              'Start a track in Spotify once. Live Ride takes '
-                              'over the controls from there.',
+                              S.nothingPlayingHint,
                               style: LR.body.copyWith(
                                 fontSize: 12.5,
                                 height: 1.35,
@@ -255,7 +243,7 @@ class _MusicTabState extends State<MusicTab> {
                           color: track.shuffle ? LR.accentDeep : LR.muted,
                         ),
                         label: Text(
-                          track.shuffle ? 'SHUFFLE ON' : 'SHUFFLE OFF',
+                          track.shuffle ? S.shuffleOn : S.shuffleOff,
                           style: TextStyle(
                             color: track.shuffle ? LR.accentDeep : LR.muted,
                           ),
@@ -287,11 +275,7 @@ class _MusicTabState extends State<MusicTab> {
           ),
           if (!_spotify.isPremium) ...[
             const SizedBox(height: 12),
-            _errorPanel(
-              'This Spotify account is not Premium. Spotify only allows other '
-              'apps to control playback on Premium, so the transport buttons '
-              'will report an error.',
-            ),
+            _errorPanel(S.spotifyNotPremium),
           ],
           if (_spotify.lastError != null) ...[
             const SizedBox(height: 12),
@@ -299,15 +283,15 @@ class _MusicTabState extends State<MusicTab> {
           ],
           const SizedBox(height: 24),
           LrSectionHeader(
-            title: 'Play on',
+            title: S.playOn,
             trailing: TextButton(
               onPressed: () => _run(_spotify.refreshDevices),
-              child: const Text('REFRESH'),
+              child: Text(S.refresh),
             ),
           ),
           _deviceList(),
           const SizedBox(height: 24),
-          const LrSectionHeader(title: 'Start something'),
+          LrSectionHeader(title: S.startSomething),
           _shortcutGrid(),
           const SizedBox(height: 24),
           LrPanel(
@@ -321,20 +305,20 @@ class _MusicTabState extends State<MusicTab> {
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
                       Text(
-                        _spotify.displayName ?? 'Spotify account',
+                        _spotify.displayName ?? S.spotifyAccount,
                         style: const TextStyle(
                           fontSize: 14,
                           fontWeight: FontWeight.w800,
                         ),
                       ),
                       const SizedBox(height: 2),
-                      Text('Connected', style: LR.body.copyWith(fontSize: 12)),
+                      Text(S.connected, style: LR.body.copyWith(fontSize: 12)),
                     ],
                   ),
                 ),
                 TextButton(
                   onPressed: () => _run(_spotify.disconnect),
-                  child: const Text('DISCONNECT'),
+                  child: Text(S.disconnect),
                 ),
               ],
             ),
@@ -349,11 +333,7 @@ class _MusicTabState extends State<MusicTab> {
     if (devices.isEmpty) {
       return LrPanel(
         padding: const EdgeInsets.all(18),
-        child: Text(
-          'No Spotify devices are awake. Open Spotify on this phone, a '
-          'speaker or a computer and it appears here.',
-          style: LR.body,
-        ),
+        child: Text(S.noSpotifyDevices, style: LR.body),
       );
     }
     return Column(
@@ -382,7 +362,7 @@ class _MusicTabState extends State<MusicTab> {
                       ),
                       const SizedBox(height: 2),
                       Text(
-                        device.isActive ? 'Playing here' : device.type,
+                        device.isActive ? S.playingHere : device.type,
                         style: LR.body.copyWith(fontSize: 11.5),
                       ),
                     ],
@@ -415,15 +395,10 @@ class _MusicTabState extends State<MusicTab> {
         padding: const EdgeInsets.all(18),
         child: Row(
           children: [
-            Expanded(
-              child: Text(
-                'Your playlists and recently played appear here.',
-                style: LR.body,
-              ),
-            ),
+            Expanded(child: Text(S.yourPlaylistsAppearHere, style: LR.body)),
             TextButton(
               onPressed: () => _run(_spotify.refreshShortcuts),
-              child: const Text('LOAD'),
+              child: Text(S.load),
             ),
           ],
         ),
@@ -496,7 +471,7 @@ class _MusicTabState extends State<MusicTab> {
             const Icon(Icons.graphic_eq, color: LR.accent, size: 18),
             const SizedBox(width: 8),
             Text(
-              'MUSIC',
+              S.tabMusic,
               style: TextStyle(
                 color: LR.accent,
                 fontSize: 11,
@@ -610,11 +585,11 @@ class _MusicTabState extends State<MusicTab> {
           ),
         ),
         IconButton(
-          tooltip: 'Copy',
+          tooltip: S.copy,
           icon: const Icon(Icons.copy, size: 16),
           onPressed: () async {
             await Clipboard.setData(ClipboardData(text: value));
-            if (mounted) showLrMessage(context, 'Redirect URI copied');
+            if (mounted) showLrMessage(context, S.copied);
           },
         ),
       ],

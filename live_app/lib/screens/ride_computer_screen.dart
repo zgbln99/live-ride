@@ -7,6 +7,7 @@ import 'package:wakelock_plus/wakelock_plus.dart';
 import '../core/formatters.dart';
 import '../core/idle_chrome_controller.dart';
 import '../core/lr_theme.dart';
+import '../i18n/strings.dart';
 import '../models/navigation_plan.dart';
 import '../models/ride_data_field.dart';
 import '../models/ride_pages.dart';
@@ -167,7 +168,7 @@ class _RideComputerScreenState extends State<RideComputerScreen> {
                             NavigationHeader(
                               progress: recorder.progress,
                               metric: profile.metricUnits,
-                              routeName: recorder.route?.name ?? 'Route',
+                              routeName: recorder.route?.name ?? S.route,
                               etaSeconds: _etaSeconds(recorder),
                               live: services.live.isActive,
                               mapMatched: recorder.plan?.mapMatched ?? true,
@@ -317,14 +318,14 @@ class _RideComputerScreenState extends State<RideComputerScreen> {
                 child: IconButton(
                   onPressed: _confirmExit,
                   icon: const Icon(Icons.close, size: 20),
-                  tooltip: 'Exit ride',
+                  tooltip: S.exitRide,
                   visualDensity: VisualDensity.compact,
                   color: LR.ink,
                 ),
               ),
               const SizedBox(width: 2),
               LrStatusChip(
-                label: paused ? 'PAUSED' : 'RECORDING',
+                label: paused ? S.paused : S.recording,
                 color: paused ? LR.inkSoft : LR.alert,
                 filled: !paused,
               ),
@@ -334,7 +335,7 @@ class _RideComputerScreenState extends State<RideComputerScreen> {
                 style: LR.fieldValue(21),
               ),
               const SizedBox(width: 4),
-              Text('ELAPSED', style: LR.fieldLabel.copyWith(fontSize: 9)),
+              Text(S.elapsed, style: LR.fieldLabel.copyWith(fontSize: 9)),
             ],
           ),
         ),
@@ -372,7 +373,7 @@ class _RideComputerScreenState extends State<RideComputerScreen> {
             alignment: Alignment.center,
             child: _showMap
                 ? const CircularProgressIndicator()
-                : Text('Map unavailable offline', style: LR.body),
+                : Text(S.mapUnavailableOffline, style: LR.body),
           ),
         Positioned(
           top: 10,
@@ -383,13 +384,13 @@ class _RideComputerScreenState extends State<RideComputerScreen> {
               children: [
                 LrMapButton(
                   icon: Icons.tune,
-                  tooltip: 'Ride settings',
+                  tooltip: S.rideSettings,
                   onPressed: _openRideSettings,
                 ),
                 const SizedBox(height: 8),
                 LrMapButton(
                   icon: Icons.sensors,
-                  tooltip: 'LIVE',
+                  tooltip: S.live,
                   active: services.live.isActive,
                   onPressed: _openLiveSheet,
                 ),
@@ -397,7 +398,7 @@ class _RideComputerScreenState extends State<RideComputerScreen> {
                   const SizedBox(height: 8),
                   LrMapButton(
                     icon: Icons.graphic_eq,
-                    tooltip: 'Music',
+                    tooltip: S.music,
                     active: services.spotify.nowPlaying?.isPlaying ?? false,
                     onPressed: _openMusicSheet,
                   ),
@@ -439,7 +440,7 @@ class _RideComputerScreenState extends State<RideComputerScreen> {
                 visible: _chromeVisible || !_follow,
                 child: LrMapButton(
                   icon: Icons.my_location,
-                  tooltip: 'Recenter',
+                  tooltip: S.recenter,
                   active: _follow,
                   onPressed: () => _mapKey.currentState?.recenter(),
                 ),
@@ -452,13 +453,13 @@ class _RideComputerScreenState extends State<RideComputerScreen> {
                     const SizedBox(height: 8),
                     LrMapButton(
                       icon: Icons.add,
-                      tooltip: 'Zoom in',
+                      tooltip: S.zoomIn,
                       onPressed: () => _mapKey.currentState?.zoomBy(1),
                     ),
                     const SizedBox(height: 8),
                     LrMapButton(
                       icon: Icons.remove,
-                      tooltip: 'Zoom out',
+                      tooltip: S.zoomOut,
                       onPressed: () => _mapKey.currentState?.zoomBy(-1),
                     ),
                   ],
@@ -520,7 +521,7 @@ class _RideComputerScreenState extends State<RideComputerScreen> {
           ),
           const SizedBox(width: 5),
           Text(
-            accuracy == null ? 'NO FIX' : '±${accuracy.round()} m',
+            accuracy == null ? S.noFix : '±${accuracy.round()} m',
             style: LR.fieldLabel.copyWith(fontSize: 10),
           ),
           if (bpm != null) ...[
@@ -534,7 +535,7 @@ class _RideComputerScreenState extends State<RideComputerScreen> {
             const Icon(Icons.cloud_off, size: 13, color: LR.alert),
             const SizedBox(width: 4),
             Text(
-              'LIVE OFFLINE',
+              S.liveOffline,
               style: LR.fieldLabel.copyWith(fontSize: 10, color: LR.alert),
             ),
           ],
@@ -560,7 +561,7 @@ class _RideComputerScreenState extends State<RideComputerScreen> {
           if (_openSettingsOnError)
             OutlinedButton(
               onPressed: () => _services.location.openSettings(),
-              child: const Text('OPEN SETTINGS'),
+              child: Text(S.openSettingsButton),
             ),
           const SizedBox(height: 10),
           FilledButton(
@@ -571,12 +572,12 @@ class _RideComputerScreenState extends State<RideComputerScreen> {
               });
               unawaited(_boot());
             },
-            child: const Text('TRY AGAIN'),
+            child: Text(S.tryAgain),
           ),
           const SizedBox(height: 10),
           TextButton(
             onPressed: () => Navigator.of(context).maybePop(),
-            child: const Text('Back'),
+            child: Text(S.back),
           ),
         ],
       ),
@@ -608,19 +609,17 @@ class _RideComputerScreenState extends State<RideComputerScreen> {
             child: Column(
               mainAxisSize: MainAxisSize.min,
               children: [
-                const Padding(
-                  padding: EdgeInsets.fromLTRB(20, 0, 20, 6),
-                  child: LrSectionHeader(title: 'Ride settings'),
+                Padding(
+                  padding: const EdgeInsets.fromLTRB(20, 0, 20, 6),
+                  child: LrSectionHeader(title: S.rideSettings),
                 ),
                 SwitchListTile(
                   value: profile.headingUp,
                   onChanged: (value) => services.profile.update(
                     profile.copyWith(headingUp: value),
                   ),
-                  title: const Text('Heading up'),
-                  subtitle: const Text(
-                    'Rotate the map with the direction of travel',
-                  ),
+                  title: Text(S.headingUp),
+                  subtitle: Text(S.headingUpSubtitle),
                 ),
                 SwitchListTile(
                   value: profile.keepScreenAwake,
@@ -632,18 +631,18 @@ class _RideComputerScreenState extends State<RideComputerScreen> {
                       value ? WakelockPlus.enable() : WakelockPlus.disable(),
                     );
                   },
-                  title: const Text('Keep the screen on'),
+                  title: Text(S.keepScreenOn),
                 ),
                 SwitchListTile(
                   value: profile.weatherEnabled,
                   onChanged: (value) => services.profile.update(
                     profile.copyWith(weatherEnabled: value),
                   ),
-                  title: const Text('Show weather'),
+                  title: Text(S.showWeather),
                 ),
                 ListTile(
                   leading: const Icon(Icons.grid_view),
-                  title: const Text('Data fields'),
+                  title: Text(S.dataFields),
                   subtitle: Text(profile.layout.label),
                   onTap: () {
                     Navigator.pop(sheetContext);
@@ -698,25 +697,25 @@ class _RideComputerScreenState extends State<RideComputerScreen> {
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            const Padding(
-              padding: EdgeInsets.fromLTRB(20, 0, 20, 4),
-              child: LrSectionHeader(title: 'Ride in progress'),
+            Padding(
+              padding: const EdgeInsets.fromLTRB(20, 0, 20, 4),
+              child: LrSectionHeader(title: S.rideInProgress),
             ),
             ListTile(
               leading: const Icon(Icons.play_arrow),
-              title: const Text('Keep riding'),
+              title: Text(S.keepRiding),
               onTap: () => Navigator.pop(sheetContext, 'keep'),
             ),
             ListTile(
               leading: const Icon(Icons.save_outlined),
-              title: const Text('Finish and save'),
+              title: Text(S.finishAndSave),
               onTap: () => Navigator.pop(sheetContext, 'save'),
             ),
             ListTile(
               leading: const Icon(Icons.delete_outline, color: LR.alert),
-              title: const Text(
-                'Discard this ride',
-                style: TextStyle(color: LR.alert),
+              title: Text(
+                S.discardRide,
+                style: const TextStyle(color: LR.alert),
               ),
               onTap: () => Navigator.pop(sheetContext, 'discard'),
             ),

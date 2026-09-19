@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 
 import '../core/geo.dart';
 import '../core/lr_theme.dart';
+import '../i18n/strings.dart';
 import '../services/geocoding_service.dart';
 import '../widgets/lr_common.dart';
 
@@ -75,7 +76,7 @@ class _SearchSheetState extends State<_SearchSheet> {
         mainAxisSize: MainAxisSize.min,
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          const LrSectionHeader(title: 'Szukaj miejsca'),
+          LrSectionHeader(title: S.searchPlace),
           TextField(
             controller: _field,
             autofocus: true,
@@ -83,7 +84,7 @@ class _SearchSheetState extends State<_SearchSheet> {
             onChanged: _onChanged,
             onSubmitted: _search,
             decoration: InputDecoration(
-              hintText: 'Miasto, ulica albo nazwa miejsca',
+              hintText: S.placeQueryHint,
               prefixIcon: const Icon(Icons.search, size: 20),
               suffixIcon: _searching
                   ? const Padding(
@@ -105,9 +106,9 @@ class _SearchSheetState extends State<_SearchSheet> {
                     padding: const EdgeInsets.symmetric(vertical: 24),
                     child: Text(
                       _field.text.trim().length < 3
-                          ? 'Wpisz co najmniej trzy znaki.'
+                          ? S.typeAtLeastThree
                           : _searching
-                          ? 'Szukam…'
+                          ? S.searchingPlaces
                           : 'Brak wyników.',
                       textAlign: TextAlign.center,
                       style: LR.body,

@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 
 import '../../core/formatters.dart';
 import '../../core/lr_theme.dart';
+import '../../i18n/strings.dart';
 import '../../models/ride_record.dart';
 import '../../models/ride_route.dart';
 import '../../services/app_services.dart';
@@ -68,7 +69,7 @@ class _RideTabState extends State<RideTab> {
               _startPanel(active),
               const SizedBox(height: 22),
               if (services.profile.profile.weatherEnabled) ...[
-                const LrSectionHeader(title: 'Conditions'),
+                LrSectionHeader(title: S.conditions),
                 LrPanel(
                   padding: const EdgeInsets.all(16),
                   child: WeatherCard(
@@ -82,10 +83,10 @@ class _RideTabState extends State<RideTab> {
               _statsBlock(metric),
               const SizedBox(height: 22),
               LrSectionHeader(
-                title: 'Routes',
+                title: S.routes,
                 trailing: TextButton(
                   onPressed: () => widget.onOpenTab(1),
-                  child: const Text('ALL'),
+                  child: Text(S.all),
                 ),
               ),
               if (_loading)
@@ -101,12 +102,7 @@ class _RideTabState extends State<RideTab> {
                     children: [
                       const Icon(Icons.file_upload_outlined, color: LR.inkSoft),
                       const SizedBox(width: 14),
-                      Expanded(
-                        child: Text(
-                          'Import a GPX file to navigate a planned route.',
-                          style: LR.body,
-                        ),
-                      ),
+                      Expanded(child: Text(S.importGpxHint, style: LR.body)),
                       const Icon(Icons.chevron_right, color: LR.muted),
                     ],
                   ),
@@ -118,20 +114,16 @@ class _RideTabState extends State<RideTab> {
                 ],
               const SizedBox(height: 18),
               LrSectionHeader(
-                title: 'Last ride',
+                title: S.lastRide,
                 trailing: TextButton(
                   onPressed: () => widget.onOpenTab(2),
-                  child: const Text('HISTORY'),
+                  child: Text(S.tabHistory),
                 ),
               ),
               if (_rides.isEmpty)
                 LrPanel(
                   padding: const EdgeInsets.all(18),
-                  child: Text(
-                    'Your finished rides will appear here with full stats and '
-                    'a GPX export.',
-                    style: LR.body,
-                  ),
+                  child: Text(S.historyEmptyHint, style: LR.body),
                 )
               else
                 _lastRide(_rides.first, metric),
@@ -154,7 +146,7 @@ class _RideTabState extends State<RideTab> {
         Row(
           children: [
             Text(
-              active ? 'RIDE IN PROGRESS' : 'READY TO RIDE',
+              active ? S.rideInProgress : S.readyToRide,
               style: const TextStyle(
                 color: LR.accent,
                 fontSize: 11,
@@ -176,9 +168,7 @@ class _RideTabState extends State<RideTab> {
         ),
         const SizedBox(height: 10),
         Text(
-          active
-              ? 'Your ride computer is still running.'
-              : 'Free ride — no route needed.',
+          active ? S.rideInProgressSubtitle : 'Free ride — no route needed.',
           style: const TextStyle(
             color: Colors.white,
             fontSize: 24,
@@ -188,8 +178,8 @@ class _RideTabState extends State<RideTab> {
           ),
         ),
         const SizedBox(height: 6),
-        const Text(
-          'GPS track, speed, distance, ascent, heart rate and LIVE tracking.',
+        Text(
+          S.rideDescription,
           style: TextStyle(color: Color(0xFF9BAEBD), fontSize: 13, height: 1.4),
         ),
         const SizedBox(height: 20),
@@ -206,7 +196,7 @@ class _RideTabState extends State<RideTab> {
               size: 22,
             ),
             label: Text(
-              active ? 'BACK TO RIDE' : 'START RIDE',
+              active ? S.backToRide : S.startRide,
               style: const TextStyle(
                 fontSize: 16,
                 fontWeight: FontWeight.w900,
@@ -243,7 +233,7 @@ class _RideTabState extends State<RideTab> {
             children: [
               Expanded(
                 child: LrStat(
-                  label: 'Distance',
+                  label: S.distance,
                   value: Fmt.distance(distance, metric: metric),
                   unit: Fmt.distanceUnit(metric: metric),
                   valueSize: 24,
@@ -251,7 +241,7 @@ class _RideTabState extends State<RideTab> {
               ),
               Expanded(
                 child: LrStat(
-                  label: 'Ascent',
+                  label: S.ascent,
                   value: Fmt.elevation(ascent, metric: metric),
                   unit: Fmt.elevationUnit(metric: metric),
                   valueSize: 24,
@@ -259,14 +249,14 @@ class _RideTabState extends State<RideTab> {
               ),
               Expanded(
                 child: LrStat(
-                  label: 'Time',
+                  label: S.elapsed,
                   value: Fmt.durationCompact(Duration(seconds: moving)),
                   valueSize: 24,
                 ),
               ),
               Expanded(
                 child: LrStat(
-                  label: 'Rides',
+                  label: S.rides,
                   value: '${recent.length}',
                   valueSize: 24,
                 ),
@@ -341,14 +331,14 @@ class _RideTabState extends State<RideTab> {
           children: [
             Expanded(
               child: LrStat(
-                label: 'Distance',
+                label: S.distance,
                 value: Fmt.distance(ride.distanceMeters, metric: metric),
                 unit: Fmt.distanceUnit(metric: metric),
               ),
             ),
             Expanded(
               child: LrStat(
-                label: 'Moving',
+                label: S.movingTime,
                 value: Fmt.duration(ride.movingTime),
               ),
             ),

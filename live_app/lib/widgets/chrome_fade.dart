@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
 
+import '../i18n/strings.dart';
+
 import '../core/lr_theme.dart';
 
 /// Wraps a piece of secondary ride UI so it can retire out of the way.
@@ -96,9 +98,9 @@ class ChromeHint extends StatelessWidget {
           color: LR.ink.withValues(alpha: 0.82),
           borderRadius: BorderRadius.circular(4),
         ),
-        child: const Text(
-          'TAP TO SHOW CONTROLS',
-          style: TextStyle(
+        child: Text(
+          S.tapToShowControls,
+          style: const TextStyle(
             color: Colors.white,
             fontSize: 10.5,
             fontWeight: FontWeight.w900,

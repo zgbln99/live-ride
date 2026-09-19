@@ -2,6 +2,8 @@ import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
 
+import '../i18n/strings.dart';
+
 import '../core/lr_theme.dart';
 
 /// A live heart-rate trace.
@@ -27,7 +29,7 @@ class BpmTrace extends StatelessWidget {
     child: samples.length < 2
         ? Center(
             child: Text(
-              'WAITING FOR A SIGNAL',
+              S.waitingForSignal,
               style: LR.fieldLabel.copyWith(fontSize: 9.5),
             ),
           )

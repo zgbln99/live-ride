@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 
 import '../core/formatters.dart';
 import '../core/lr_theme.dart';
+import '../i18n/strings.dart';
 
 /// The elevation chart on a ride summary. Filled area, hairline axis, no grid
 /// clutter — an instrument readout rather than a business chart.
@@ -24,9 +25,7 @@ class ElevationProfile extends StatelessWidget {
     if (samples.length < 3) {
       return SizedBox(
         height: height,
-        child: Center(
-          child: Text('No elevation data recorded', style: LR.body),
-        ),
+        child: Center(child: Text(S.noElevationData, style: LR.body)),
       );
     }
 

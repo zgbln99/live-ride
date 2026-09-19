@@ -128,11 +128,11 @@
     }
 
     function ago(seconds: number) {
-        if (!Number.isFinite(seconds)) return "no data";
-        if (seconds < 10) return "just now";
-        if (seconds < 60) return `${seconds}s ago`;
-        if (seconds < 3600) return `${Math.floor(seconds / 60)} min ago`;
-        return `${Math.floor(seconds / 3600)} h ago`;
+        if (!Number.isFinite(seconds)) return "brak danych";
+        if (seconds < 10) return "przed chwilą";
+        if (seconds < 60) return `${seconds} s temu`;
+        if (seconds < 3600) return `${Math.floor(seconds / 60)} min temu`;
+        return `${Math.floor(seconds / 3600)} godz. temu`;
     }
 
     function clock(date: string) {
@@ -162,6 +162,7 @@
     }
 
     function compass(degrees: number) {
+        // Kierunki po polsku: północ, północny wschód i tak dalej.
         const labels = ["N", "NE", "E", "SE", "S", "SW", "W", "NW"];
         return labels[Math.round((((degrees % 360) + 360) % 360) / 45) % 8];
     }
@@ -401,7 +402,7 @@
             error = "";
             syncMarkers();
         } catch (e) {
-            error = e instanceof Error ? e.message : "Connection lost";
+            error = e instanceof Error ? e.message : "Utracono połączenie";
         }
     }
 
@@ -431,11 +432,14 @@
             map.on("dragstart", () => (followSelected = false));
             map.on("error", (event) => console.warn("Live Ride map error", event.error));
         } catch (e) {
-            mapError = e instanceof Error ? e.message : "The map could not be started";
+            mapError = e instanceof Error ? e.message : "Nie udało się uruchomić mapy";
         }
     }
 
     onMount(() => {
+        // Podgląd jest po polsku, więc mówi to też przeglądarce — ale tylko
+        // on, bez ruszania reszty serwisu.
+        document.documentElement.lang = "pl";
         void initMap();
         void loadRoute();
         void refresh();
@@ -456,7 +460,7 @@
 <svelte:head>
     <title>{snapshot?.title ?? "Live Ride"} · Live Ride</title>
     <meta name="theme-color" content="#07101A" />
-    <meta name="description" content="Follow this ride live on Live Ride." />
+    <meta name="description" content="Śledź tę jazdę na żywo w Live Ride." />
     <link
         rel="icon"
         href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 64 64%22><rect width=%2264%22 height=%2264%22 rx=%2212%22 fill=%22%2307101a%22/><path d=%22M10 52 33 9l9 18H23z%22 fill=%22white%22/><path d=%22M30 56 58 12 49 56z%22 fill=%22%2300bfd8%22/></svg>"
@@ -474,11 +478,11 @@
             </svg>
             <div class="brand-copy">
                 <span>LIVE RIDE</span>
-                <strong>{snapshot?.title ?? "Loading ride…"}</strong>
+                <strong>{snapshot?.title ?? "Wczytuję przejazd…"}</strong>
             </div>
         </div>
         <div class="top-actions">
-            <button class="ghost" onclick={() => fitAll(true)} title="Show everyone">
+            <button class="ghost" onclick={() => fitAll(true)} title="Pokaż wszystkich">
                 <svg viewBox="0 0 24 24" aria-hidden="true"
                     ><path
                         fill="currentColor"
@@ -487,34 +491,34 @@
                 >
             </button>
             <div class="status" class:ended>
-                <i></i>{ended ? "FINISHED" : "LIVE"}
+                <i></i>{ended ? "ZAKOŃCZONA" : "NA ŻYWO"}
             </div>
         </div>
     </header>
 
     {#if error || mapError}
         <div class="warning" role="status">
-            {#if mapError}<span>Map: {mapError}</span>{/if}
-            {#if error}<span>Live data: {error} — retrying every {REFRESH_MS / 1000}s</span>{/if}
+            {#if mapError}<span>Mapa: {mapError}</span>{/if}
+            {#if error}<span>Dane na żywo: {error} — ponawiam co {REFRESH_MS / 1000} s</span>{/if}
         </div>
     {/if}
 
     <section class="rail">
         <div class="session">
-            <div><span>ELAPSED</span><b>{elapsed(snapshot?.started_at ?? "")}</b></div>
-            <div><span>STARTED</span><b>{clock(snapshot?.started_at ?? "")}</b></div>
+            <div><span>CZAS</span><b>{elapsed(snapshot?.started_at ?? "")}</b></div>
+            <div><span>START</span><b>{clock(snapshot?.started_at ?? "")}</b></div>
             <div>
-                <span>ROUTE</span><b>{route?.distance_m ? km(route.distance_m, 1) : "—"}</b>
+                <span>TRASA</span><b>{route?.distance_m ? km(route.distance_m, 1) : "—"}</b>
             </div>
         </div>
 
         <div class="rail-head">
             <div>
-                <span>RIDERS</span>
+                <span>ZAWODNICY</span>
                 <strong>{riders.length}</strong>
-                {#if riders.length}<em>{liveCount} live</em>{/if}
+                {#if riders.length}<em>{liveCount} na żywo</em>{/if}
             </div>
-            <small>updates every {REFRESH_MS / 1000}s</small>
+            <small>odświeżanie co {REFRESH_MS / 1000} s</small>
         </div>
 
         <div class="rider-list">
@@ -533,9 +537,9 @@
                                 <strong>{rider.display_name}</strong>
                                 <span>
                                     {#if rider.fresh}
-                                        {riders.length > 1 ? `P${index + 1} · ` : ""}RIDING
+                                        {riders.length > 1 ? `P${index + 1} · ` : ""}JEDZIE
                                     {:else}
-                                        NO SIGNAL · {ago(rider.secondsSinceUpdate)}
+                                        BRAK SYGNAŁU · {ago(rider.secondsSinceUpdate)}
                                     {/if}
                                 </span>
                             </div>
@@ -545,61 +549,61 @@
                         </div>
 
                         {#if rider.progress !== null}
-                            <div class="progress" title="Position along the route">
+                            <div class="progress" title="Pozycja na trasie">
                                 <div class="bar"><i style={`width:${rider.progress * 100}%`}></i></div>
                                 <small>
-                                    {Math.round(rider.progress * 100)}% of the route
+                                    {Math.round(rider.progress * 100)}% trasy
                                     {#if rider.offRouteMeters !== null && rider.offRouteMeters > 80}
-                                        · <b class="off">{Math.round(rider.offRouteMeters)} m off route</b>
+                                        · <b class="off">{Math.round(rider.offRouteMeters)} m od trasy</b>
                                     {/if}
                                 </small>
                             </div>
                         {/if}
 
                         <div class="metrics">
-                            <div><span>DISTANCE</span><b>{km(rider.distance_m)}</b></div>
+                            <div><span>DYSTANS</span><b>{km(rider.distance_m)}</b></div>
                             <div>
-                                <span>HR</span><b>{rider.heart_rate_bpm || "—"}{rider.heart_rate_bpm ? " bpm" : ""}</b>
+                                <span>TĘTNO</span><b>{rider.heart_rate_bpm || "—"}{rider.heart_rate_bpm ? " bpm" : ""}</b>
                             </div>
-                            <div><span>ASCENT</span><b>{Math.round(rider.elevation_gain_m)} m</b></div>
-                            <div><span>ALTITUDE</span><b>{Math.round(rider.altitude_m)} m</b></div>
+                            <div><span>PRZEWYŻSZENIE</span><b>{Math.round(rider.elevation_gain_m)} m</b></div>
+                            <div><span>WYSOKOŚĆ</span><b>{Math.round(rider.altitude_m)} m</b></div>
                         </div>
 
                         <footer>
                             {ago(rider.secondsSinceUpdate)} · GPS ±{Math.round(rider.accuracy_m)} m
-                            {#if rider.heading_deg > 0}· heading {compass(rider.heading_deg)}{/if}
+                            {#if rider.heading_deg > 0}· kierunek {compass(rider.heading_deg)}{/if}
                         </footer>
                     </button>
                 {/each}
             {:else}
                 <div class="waiting">
                     <div class="pulse"></div>
-                    <strong>Waiting for the first position</strong>
+                    <strong>Czekam na pierwszą pozycję</strong>
                     <span>
-                        The map is already live. Riders appear here as soon as their
-                        phone sends its first telemetry.
+                        Mapa już działa. Zawodnicy pojawią się tutaj, gdy tylko ich
+                        telefon wyśle pierwsze dane.
                     </span>
                 </div>
             {/if}
         </div>
 
-        <p class="rail-foot">Live Ride · self-hosted live cycling tracking</p>
+        <p class="rail-foot">Live Ride · własne śledzenie jazdy na żywo</p>
     </section>
 
     <section class="sheet" class:open={sheetOpen}>
         <button
             class="handle"
             onclick={() => (sheetOpen = !sheetOpen)}
-            aria-label={sheetOpen ? "Collapse rider list" : "Expand rider list"}
+            aria-label={sheetOpen ? "Zwiń listę zawodników" : "Rozwiń listę zawodników"}
         >
             <i></i>
         </button>
 
         <div class="sheet-summary">
-            <div><span>RIDERS</span><b>{riders.length}</b></div>
-            <div><span>ELAPSED</span><b>{elapsed(snapshot?.started_at ?? "")}</b></div>
-            <div><span>ROUTE</span><b>{route?.distance_m ? km(route.distance_m, 1) : "—"}</b></div>
-            <div class="sheet-status" class:ended><i></i>{ended ? "ENDED" : "LIVE"}</div>
+            <div><span>ZAWODNICY</span><b>{riders.length}</b></div>
+            <div><span>CZAS</span><b>{elapsed(snapshot?.started_at ?? "")}</b></div>
+            <div><span>TRASA</span><b>{route?.distance_m ? km(route.distance_m, 1) : "—"}</b></div>
+            <div class="sheet-status" class:ended><i></i>{ended ? "ZAKOŃCZONA" : "NA ŻYWO"}</div>
         </div>
 
         <div class="sheet-riders">
@@ -623,7 +627,7 @@
                     {/if}
                 </button>
             {:else}
-                <p class="sheet-empty">Waiting for the first position…</p>
+                <p class="sheet-empty">Czekam na pierwszą pozycję…</p>
             {/each}
         </div>
     </section>

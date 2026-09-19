@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
 
+import '../i18n/strings.dart';
+
 import '../core/lr_theme.dart';
 import '../services/ride_recorder.dart';
 
@@ -44,7 +46,7 @@ class RideControls extends StatelessWidget {
             _ControlButton(
               icon: Icons.sensors,
               label: '',
-              tooltip: liveActive ? 'LIVE is on' : 'Start LIVE',
+              tooltip: liveActive ? S.liveIsOn : S.startLive,
               onPressed: busy ? null : onLive,
               background: liveActive ? LR.alert : LR.surface,
               foreground: liveActive ? Colors.white : LR.ink,
@@ -56,7 +58,7 @@ class RideControls extends StatelessWidget {
           Expanded(
             child: _ControlButton(
               icon: paused ? Icons.play_arrow_rounded : Icons.pause_rounded,
-              label: paused ? 'RESUME' : 'PAUSE',
+              label: paused ? S.resume : S.pause,
               onPressed: busy ? null : (paused ? onResume : onPause),
               background: paused ? LR.accent : LR.surface,
               foreground: LR.ink,
@@ -67,7 +69,7 @@ class RideControls extends StatelessWidget {
           Expanded(
             child: _ControlButton(
               icon: Icons.stop_rounded,
-              label: busy ? 'SAVING' : 'FINISH',
+              label: busy ? S.saving : S.finish,
               onPressed: busy ? null : onStop,
               background: LR.ink,
               foreground: Colors.white,

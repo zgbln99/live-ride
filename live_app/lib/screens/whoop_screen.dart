@@ -6,6 +6,7 @@ import 'package:flutter/material.dart';
 
 import '../core/formatters.dart';
 import '../core/lr_theme.dart';
+import '../i18n/strings.dart';
 import '../services/app_services.dart';
 import '../services/heart_rate_service.dart';
 import '../widgets/bpm_trace.dart';
@@ -68,14 +69,14 @@ class _WhoopScreenState extends State<WhoopScreen> {
   @override
   Widget build(BuildContext context) => Scaffold(
     appBar: AppBar(
-      title: const Text('HEART RATE'),
+      title: Text(S.heartRate),
       actions: [
         AnimatedBuilder(
           animation: _hr,
           builder: (context, _) => TextButton(
             onPressed: _hr.status == HeartRateStatus.scanning ? null : _scan,
             child: Text(
-              _hr.status == HeartRateStatus.scanning ? 'SCANNING…' : 'SCAN',
+              _hr.status == HeartRateStatus.scanning ? S.scanning : S.scan,
             ),
           ),
         ),
@@ -93,19 +94,16 @@ class _WhoopScreenState extends State<WhoopScreen> {
           ],
           if (_hr.adapterState == BluetoothLowEnergyState.poweredOff) ...[
             const SizedBox(height: 12),
-            _errorPanel(
-              'Bluetooth is switched off. Turn it on in Control Centre or '
-              'Settings, then scan again.',
-            ),
+            _errorPanel(S.bluetoothOff),
           ],
           const SizedBox(height: 24),
           if (!_hr.isConnected) ...[
-            const LrSectionHeader(title: 'Using a WHOOP strap'),
+            LrSectionHeader(title: S.usingWhoop),
             _whoopSteps(),
             const SizedBox(height: 24),
           ],
           LrSectionHeader(
-            title: 'Sensors nearby',
+            title: S.sensorsNearby,
             trailing: _hr.status == HeartRateStatus.scanning
                 ? const SizedBox(
                     width: 13,
@@ -194,7 +192,7 @@ class _WhoopScreenState extends State<WhoopScreen> {
                     padding: const EdgeInsets.only(bottom: 10),
                     child: Text(
                       _hr.isStale
-                          ? 'NO BEAT'
+                          ? S.noBeat
                           : 'UPDATED ${Fmt.clock(_hr.lastSampleAt!)}',
                       style: LR.fieldLabel.copyWith(
                         fontSize: 9.5,
@@ -220,7 +218,7 @@ class _WhoopScreenState extends State<WhoopScreen> {
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
                         Text(
-                          _hr.connectedName ?? 'Heart rate sensor',
+                          _hr.connectedName ?? S.heartRateStrap,
                           style: const TextStyle(
                             fontSize: 14.5,
                             fontWeight: FontWeight.w800,
@@ -229,7 +227,7 @@ class _WhoopScreenState extends State<WhoopScreen> {
                         const SizedBox(height: 3),
                         Text(
                           worn == null
-                              ? 'Connected'
+                              ? S.connected
                               : worn
                               ? 'Worn · skin contact detected'
                               : 'Not being worn · no skin contact',
@@ -243,15 +241,15 @@ class _WhoopScreenState extends State<WhoopScreen> {
                   ),
                   TextButton(
                     onPressed: () => unawaited(_hr.disconnect()),
-                    child: const Text('DISCONNECT'),
+                    child: Text(S.disconnect),
                   ),
                   PopupMenuButton<String>(
                     icon: const Icon(Icons.more_vert, size: 20),
                     onSelected: (_) => unawaited(_hr.forget()),
-                    itemBuilder: (context) => const [
+                    itemBuilder: (context) => [
                       PopupMenuItem(
                         value: 'forget',
-                        child: Text('Forget strap'),
+                        child: Text(S.forgetSensor),
                       ),
                     ],
                   ),
@@ -276,7 +274,7 @@ class _WhoopScreenState extends State<WhoopScreen> {
                     onPressed: _hr.isBusy
                         ? null
                         : () => unawaited(_hr.reconnectRemembered()),
-                    child: const Text('RECONNECT'),
+                    child: Text(S.reconnect),
                   ),
                 ],
               ),
@@ -290,12 +288,12 @@ class _WhoopScreenState extends State<WhoopScreen> {
   Widget _statusChip() {
     final (label, color, filled) = switch (_hr.status) {
       HeartRateStatus.streaming =>
-        _hr.isStale ? ('NO BEAT', LR.inkSoft, false) : ('LIVE', LR.alert, true),
-      HeartRateStatus.waiting => ('CONNECTED', LR.accentDeep, false),
-      HeartRateStatus.connecting => ('CONNECTING', LR.accentDeep, false),
-      HeartRateStatus.reconnecting => ('RECONNECTING', LR.alert, false),
-      HeartRateStatus.scanning => ('SCANNING', LR.accentDeep, false),
-      HeartRateStatus.idle => ('NOT CONNECTED', LR.muted, false),
+        _hr.isStale ? (S.noBeat, LR.inkSoft, false) : (S.live, LR.alert, true),
+      HeartRateStatus.waiting => (S.connected, LR.accentDeep, false),
+      HeartRateStatus.connecting => (S.connecting, LR.accentDeep, false),
+      HeartRateStatus.reconnecting => (S.reconnecting, LR.alert, false),
+      HeartRateStatus.scanning => (S.scanning, LR.accentDeep, false),
+      HeartRateStatus.idle => (S.notConnected, LR.muted, false),
     };
     return LrStatusChip(label: label, color: color, filled: filled);
   }
@@ -327,20 +325,15 @@ class _WhoopScreenState extends State<WhoopScreen> {
     child: Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Text(
-          'A WHOOP strap does not advertise heart rate until you switch '
-          'broadcasting on, which is why it can look missing here.',
-          style: LR.body.copyWith(height: 1.45, fontSize: 13),
-        ),
+        Text(S.whoopIntro, style: LR.body.copyWith(height: 1.45, fontSize: 13)),
         const SizedBox(height: 16),
-        _step(1, 'Open the WHOOP app and keep it open.'),
-        _step(2, 'Go to Menu → Device Settings.'),
-        _step(3, 'Turn on Broadcast Heart Rate.'),
-        _step(4, 'Come back here — the strap appears below as WHOOP.'),
+        _step(1, S.whoopStep1),
+        _step(2, S.whoopStep2),
+        _step(3, S.whoopStep3),
+        _step(4, S.whoopStep4),
         const SizedBox(height: 6),
         Text(
-          'Any ANT+/Bluetooth chest strap works too and needs no setup: '
-          'wet the contacts and it appears straight away.',
+          S.anyStrapWorks,
           style: LR.body.copyWith(fontSize: 12, height: 1.4),
         ),
       ],
@@ -390,9 +383,8 @@ class _WhoopScreenState extends State<WhoopScreen> {
         padding: const EdgeInsets.all(18),
         child: Text(
           _hr.status == HeartRateStatus.scanning
-              ? 'Looking for sensors…'
-              : 'No sensors found yet. Press SCAN with the strap on and '
-                    'awake.',
+              ? S.lookingForSensors
+              : S.noSensorsFound,
           style: LR.body,
         ),
       );
@@ -465,10 +457,10 @@ class _WhoopScreenState extends State<WhoopScreen> {
                       const SizedBox(height: 3),
                       Text(
                         device.advertisesHeartRate
-                            ? 'Heart rate service'
+                            ? S.heartRateServiceLabel
                             : device.isWhoop
                             ? 'Tap to connect · needs Broadcast Heart Rate'
-                            : 'Bluetooth device',
+                            : S.bluetoothDevice,
                         style: LR.body.copyWith(fontSize: 11.5),
                       ),
                     ],

@@ -15,7 +15,9 @@ import '../../widgets/lr_common.dart';
 import '../data_field_editor.dart';
 import '../alert_settings_screen.dart';
 import '../garage_screen.dart';
+import '../profile_editor_screen.dart';
 import '../sensors_screen.dart';
+import '../training_zones_screen.dart';
 import '../whoop_screen.dart';
 
 /// Rider identity and app preferences.
@@ -82,29 +84,41 @@ class _ProfileTabState extends State<ProfileTab> {
                         const SizedBox(height: 3),
                         Text(
                           profile.username.isEmpty
-                              ? 'Signed in to Live Ride'
+                              ? S.signedInToLiveRide
                               : '@${profile.username}',
                           style: LR.body.copyWith(fontSize: 12.5),
                         ),
+                        if (profile.bio.isNotEmpty) ...[
+                          const SizedBox(height: 6),
+                          Text(
+                            profile.bio,
+                            maxLines: 2,
+                            overflow: TextOverflow.ellipsis,
+                            style: LR.body.copyWith(fontSize: 12),
+                          ),
+                        ],
                       ],
                     ),
                   ),
                   IconButton(
-                    tooltip: 'Edit display name',
+                    tooltip: S.edit,
                     icon: const Icon(Icons.edit_outlined),
-                    onPressed: () => _editName(context, services),
+                    onPressed: () => Navigator.of(context).push(
+                      MaterialPageRoute<void>(
+                        builder: (_) => const ProfileEditorScreen(),
+                      ),
+                    ),
                   ),
                 ],
               ),
             ),
             const SizedBox(height: 10),
             Text(
-              'Your display name is what spectators see on the LIVE map and '
-              'what is stored with each recorded ride.',
+              S.displayNameHint,
               style: LR.body.copyWith(fontSize: 12.5, height: 1.4),
             ),
             const SizedBox(height: 24),
-            const LrSectionHeader(title: 'Ride computer'),
+            LrSectionHeader(title: S.rideComputer),
             LrPanel(
               padding: EdgeInsets.zero,
               child: Column(
@@ -163,7 +177,7 @@ class _ProfileTabState extends State<ProfileTab> {
                   const Divider(height: 1),
                   SwitchListTile(
                     secondary: const Icon(Icons.straighten),
-                    title: const Text('Metric units'),
+                    title: Text(S.metricUnits),
                     subtitle: Text(
                       profile.metricUnits ? 'km · m · km/h' : 'mi · ft · mph',
                     ),
@@ -175,8 +189,8 @@ class _ProfileTabState extends State<ProfileTab> {
                   const Divider(height: 1),
                   SwitchListTile(
                     secondary: const Icon(Icons.explore_outlined),
-                    title: const Text('Heading up'),
-                    subtitle: const Text('Rotate the map with your direction'),
+                    title: Text(S.headingUp),
+                    subtitle: Text(S.headingUpSubtitle),
                     value: profile.headingUp,
                     onChanged: (value) => profileService.update(
                       profile.copyWith(headingUp: value),
@@ -185,7 +199,7 @@ class _ProfileTabState extends State<ProfileTab> {
                   const Divider(height: 1),
                   SwitchListTile(
                     secondary: const Icon(Icons.screen_lock_portrait),
-                    title: const Text('Keep the screen on while riding'),
+                    title: Text(S.keepScreenOn),
                     value: profile.keepScreenAwake,
                     onChanged: (value) => profileService.update(
                       profile.copyWith(keepScreenAwake: value),
@@ -194,7 +208,7 @@ class _ProfileTabState extends State<ProfileTab> {
                   const Divider(height: 1),
                   SwitchListTile(
                     secondary: const Icon(Icons.cloud_outlined),
-                    title: const Text('Weather'),
+                    title: Text(S.weather),
                     subtitle: const Text('Open-Meteo · no account required'),
                     value: profile.weatherEnabled,
                     onChanged: (value) => profileService.update(
@@ -205,7 +219,7 @@ class _ProfileTabState extends State<ProfileTab> {
               ),
             ),
             const SizedBox(height: 24),
-            const LrSectionHeader(title: 'Devices and services'),
+            LrSectionHeader(title: S.devicesAndServices),
             LrPanel(
               padding: EdgeInsets.zero,
               child: Column(
@@ -214,20 +228,39 @@ class _ProfileTabState extends State<ProfileTab> {
                     animation: services.heartRate,
                     builder: (context, _) => ListTile(
                       leading: const Icon(Icons.favorite_outline),
-                      title: const Text('WHOOP and heart rate'),
+                      title: Text(S.whoopAndHeartRate),
                       subtitle: Text(
                         services.heartRate.isConnected
-                            ? '${services.heartRate.connectedName ?? 'Sensor'} connected'
+                            ? '${S.connectedTo(services.heartRate.connectedName ?? S.heartRateStrap)}'
                                   '${services.heartRate.latestBpm == null ? '' : ' · ${services.heartRate.latestBpm} bpm'}'
                             : services.heartRate.rememberedName != null
-                            ? 'Last used ${services.heartRate.rememberedName}'
-                            : 'No sensor connected',
+                            ? '${S.lastUsed} ${services.heartRate.rememberedName}'
+                            : S.noSensorConnected,
                       ),
                       trailing: const Icon(Icons.chevron_right),
                       onTap: () => Navigator.of(context).push(
                         MaterialPageRoute<void>(
                           builder: (_) => const WhoopScreen(),
                         ),
+                      ),
+                    ),
+                  ),
+                  const Divider(height: 1),
+                  ListTile(
+                    leading: const Icon(Icons.insights),
+                    title: Text(S.trainingZones),
+                    subtitle: Text(
+                      services.profile.trainingProfile.hasPowerZones ||
+                              services.profile.trainingProfile.hasHeartRateZones
+                          ? S.zonesReady
+                          : S.zonesMissing,
+                      maxLines: 2,
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                    trailing: const Icon(Icons.chevron_right),
+                    onTap: () => Navigator.of(context).push(
+                      MaterialPageRoute<void>(
+                        builder: (_) => const TrainingZonesScreen(),
                       ),
                     ),
                   ),
@@ -295,11 +328,12 @@ class _ProfileTabState extends State<ProfileTab> {
                       leading: const Icon(Icons.graphic_eq),
                       title: const Text('Spotify'),
                       subtitle: Text(switch (services.spotify.status) {
-                        SpotifyStatus.connected =>
-                          '${services.spotify.displayName ?? 'Account'} connected',
-                        SpotifyStatus.connecting => 'Connecting…',
-                        SpotifyStatus.signedOut => 'Not signed in',
-                        SpotifyStatus.unconfigured => 'Needs a client ID',
+                        SpotifyStatus.connected => S.connectedTo(
+                          services.spotify.displayName ?? S.spotifyAccount,
+                        ),
+                        SpotifyStatus.connecting => S.connecting,
+                        SpotifyStatus.signedOut => S.spotifyNotSignedIn,
+                        SpotifyStatus.unconfigured => S.spotifyNeedsClientId,
                       }),
                       trailing: const Icon(Icons.chevron_right),
                       onTap: () => widget.onOpenTab(2),
@@ -308,17 +342,13 @@ class _ProfileTabState extends State<ProfileTab> {
                   const Divider(height: 1),
                   ListTile(
                     leading: const Icon(Icons.lock_clock),
-                    title: const Text('Lock Screen Live Activity'),
+                    title: Text(S.lockScreenLiveActivity),
                     subtitle: Text(
                       switch (_liveActivitySupported) {
-                        null => 'Checking…',
-                        true =>
-                          'Ready — starts automatically when a ride starts',
+                        null => S.checking,
+                        true => S.liveActivityReady,
                         false =>
-                          Platform.isIOS
-                              ? 'Turn Live Activities on for Live Ride in '
-                                    'iOS Settings'
-                              : 'iOS only',
+                          Platform.isIOS ? S.liveActivityDisabled : S.iosOnly,
                       },
                       style: TextStyle(
                         color: _liveActivitySupported == false
@@ -331,20 +361,20 @@ class _ProfileTabState extends State<ProfileTab> {
               ),
             ),
             const SizedBox(height: 24),
-            const LrSectionHeader(title: 'Connection'),
+            LrSectionHeader(title: S.connection),
             LrPanel(
               padding: EdgeInsets.zero,
               child: Column(
                 children: [
                   ListTile(
                     leading: const Icon(Icons.dns_outlined),
-                    title: const Text('Live Ride server'),
+                    title: Text(S.liveRideServer),
                     subtitle: const Text(ApiClient.serverOrigin),
                   ),
                   const Divider(height: 1),
                   ListTile(
                     leading: const Icon(Icons.cloud_queue),
-                    title: const Text('Weather provider'),
+                    title: Text(S.weatherProvider),
                     subtitle: const Text(WeatherService.endpoint),
                   ),
                 ],
@@ -354,12 +384,12 @@ class _ProfileTabState extends State<ProfileTab> {
             OutlinedButton.icon(
               onPressed: () => _logout(context, services),
               icon: const Icon(Icons.logout, size: 18),
-              label: const Text('SIGN OUT'),
+              label: Text(S.signOut),
             ),
             const SizedBox(height: 20),
             Center(
               child: Text(
-                'LIVE RIDE',
+                S.appName,
                 style: LR.fieldLabel.copyWith(letterSpacing: 3, fontSize: 10),
               ),
             ),
@@ -369,49 +399,9 @@ class _ProfileTabState extends State<ProfileTab> {
     );
   }
 
-  Future<void> _editName(BuildContext context, AppServices services) async {
-    final profile = services.profile.profile;
-    final controller = TextEditingController(text: profile.displayName);
-    final name = await showDialog<String>(
-      context: context,
-      builder: (dialogContext) => AlertDialog(
-        title: const Text('Display name'),
-        content: TextField(
-          controller: controller,
-          autofocus: true,
-          textCapitalization: TextCapitalization.words,
-          decoration: InputDecoration(
-            labelText: 'Name',
-            hintText: profile.username.isEmpty ? 'Your name' : profile.username,
-          ),
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(dialogContext),
-            child: const Text('Cancel'),
-          ),
-          FilledButton(
-            onPressed: () => Navigator.pop(dialogContext, controller.text),
-            child: const Text('Save'),
-          ),
-        ],
-      ),
-    );
-    controller.dispose();
-    if (name == null) return;
-    await services.profile.update(profile.copyWith(displayName: name.trim()));
-    if (context.mounted) {
-      showLrMessage(context, 'Riding as ${services.profile.riderName}');
-    }
-  }
-
   Future<void> _logout(BuildContext context, AppServices services) async {
     if (services.recorder.isActive) {
-      showLrMessage(
-        context,
-        'Finish your ride before signing out.',
-        error: true,
-      );
+      showLrMessage(context, S.finishRideBeforeSignOut, error: true);
       return;
     }
     if (services.live.isActive) await services.live.stop();

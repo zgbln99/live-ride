@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:live_ride/i18n/strings.dart';
 import 'package:live_ride/core/geo.dart';
 import 'package:live_ride/core/lr_theme.dart';
 import 'package:live_ride/models/navigation_plan.dart';
@@ -149,7 +150,7 @@ void main() {
     testWidgets('says how to bring the controls back', (tester) async {
       await tester.pumpWidget(host(const ChromeHint(visible: true)));
       await tester.pumpAndSettle();
-      expect(find.text('TAP TO SHOW CONTROLS'), findsOneWidget);
+      expect(find.text(S.tapToShowControls), findsOneWidget);
     });
   });
 

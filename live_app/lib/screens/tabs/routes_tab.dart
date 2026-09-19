@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 
 import '../../core/formatters.dart';
 import '../../core/lr_theme.dart';
+import '../../i18n/strings.dart';
 import '../../models/ride_route.dart';
 import '../../services/app_services.dart';
 import '../../services/gpx_service.dart';
@@ -66,10 +67,10 @@ class _RoutesTabState extends State<RoutesTab> {
                   height: 44,
                   child: TextField(
                     onChanged: (value) => setState(() => _query = value),
-                    decoration: const InputDecoration(
+                    decoration: InputDecoration(
                       isDense: true,
-                      prefixIcon: Icon(Icons.search, size: 19),
-                      hintText: 'Szukaj tras',
+                      prefixIcon: const Icon(Icons.search, size: 19),
+                      hintText: S.searchRoutes,
                       fillColor: LR.panel,
                     ),
                   ),
@@ -85,7 +86,7 @@ class _RoutesTabState extends State<RoutesTab> {
                     padding: const EdgeInsets.symmetric(horizontal: 12),
                   ),
                   icon: const Icon(Icons.add_road, size: 18),
-                  label: const Text('PLANUJ'),
+                  label: Text(S.plan),
                 ),
               ),
               const SizedBox(width: 8),
@@ -116,12 +117,10 @@ class _RoutesTabState extends State<RoutesTab> {
               : _visible.isEmpty
               ? LrEmptyState(
                   icon: Icons.route_outlined,
-                  title: _routes.isEmpty ? 'No routes yet' : 'No matches',
+                  title: _routes.isEmpty ? S.noRoutesYet : S.noMatches,
                   message: _routes.isEmpty
-                      ? 'Import a GPX file from Files, iCloud Drive or any '
-                            'cloud provider and Live Ride will navigate it '
-                            'turn by turn.'
-                      : 'Nothing in your library matches "$_query".',
+                      ? S.noRoutesMessage
+                      : S.nothingMatches(_query),
                   action: _routes.isEmpty
                       ? FilledButton.icon(
                           onPressed: _importing ? null : _import,
@@ -129,7 +128,7 @@ class _RoutesTabState extends State<RoutesTab> {
                             Icons.file_upload_outlined,
                             size: 18,
                           ),
-                          label: const Text('IMPORT GPX'),
+                          label: Text(S.importGpx),
                         )
                       : null,
                 )
@@ -206,7 +205,7 @@ class _RoutesTabState extends State<RoutesTab> {
             children: [
               Expanded(
                 child: LrStat(
-                  label: 'Dystans',
+                  label: S.distance,
                   value: Fmt.distance(route.distanceMeters, metric: metric),
                   unit: Fmt.distanceUnit(metric: metric),
                   valueSize: 18,
@@ -214,7 +213,7 @@ class _RoutesTabState extends State<RoutesTab> {
               ),
               Expanded(
                 child: LrStat(
-                  label: 'Podjazd',
+                  label: S.ascent,
                   value: Fmt.elevation(route.ascentMeters, metric: metric),
                   unit: Fmt.elevationUnit(metric: metric),
                   valueSize: 18,
@@ -229,14 +228,11 @@ class _RoutesTabState extends State<RoutesTab> {
                 tooltip: 'Działania',
                 icon: const Icon(Icons.more_vert, size: 20, color: LR.inkSoft),
                 onSelected: (value) => _action(value, route),
-                itemBuilder: (context) => const [
-                  PopupMenuItem(value: 'preview', child: Text('Podgląd')),
-                  PopupMenuItem(
-                    value: 'edit',
-                    child: Text('Edytuj w kreatorze'),
-                  ),
-                  PopupMenuItem(value: 'rename', child: Text('Zmień nazwę')),
-                  PopupMenuItem(value: 'delete', child: Text('Usuń')),
+                itemBuilder: (context) => [
+                  PopupMenuItem(value: 'preview', child: Text(S.preview)),
+                  PopupMenuItem(value: 'edit', child: Text(S.editInBuilder)),
+                  PopupMenuItem(value: 'rename', child: Text(S.rename)),
+                  PopupMenuItem(value: 'delete', child: Text(S.delete)),
                 ],
               ),
             ],
@@ -326,16 +322,16 @@ class _RoutesTabState extends State<RoutesTab> {
         content: TextField(
           controller: controller,
           autofocus: true,
-          decoration: const InputDecoration(labelText: 'Nazwa trasy'),
+          decoration: InputDecoration(labelText: S.routeName),
         ),
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(dialogContext),
-            child: const Text('Anuluj'),
+            child: Text(S.cancel),
           ),
           FilledButton(
             onPressed: () => Navigator.pop(dialogContext, controller.text),
-            child: const Text('Zapisz'),
+            child: Text(S.save),
           ),
         ],
       ),
@@ -355,12 +351,12 @@ class _RoutesTabState extends State<RoutesTab> {
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(dialogContext, false),
-            child: const Text('Cancel'),
+            child: Text(S.cancel),
           ),
           FilledButton(
             style: FilledButton.styleFrom(backgroundColor: LR.alert),
             onPressed: () => Navigator.pop(dialogContext, true),
-            child: const Text('Delete'),
+            child: Text(S.delete),
           ),
         ],
       ),

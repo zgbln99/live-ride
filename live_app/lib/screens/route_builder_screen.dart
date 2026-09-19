@@ -5,6 +5,7 @@ import 'package:flutter/material.dart';
 import '../core/formatters.dart';
 import '../core/geo.dart';
 import '../core/lr_theme.dart';
+import '../i18n/strings.dart';
 import '../models/ride_route.dart';
 import '../services/app_services.dart';
 import '../services/route_builder_controller.dart';
@@ -146,14 +147,14 @@ class _RouteBuilderScreenState extends State<RouteBuilderScreen> {
   Widget build(BuildContext context) => Scaffold(
     backgroundColor: LR.canvas,
     appBar: AppBar(
-      title: Text(widget.existing == null ? 'NOWA TRASA' : 'EDYCJA TRASY'),
+      title: Text(widget.existing == null ? S.newRoute : S.editRoute),
       actions: [
         AnimatedBuilder(
           animation: _controller,
           builder: (context, _) => Row(
             children: [
               IconButton(
-                tooltip: 'Cofnij',
+                tooltip: S.undo,
                 icon: const Icon(Icons.undo),
                 onPressed: _controller.canUndo
                     ? () {
@@ -204,14 +205,14 @@ class _RouteBuilderScreenState extends State<RouteBuilderScreen> {
         ],
         LrMapButton(
           icon: Icons.search,
-          tooltip: 'Szukaj miejsca',
+          tooltip: S.searchPlace,
           onPressed: _openSearch,
           size: 40,
         ),
         const SizedBox(width: 8),
         LrMapButton(
           icon: Icons.my_location,
-          tooltip: 'Moja pozycja',
+          tooltip: S.myPosition,
           onPressed: _useCurrentPosition,
           size: 40,
         ),
@@ -301,7 +302,7 @@ class _RouteBuilderScreenState extends State<RouteBuilderScreen> {
               ],
               LrMapButton(
                 icon: Icons.zoom_out_map,
-                tooltip: 'Dopasuj widok',
+                tooltip: S.fitView,
                 onPressed: () => _mapKey.currentState?.fitRoute(),
               ),
               const SizedBox(height: 8),
@@ -313,7 +314,7 @@ class _RouteBuilderScreenState extends State<RouteBuilderScreen> {
               const SizedBox(height: 8),
               LrMapButton(
                 icon: Icons.remove,
-                tooltip: 'Oddal',
+                tooltip: S.zoomOut,
                 onPressed: () => _mapKey.currentState?.zoomBy(-1),
               ),
             ],
@@ -364,7 +365,7 @@ class _RouteBuilderScreenState extends State<RouteBuilderScreen> {
                 children: [
                   Expanded(
                     child: LrStat(
-                      label: 'Dystans',
+                      label: S.distance,
                       value: hasRoute
                           ? Fmt.distance(
                               _controller.distanceMeters,
@@ -377,7 +378,7 @@ class _RouteBuilderScreenState extends State<RouteBuilderScreen> {
                   ),
                   Expanded(
                     child: LrStat(
-                      label: 'Podjazd',
+                      label: S.ascent,
                       value: analysis.hasElevationData
                           ? Fmt.elevation(analysis.ascentMeters, metric: metric)
                           : '--',
@@ -387,7 +388,7 @@ class _RouteBuilderScreenState extends State<RouteBuilderScreen> {
                   ),
                   Expanded(
                     child: LrStat(
-                      label: 'Zjazd',
+                      label: S.descent,
                       value: analysis.hasElevationData
                           ? Fmt.elevation(
                               analysis.descentMeters,
@@ -448,8 +449,8 @@ class _RouteBuilderScreenState extends State<RouteBuilderScreen> {
               padding: const EdgeInsets.fromLTRB(10, 8, 10, 10),
               child: Row(
                 children: [
-                  _action(Icons.list, 'Punkty', _openWaypoints),
-                  _action(Icons.tune, 'Profil', _openPreferences),
+                  _action(Icons.list, S.waypointsShort, _openWaypoints),
+                  _action(Icons.tune, S.profileShort, _openPreferences),
                   _action(
                     Icons.swap_horiz,
                     'Odwróć',
@@ -480,7 +481,7 @@ class _RouteBuilderScreenState extends State<RouteBuilderScreen> {
                               ),
                             )
                           : const Icon(Icons.check, size: 18),
-                      label: const Text('ZAPISZ'),
+                      label: Text(S.saveUpper),
                       style: FilledButton.styleFrom(
                         minimumSize: const Size(0, 44),
                         padding: const EdgeInsets.symmetric(horizontal: 16),
@@ -540,11 +541,11 @@ class _RouteBuilderScreenState extends State<RouteBuilderScreen> {
     final position = await _services.location.lastKnown();
     if (position == null) {
       if (mounted) {
-        showLrMessage(context, 'Brak pozycji GPS.', error: true);
+        showLrMessage(context, S.noGpsPosition, error: true);
       }
       return;
     }
-    _controller.addWaypoint(position, name: 'Moja pozycja');
+    _controller.addWaypoint(position, name: S.myPosition);
     _mapKey.currentState?.centerOn(position);
   }
 
@@ -570,7 +571,7 @@ class _RouteBuilderScreenState extends State<RouteBuilderScreen> {
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(dialogContext, false),
-            child: const Text('Anuluj'),
+            child: Text(S.cancel),
           ),
           FilledButton(
             style: FilledButton.styleFrom(backgroundColor: LR.alert),
@@ -642,7 +643,7 @@ class _RouteBuilderScreenState extends State<RouteBuilderScreen> {
               controller: nameField,
               autofocus: true,
               textCapitalization: TextCapitalization.sentences,
-              decoration: const InputDecoration(labelText: 'Nazwa trasy'),
+              decoration: InputDecoration(labelText: S.routeName),
             ),
             const SizedBox(height: 12),
             TextField(
@@ -658,11 +659,11 @@ class _RouteBuilderScreenState extends State<RouteBuilderScreen> {
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(dialogContext),
-            child: const Text('Anuluj'),
+            child: Text(S.cancel),
           ),
           FilledButton(
             onPressed: () => Navigator.pop(dialogContext, nameField.text),
-            child: const Text('Zapisz'),
+            child: Text(S.save),
           ),
         ],
       ),
@@ -672,7 +673,7 @@ class _RouteBuilderScreenState extends State<RouteBuilderScreen> {
     descriptionField.dispose();
     if (result == null) return null;
     final trimmed = result.trim();
-    return trimmed.isEmpty ? 'Trasa bez nazwy' : trimmed;
+    return trimmed.isEmpty ? S.unnamedRoute : trimmed;
   }
 }
 

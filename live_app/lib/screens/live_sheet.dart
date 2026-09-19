@@ -4,6 +4,7 @@ import 'package:share_plus/share_plus.dart';
 
 import '../core/api_client.dart';
 import '../core/lr_theme.dart';
+import '../i18n/strings.dart';
 import '../services/app_services.dart';
 import '../widgets/lr_common.dart';
 
@@ -49,8 +50,8 @@ class _LiveSheetState extends State<_LiveSheet> {
                 const LrWordmark(compact: true),
                 const Spacer(),
                 if (session != null)
-                  const LrStatusChip(
-                    label: 'BROADCASTING',
+                  LrStatusChip(
+                    label: S.broadcasting,
                     color: LR.alert,
                     filled: true,
                   ),
@@ -58,45 +59,41 @@ class _LiveSheetState extends State<_LiveSheet> {
             ),
             const SizedBox(height: 16),
             if (session == null) ...[
-              Text(
-                'Share your position, speed, distance and heart rate with '
-                'anyone holding the link. Spectators need no account.',
-                style: LR.body.copyWith(height: 1.45),
-              ),
+              Text(S.liveDescription, style: LR.body.copyWith(height: 1.45)),
               const SizedBox(height: 18),
               FilledButton.icon(
                 onPressed: _busy ? null : _start,
                 icon: const Icon(Icons.sensors, size: 18),
-                label: const Text('START LIVE'),
+                label: Text(S.startLive),
               ),
               const SizedBox(height: 10),
               OutlinedButton.icon(
                 onPressed: _busy ? null : _join,
                 icon: const Icon(Icons.group_add_outlined, size: 18),
-                label: const Text('JOIN WITH A CODE'),
+                label: Text(S.joinWithCode),
               ),
             ] else ...[
-              _row('RIDER', widget.services.profile.riderName),
+              _row(S.rider, widget.services.profile.riderName),
               const SizedBox(height: 12),
-              _copyRow('JOIN CODE', session.joinToken),
+              _copyRow(S.joinCode, session.joinToken),
               const SizedBox(height: 12),
-              _copyRow('SPECTATOR LINK', live.viewerUrl ?? ''),
+              _copyRow(S.spectatorLink, live.viewerUrl ?? ''),
               const SizedBox(height: 18),
               FilledButton.icon(
                 onPressed: () => SharePlus.instance.share(
                   ShareParams(
                     text: live.viewerUrl ?? '',
-                    subject: 'Follow my ride on Live Ride',
+                    subject: S.followMyRide,
                   ),
                 ),
                 icon: const Icon(Icons.ios_share, size: 18),
-                label: const Text('SHARE THE LINK'),
+                label: Text(S.shareTheLink),
               ),
               const SizedBox(height: 10),
               OutlinedButton.icon(
                 onPressed: _busy ? null : _stop,
                 icon: const Icon(Icons.stop_circle_outlined, size: 18),
-                label: const Text('END LIVE'),
+                label: Text(S.endLive),
                 style: OutlinedButton.styleFrom(
                   foregroundColor: LR.alert,
                   side: const BorderSide(color: LR.alert),
@@ -127,7 +124,7 @@ class _LiveSheetState extends State<_LiveSheet> {
       children: [
         Expanded(child: _row(label, value)),
         IconButton(
-          tooltip: 'Copy',
+          tooltip: S.copy,
           icon: const Icon(Icons.copy, size: 18),
           onPressed: () async {
             await Clipboard.setData(ClipboardData(text: value));
@@ -157,21 +154,21 @@ class _LiveSheetState extends State<_LiveSheet> {
     final code = await showDialog<String>(
       context: context,
       builder: (dialogContext) => AlertDialog(
-        title: const Text('Join a LIVE ride'),
+        title: Text(S.joinLiveTitle),
         content: TextField(
           controller: controller,
           autofocus: true,
           textCapitalization: TextCapitalization.characters,
-          decoration: const InputDecoration(labelText: 'LIVE code'),
+          decoration: InputDecoration(labelText: S.liveCode),
         ),
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(dialogContext),
-            child: const Text('Cancel'),
+            child: Text(S.cancel),
           ),
           FilledButton(
             onPressed: () => Navigator.pop(dialogContext, controller.text),
-            child: const Text('Join'),
+            child: Text(S.joinWithCode),
           ),
         ],
       ),

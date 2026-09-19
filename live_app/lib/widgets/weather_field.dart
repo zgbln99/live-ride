@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
 
+import '../i18n/strings.dart';
+
 import '../core/formatters.dart';
 import '../core/lr_theme.dart';
 import '../models/weather.dart';
@@ -115,10 +117,7 @@ class WeatherCard extends StatelessWidget {
           const Icon(Icons.cloud_off_outlined, size: 20, color: LR.muted),
           const SizedBox(width: 10),
           Expanded(
-            child: Text(
-              error ?? 'Weather appears once Live Ride has your position.',
-              style: LR.body,
-            ),
+            child: Text(error ?? S.weatherAppearsWithPosition, style: LR.body),
           ),
         ],
       );

@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
 
+import '../i18n/strings.dart';
+
 import '../core/lr_theme.dart';
 
 /// The Live Ride mark: a forward chevron in the accent colour.
@@ -64,7 +66,7 @@ class LrWordmark extends StatelessWidget {
       LrBrandMark(size: compact ? 20 : 24, dark: dark),
       const SizedBox(width: 8),
       Text(
-        'LIVE RIDE',
+        S.appName,
         style: TextStyle(
           fontSize: compact ? 12 : 14,
           fontWeight: FontWeight.w900,

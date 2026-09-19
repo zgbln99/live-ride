@@ -70,6 +70,20 @@ class Strings {
   String get emailRequired => 'Podaj adres e-mail.';
   String get emailInvalid => 'To nie wygląda na adres e-mail.';
 
+  // ------------------------------------------------------- pulpit i listy
+  String ridingAsTelemetry(String name, int seconds) =>
+      'Jedziesz jako $name. Dane lecą na serwer co $seconds s, dopóki trwa '
+      'nagrywanie przejazdu.';
+  String sensorBattery(int percent) => '$percent % baterii';
+  String get connectStrapHint =>
+      'Podłącz opaskę WHOOP albo dowolny pasek Bluetooth z tętnem.';
+
+  String get importGpxHint =>
+      'Zaimportuj plik GPX, żeby jechać zaplanowaną trasą.';
+  String get historyEmptyHint =>
+      'Zakończone przejazdy pojawią się tutaj z pełnymi statystykami '
+      'i eksportem do GPX.';
+
   // ---------------------------------------------------------------- jazda
   String get startRide => 'ROZPOCZNIJ JAZDĘ';
   String get backToRide => 'WRÓĆ DO JAZDY';
@@ -230,6 +244,43 @@ class Strings {
   String get deleteRouteTitle => 'Usunąć tę trasę?';
   String deleteRouteMessage(String name) =>
       'Trasa „$name” zostanie usunięta z tego urządzenia.';
+  String get plan => 'PLANUJ';
+  String get liveIsOn => 'LIVE jest włączone';
+  String get waitingForSignal => 'CZEKAM NA SYGNAŁ';
+  String get continueAhead => 'Jedź prosto';
+  String get newRoute => 'NOWA TRASA';
+  String get editRoute => 'EDYCJA TRASY';
+  String get undo => 'Cofnij';
+  String get searchPlace => 'Szukaj miejsca';
+  String get myPosition => 'Moja pozycja';
+  String get fitView => 'Dopasuj widok';
+  String get waypointsShort => 'Punkty';
+  String get profileShort => 'Profil';
+  String get saveUpper => 'ZAPISZ';
+  String get noGpsPosition => 'Brak pozycji GPS.';
+  String get unnamedRoute => 'Trasa bez nazwy';
+  String get waypoints => 'Punkty trasy';
+  String get placeQueryHint => 'Miasto, ulica albo nazwa miejsca';
+  String get typeAtLeastThree => 'Wpisz co najmniej trzy znaki.';
+  String get searchingPlaces => 'Szukam…';
+  String get descent2 => 'Zjazd';
+  String get bike => 'Rower';
+  String get routeCharacter => 'Charakter trasy';
+  String get surface => 'Nawierzchnia';
+  String get avoidAndPrefer => 'Unikaj i preferuj';
+  String get avoidTunnels => 'Unikaj tuneli';
+  String get apply => 'ZASTOSUJ';
+  String get maxSpeed => 'Maks. prędkość';
+  String get avgSpeed => 'Śr. prędkość';
+  String get avgHeartRate => 'Śr. tętno';
+  String get maxHeartRateShort => 'Maks. tętno';
+  String get elevation => 'Wysokość';
+  String get openSettingsButton => 'OTWÓRZ USTAWIENIA';
+  String get tryAgain => 'SPRÓBUJ PONOWNIE';
+  String nothingMatches(String query) =>
+      'Nic w Twojej bibliotece nie pasuje do „$query".';
+  String get editInBuilder => 'Edytuj w kreatorze';
+  String get routeName => 'Nazwa trasy';
   String get routeShapeLoop => 'Pętla';
   String get routeShapeOutAndBack => 'Tam i z powrotem';
   String get routeShapePointToPoint => 'Z punktu do punktu';
@@ -430,6 +481,10 @@ class Strings {
   String get spotifyStep2 => 'Dodaj dokładnie ten redirect URI:';
   String get spotifyStep3 => 'Zaznacz Web API i zapisz.';
   String get spotifyStep4 => 'Skopiuj client ID i wklej poniżej.';
+  String get spotifyClientIdHint => '32 znaki';
+  String get spotifySignInIntro =>
+      'Zaloguj się raz. Live Ride prosi tylko o to, co potrzebne, żeby '
+      'pokazać utwór i obsłużyć przyciski.';
   String get spotifyClientId => 'Client ID Spotify';
   String get saveAndConnect => 'ZAPISZ I POŁĄCZ';
   String get useDifferentClientId => 'Użyj innego client ID';
@@ -492,6 +547,37 @@ class Strings {
   String get nextTrack => 'Następny utwór';
   String get play => 'Odtwórz';
 
+  String get identity => 'Kim jesteś';
+  String get displayName => 'Nazwa widoczna dla innych';
+  String get displayNameHint =>
+      'To widzą obserwujący na mapie LIVE i to zapisuje się przy przejeździe.';
+  String get location => 'Miejscowość';
+  String get bio => 'O sobie';
+  String get physiology => 'Dane do obliczeń';
+  String get physiologyHint =>
+      'Każde pole możesz zostawić puste. Puste znaczy „nie wiem", a nie zero '
+      '— Live Ride po prostu nie pokaże tego, czego bez tej liczby nie da '
+      'się policzyć.';
+  String get weightKg => 'Waga (kg)';
+  String get heightCm => 'Wzrost (cm)';
+  String get birthYear => 'Rocznik';
+  String get ftp => 'FTP (W)';
+  String get maxHeartRateLabel => 'HR max';
+  String get restingHeartRateLabel => 'HR spoczynkowe';
+  String get zonesReady =>
+      'Strefy są policzone — znajdziesz je w sekcji Trening.';
+  String get zonesMissing =>
+      'Podaj FTP albo HR max, żeby zobaczyć strefy treningowe.';
+  String get trainingZones => 'Strefy treningowe';
+  String get heartRateZonesTitle => 'Strefy tętna';
+  String get powerZonesTitle => 'Strefy mocy';
+  String get zonesFromKarvonen =>
+      'Liczone metodą rezerwy tętna (Karvonena), bo podałeś tętno '
+      'spoczynkowe.';
+  String get zonesFromMaxHr => 'Liczone jako procent HR max.';
+  String get zonesFromFtp => 'Liczone z FTP według podziału Coggana.';
+  String get wattsPerKg => 'W/kg przy progu';
+
   // -------------------------------------------------------------- garaż
   String get garage => 'Garaż';
   String get addBike => 'Dodaj rower';
@@ -517,7 +603,6 @@ class Strings {
 
   // -------------------------------------------------------------- profil
   String get profile => 'Profil';
-  String get displayName => 'Nazwa wyświetlana';
   String get name => 'Imię lub nazwa';
   String get signedInToLiveRide => 'Zalogowany w Live Ride';
   String get displayNameExplainer =>

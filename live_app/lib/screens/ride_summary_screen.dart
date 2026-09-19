@@ -3,6 +3,7 @@ import 'package:share_plus/share_plus.dart';
 
 import '../core/formatters.dart';
 import '../core/lr_theme.dart';
+import '../i18n/strings.dart';
 import '../models/ride_record.dart';
 import '../services/app_services.dart';
 import '../widgets/elevation_profile.dart';
@@ -39,20 +40,20 @@ class _RideSummaryScreenState extends State<RideSummaryScreen> {
 
     return Scaffold(
       appBar: AppBar(
-        title: const Text('RIDE SUMMARY'),
+        title: Text(S.rideSummary),
         actions: [
           IconButton(
-            tooltip: 'Rename',
+            tooltip: S.rename,
             icon: const Icon(Icons.edit_outlined),
             onPressed: _busy ? null : _rename,
           ),
           IconButton(
-            tooltip: 'Export GPX',
+            tooltip: S.exportGpx,
             icon: const Icon(Icons.ios_share),
             onPressed: _busy ? null : _export,
           ),
           IconButton(
-            tooltip: 'Delete',
+            tooltip: S.delete,
             icon: const Icon(Icons.delete_outline),
             onPressed: _busy ? null : _delete,
           ),
@@ -85,7 +86,7 @@ class _RideSummaryScreenState extends State<RideSummaryScreen> {
               ),
             ),
           const SizedBox(height: 18),
-          const LrSectionHeader(title: 'Ride'),
+          LrSectionHeader(title: S.ride),
           LrPanel(
             padding: const EdgeInsets.all(18),
             child: Wrap(
@@ -93,35 +94,35 @@ class _RideSummaryScreenState extends State<RideSummaryScreen> {
               runSpacing: 22,
               children: [
                 LrStat(
-                  label: 'Distance',
+                  label: S.distance,
                   value: Fmt.distance(_ride.distanceMeters, metric: metric),
                   unit: Fmt.distanceUnit(metric: metric),
                   valueSize: 30,
                 ),
                 LrStat(
-                  label: 'Moving',
+                  label: S.movingTime,
                   value: Fmt.duration(_ride.movingTime),
                   valueSize: 30,
                 ),
                 LrStat(
-                  label: 'Elapsed',
+                  label: S.elapsed,
                   value: Fmt.duration(_ride.elapsed),
                   valueSize: 30,
                 ),
                 LrStat(
-                  label: 'Avg speed',
+                  label: S.avgSpeed,
                   value: Fmt.speed(_ride.averageSpeedKmh, metric: metric),
                   unit: Fmt.speedUnit(metric: metric),
                   valueSize: 30,
                 ),
                 LrStat(
-                  label: 'Max speed',
+                  label: S.maxSpeed,
                   value: Fmt.speed(_ride.maxSpeedKmh, metric: metric),
                   unit: Fmt.speedUnit(metric: metric),
                   valueSize: 30,
                 ),
                 LrStat(
-                  label: 'Ascent',
+                  label: S.ascent,
                   value: Fmt.elevation(
                     _ride.elevationGainMeters,
                     metric: metric,
@@ -131,7 +132,7 @@ class _RideSummaryScreenState extends State<RideSummaryScreen> {
                 ),
                 if (_ride.elevationLossMeters > 0)
                   LrStat(
-                    label: 'Descent',
+                    label: S.descent,
                     value: Fmt.elevation(
                       _ride.elevationLossMeters,
                       metric: metric,
@@ -141,20 +142,20 @@ class _RideSummaryScreenState extends State<RideSummaryScreen> {
                   ),
                 if (_ride.averageHeartRate != null)
                   LrStat(
-                    label: 'Avg HR',
+                    label: S.avgHeartRate,
                     value: '${_ride.averageHeartRate}',
                     unit: 'bpm',
                     valueSize: 30,
                   ),
                 if (_ride.maxHeartRate != null)
                   LrStat(
-                    label: 'Max HR',
+                    label: S.maxHeartRateShort,
                     value: '${_ride.maxHeartRate}',
                     unit: 'bpm',
                     valueSize: 30,
                   ),
                 LrStat(
-                  label: 'GPS points',
+                  label: S.gpsPoints,
                   value: '${_ride.points.length}',
                   valueSize: 30,
                 ),
@@ -163,7 +164,7 @@ class _RideSummaryScreenState extends State<RideSummaryScreen> {
           ),
           if (profile.length >= 3) ...[
             const SizedBox(height: 22),
-            const LrSectionHeader(title: 'Elevation'),
+            LrSectionHeader(title: S.elevation),
             LrPanel(
               padding: const EdgeInsets.fromLTRB(14, 18, 14, 14),
               child: ElevationProfile(samples: profile, metric: metric),
@@ -174,7 +175,7 @@ class _RideSummaryScreenState extends State<RideSummaryScreen> {
             FilledButton(
               onPressed: () =>
                   Navigator.of(context).popUntil((route) => route.isFirst),
-              child: const Text('DONE'),
+              child: Text(S.done),
             ),
         ],
       ),
@@ -186,20 +187,20 @@ class _RideSummaryScreenState extends State<RideSummaryScreen> {
     final name = await showDialog<String>(
       context: context,
       builder: (dialogContext) => AlertDialog(
-        title: const Text('Rename ride'),
+        title: Text(S.renameRide),
         content: TextField(
           controller: controller,
           autofocus: true,
-          decoration: const InputDecoration(labelText: 'Ride name'),
+          decoration: InputDecoration(labelText: S.rideName),
         ),
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(dialogContext),
-            child: const Text('Cancel'),
+            child: Text(S.cancel),
           ),
           FilledButton(
             onPressed: () => Navigator.pop(dialogContext, controller.text),
-            child: const Text('Save'),
+            child: Text(S.save),
           ),
         ],
       ),
@@ -233,19 +234,17 @@ class _RideSummaryScreenState extends State<RideSummaryScreen> {
     final confirmed = await showDialog<bool>(
       context: context,
       builder: (dialogContext) => AlertDialog(
-        title: const Text('Delete this ride?'),
-        content: const Text(
-          'The recorded track will be removed from this device.',
-        ),
+        title: Text(S.deleteRideTitle),
+        content: Text(S.deleteRideMessage),
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(dialogContext, false),
-            child: const Text('Cancel'),
+            child: Text(S.cancel),
           ),
           FilledButton(
             style: FilledButton.styleFrom(backgroundColor: LR.alert),
             onPressed: () => Navigator.pop(dialogContext, true),
-            child: const Text('Delete'),
+            child: Text(S.delete),
           ),
         ],
       ),

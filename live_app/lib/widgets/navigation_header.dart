@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
 
+import '../i18n/strings.dart';
+
 import '../core/formatters.dart';
 import '../core/lr_theme.dart';
 import '../models/navigation_plan.dart';
@@ -151,10 +153,10 @@ class NavigationHeader extends StatelessWidget {
 
   String _instruction(NavManeuver? next) {
     if (next == null) {
-      return mapMatched ? 'Stay on the route' : 'Follow the track';
+      return mapMatched ? S.stayOnRoute : S.followTheTrack;
     }
     if (next.instruction.isNotEmpty) return next.instruction;
-    return next.isDestination ? 'Arrive at destination' : 'Continue';
+    return next.isDestination ? S.arriveAtDestination : S.continueAhead;
   }
 
   Widget _statusStrip(BuildContext context) {
@@ -244,7 +246,7 @@ class NavigationHeader extends StatelessWidget {
                   visible: chromeVisible,
                   child: _stripButton(
                     Icons.map_outlined,
-                    'Route overview',
+                    S.routeOverview,
                     onOverview!,
                   ),
                 ),

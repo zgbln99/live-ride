@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 
 import '../core/formatters.dart';
 import '../core/lr_theme.dart';
+import '../i18n/strings.dart';
 import '../services/app_services.dart';
 import '../widgets/lr_common.dart';
 import 'ride_computer_screen.dart';
@@ -27,13 +28,19 @@ class HomeShell extends StatefulWidget {
 class _HomeShellState extends State<HomeShell> {
   int _tab = 0;
 
-  static const List<({IconData icon, IconData active, String label})> _tabs = [
-    (icon: Icons.play_circle_outline, active: Icons.play_circle, label: 'RIDE'),
-    (icon: Icons.route_outlined, active: Icons.route, label: 'ROUTES'),
-    (icon: Icons.graphic_eq, active: Icons.graphic_eq, label: 'MUSIC'),
-    (icon: Icons.history, active: Icons.history, label: 'HISTORY'),
-    (icon: Icons.sensors_outlined, active: Icons.sensors, label: 'LIVE'),
-    (icon: Icons.person_outline, active: Icons.person, label: 'PROFILE'),
+  /// Zakładki są getterem, a nie stałą: ich etykiety pochodzą z tekstów,
+  /// a te da się podmienić w locie razem z językiem.
+  static List<({IconData icon, IconData active, String label})> get _tabs => [
+    (
+      icon: Icons.play_circle_outline,
+      active: Icons.play_circle,
+      label: S.tabRide,
+    ),
+    (icon: Icons.route_outlined, active: Icons.route, label: S.tabRoutes),
+    (icon: Icons.graphic_eq, active: Icons.graphic_eq, label: S.tabMusic),
+    (icon: Icons.history, active: Icons.history, label: S.tabHistory),
+    (icon: Icons.sensors_outlined, active: Icons.sensors, label: S.tabLive),
+    (icon: Icons.person_outline, active: Icons.person, label: S.tabProfile),
   ];
 
   @override
@@ -90,8 +97,8 @@ class _HomeShellState extends State<HomeShell> {
                 padding: const EdgeInsets.only(right: 8),
                 child: InkWell(
                   onTap: _openRideComputer,
-                  child: const LrStatusChip(
-                    label: 'RIDE IN PROGRESS',
+                  child: LrStatusChip(
+                    label: S.rideInProgress,
                     color: LR.alert,
                     filled: true,
                   ),
