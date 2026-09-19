@@ -17,6 +17,7 @@ import 'profile_service.dart';
 import 'ride_recorder.dart';
 import 'ride_storage_service.dart';
 import 'route_library_service.dart';
+import 'route_weather_service.dart';
 import 'routing_service.dart';
 import 'spotify_service.dart';
 import 'weather_service.dart';
@@ -36,6 +37,7 @@ class AppServices {
     required this.rides,
     required this.profile,
     required this.weather,
+    required this.routeWeather,
     required this.heartRate,
     required this.live,
     required this.location,
@@ -66,6 +68,7 @@ class AppServices {
       rides: rides,
       profile: profile,
       weather: weather,
+      routeWeather: RouteWeatherService(),
       heartRate: heartRate,
       live: live,
       location: location,
@@ -94,6 +97,9 @@ class AppServices {
   final RideStorageService rides;
   final ProfileService profile;
   final WeatherService weather;
+
+  /// Prognoza wzdłuż trasy — używana przez briefing, nie przez komputer jazdy.
+  final RouteWeatherService routeWeather;
   final HeartRateService heartRate;
   final LiveSessionController live;
   final LocationService location;

@@ -3,14 +3,24 @@ import 'package:share_plus/share_plus.dart';
 
 import '../core/formatters.dart';
 import '../core/lr_theme.dart';
+import '../i18n/strings.dart';
 import '../models/ride_route.dart';
+import '../models/route/route_analysis.dart';
+import '../models/route/route_briefing.dart';
+import '../models/route/route_weather.dart';
 import '../services/app_services.dart';
+import '../widgets/climb_profile.dart';
 import '../widgets/lr_common.dart';
 import '../widgets/ride_map.dart';
+import '../widgets/route_weather_strip.dart';
 import '../widgets/track_preview.dart';
 import 'ride_computer_screen.dart';
 
-/// Route preview: see it on the map, check the numbers, then ride it.
+/// Briefing trasy: mapa, liczby, profil, podjazdy i pogoda — wszystko, co
+/// zawodnik chce wiedzieć, zanim naciśnie NAWIGUJ.
+///
+/// Nic tu nie jest wymyślone: jeśli trasa nie ma wysokości, nie ma sekcji
+/// podjazdów; jeśli prognoza nie doszła, nie ma sekcji pogody.
 class RouteDetailScreen extends StatefulWidget {
   const RouteDetailScreen({super.key, required this.summary});
 
@@ -23,9 +33,12 @@ class RouteDetailScreen extends StatefulWidget {
 class _RouteDetailScreenState extends State<RouteDetailScreen> {
   late RouteSummary _summary = widget.summary;
   RideRoute? _route;
+  RouteBriefing? _briefing;
+  RouteForecast? _forecast;
   String? _style;
   String? _error;
   bool _starting = false;
+  bool _loadingForecast = false;
 
   @override
   void initState() {
@@ -37,7 +50,12 @@ class _RouteDetailScreenState extends State<RouteDetailScreen> {
     final services = AppServices.of(context);
     try {
       final route = await services.routes.load(_summary);
-      if (mounted) setState(() => _route = route);
+      if (!mounted) return;
+      setState(() {
+        _route = route;
+        _briefing = _buildBriefing(route, null);
+      });
+      unawaitedForecast(route);
     } catch (e) {
       if (mounted) setState(() => _error = e.toString());
     }
@@ -45,140 +63,234 @@ class _RouteDetailScreenState extends State<RouteDetailScreen> {
       final style = await services.api.fetchMapStyle();
       if (mounted) setState(() => _style = style);
     } catch (_) {
-      // The sketch preview below covers an offline map.
+      // Szkic trasy poniżej wystarcza, gdy styl mapy nie dojdzie.
     }
+  }
+
+  RouteBriefing _buildBriefing(RideRoute route, RouteForecast? forecast) {
+    final profile = AppServices.of(context).profile.profile;
+    return RouteBriefing.build(
+      analysis: route.analysis,
+      preferences: route.preferences,
+      forecast: forecast,
+      riderWeightKg: profile.weightKg,
+      metric: profile.metricUnits,
+    );
+  }
+
+  /// Prognoza leci w tle — briefing pokazuje się natychmiast, a pogoda
+  /// dokleja się, gdy dojdzie.
+  void unawaitedForecast(RideRoute route) {
+    if (route.points.length < 2) return;
+    setState(() => _loadingForecast = true);
+    AppServices.of(context).routeWeather
+        .forecast(
+          points: route.points,
+          estimatedDuration: route.estimatedDuration(),
+        )
+        .then((forecast) {
+          if (!mounted) return;
+          setState(() {
+            _loadingForecast = false;
+            _forecast = forecast.isEmpty ? null : forecast;
+            _briefing = _buildBriefing(route, _forecast);
+          });
+        })
+        .catchError((_) {
+          if (mounted) setState(() => _loadingForecast = false);
+        });
   }
 
   @override
   Widget build(BuildContext context) {
     final services = AppServices.of(context);
     final metric = services.profile.profile.metricUnits;
+    final route = _route;
+    final briefing = _briefing;
+
+    if (_error != null) {
+      return Scaffold(
+        appBar: AppBar(title: Text(S.route)),
+        body: LrEmptyState(
+          icon: Icons.error_outline,
+          title: S.routeUnavailable,
+          message: _error!,
+        ),
+      );
+    }
 
     return Scaffold(
-      appBar: AppBar(
-        title: const Text('ROUTE'),
-        actions: [
-          IconButton(
-            tooltip: 'Rename',
-            icon: const Icon(Icons.edit_outlined),
-            onPressed: _rename,
-          ),
-          IconButton(
-            tooltip: 'Share GPX',
-            icon: const Icon(Icons.ios_share),
-            onPressed: _share,
-          ),
-          IconButton(
-            tooltip: 'Delete',
-            icon: const Icon(Icons.delete_outline),
-            onPressed: _delete,
-          ),
-        ],
-      ),
-      body: Column(
-        children: [
-          Expanded(
-            child: _error != null
-                ? LrEmptyState(
-                    icon: Icons.error_outline,
-                    title: 'Route unavailable',
-                    message: _error!,
-                  )
-                : _style != null && _route != null
-                ? RideMap(
-                    styleJson: _style!,
-                    position: null,
-                    follow: false,
-                    headingUp: false,
-                    fitRouteOnLoad: true,
-                    onFollowChanged: (_) {},
-                    routePoints: _route!.points,
-                  )
-                : Padding(
-                    padding: const EdgeInsets.all(16),
-                    child: TrackPreview(
-                      points: _route?.points ?? _summary.preview,
-                      strokeWidth: 3,
-                      background: LR.surface,
+      body: CustomScrollView(
+        slivers: [
+          SliverAppBar(
+            pinned: true,
+            expandedHeight: 260,
+            title: Text(S.briefingTitle),
+            actions: [
+              IconButton(
+                tooltip: S.rename,
+                icon: const Icon(Icons.edit_outlined),
+                onPressed: _rename,
+              ),
+              IconButton(
+                tooltip: S.exportGpx,
+                icon: const Icon(Icons.ios_share),
+                onPressed: _share,
+              ),
+              IconButton(
+                tooltip: S.delete,
+                icon: const Icon(Icons.delete_outline),
+                onPressed: _delete,
+              ),
+            ],
+            flexibleSpace: FlexibleSpaceBar(
+              background: _style != null && route != null
+                  ? RideMap(
+                      styleJson: _style!,
+                      position: null,
+                      follow: false,
+                      headingUp: false,
+                      fitRouteOnLoad: true,
+                      onFollowChanged: (_) {},
+                      routePoints: route.points,
+                    )
+                  : Padding(
+                      padding: const EdgeInsets.fromLTRB(16, 80, 16, 16),
+                      child: TrackPreview(
+                        points: route?.points ?? _summary.preview,
+                        strokeWidth: 3,
+                        background: LR.surface,
+                      ),
                     ),
-                  ),
-          ),
-          Container(
-            decoration: const BoxDecoration(
-              color: LR.surface,
-              border: Border(top: BorderSide(color: LR.line)),
             ),
-            child: SafeArea(
-              top: false,
-              child: Padding(
-                padding: const EdgeInsets.fromLTRB(16, 14, 16, 12),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.stretch,
-                  children: [
-                    Text(
-                      _summary.name,
-                      maxLines: 2,
-                      overflow: TextOverflow.ellipsis,
-                      style: LR.title,
-                    ),
-                    const SizedBox(height: 4),
-                    Text(
-                      '${_summary.shape.label} · '
-                      '${_summary.source.label} · '
-                      '${Fmt.date(_summary.createdAt)}',
-                      style: LR.body.copyWith(fontSize: 12.5),
-                    ),
-                    const SizedBox(height: 16),
-                    Row(
+          ),
+          SliverToBoxAdapter(
+            child: Padding(
+              padding: const EdgeInsets.fromLTRB(16, 16, 16, 0),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  Text(
+                    _summary.name,
+                    maxLines: 2,
+                    overflow: TextOverflow.ellipsis,
+                    style: LR.title,
+                  ),
+                  const SizedBox(height: 4),
+                  Text(
+                    '${_summary.shape.label} · ${_summary.source.label} · '
+                    '${Fmt.date(_summary.createdAt)}',
+                    style: LR.body.copyWith(fontSize: 12.5),
+                  ),
+                  if (briefing != null && briefing.headline.isNotEmpty) ...[
+                    const SizedBox(height: 12),
+                    Wrap(
+                      spacing: 8,
+                      runSpacing: 8,
                       children: [
-                        Expanded(
-                          child: LrStat(
-                            label: 'Distance',
-                            value: Fmt.distance(
-                              _summary.distanceMeters,
-                              metric: metric,
-                            ),
-                            unit: Fmt.distanceUnit(metric: metric),
-                            valueSize: 26,
-                          ),
-                        ),
-                        Expanded(
-                          child: LrStat(
-                            label: 'Ascent',
-                            value: Fmt.elevation(
-                              _summary.ascentMeters,
-                              metric: metric,
-                            ),
-                            unit: Fmt.elevationUnit(metric: metric),
-                            valueSize: 26,
-                          ),
-                        ),
-                        Expanded(
-                          child: LrStat(
-                            label: 'Points',
-                            value: '${_summary.pointCount}',
-                            valueSize: 26,
-                          ),
-                        ),
+                        for (final item in briefing.headline)
+                          LrStatusChip(label: item, color: LR.accentDeep),
                       ],
                     ),
-                    const SizedBox(height: 16),
-                    FilledButton.icon(
-                      onPressed: _route == null || _starting ? null : _navigate,
-                      icon: _starting
-                          ? const SizedBox(
-                              width: 16,
-                              height: 16,
-                              child: CircularProgressIndicator(
-                                strokeWidth: 2,
-                                color: Colors.white,
-                              ),
-                            )
-                          : const Icon(Icons.navigation, size: 18),
-                      label: Text(_starting ? 'PREPARING…' : 'NAVIGATE'),
-                    ),
                   ],
+                  const SizedBox(height: 16),
+                  _StatsRow(summary: _summary, route: route, metric: metric),
+                ],
+              ),
+            ),
+          ),
+          if (briefing != null && briefing.lines.isNotEmpty)
+            SliverToBoxAdapter(
+              child: Padding(
+                padding: const EdgeInsets.fromLTRB(16, 20, 16, 0),
+                child: LrPanel(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      for (final line in briefing.lines)
+                        Padding(
+                          padding: const EdgeInsets.symmetric(vertical: 5),
+                          child: _BriefingRow(line: line),
+                        ),
+                      if (_loadingForecast)
+                        Padding(
+                          padding: const EdgeInsets.symmetric(vertical: 5),
+                          child: Row(
+                            children: [
+                              const SizedBox(
+                                width: 12,
+                                height: 12,
+                                child: CircularProgressIndicator(
+                                  strokeWidth: 2,
+                                ),
+                              ),
+                              const SizedBox(width: 10),
+                              Text(
+                                S.loadingForecast,
+                                style: LR.body.copyWith(fontSize: 13),
+                              ),
+                            ],
+                          ),
+                        ),
+                    ],
+                  ),
                 ),
+              ),
+            ),
+          if (route != null && route.analysis.hasElevationData) ...[
+            SliverToBoxAdapter(
+              child: LrSectionHeader(title: S.elevationProfile),
+            ),
+            SliverToBoxAdapter(
+              child: Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 16),
+                child: ClimbProfileChart(
+                  samples: route.analysis.profile,
+                  climbs: route.analysis.climbs,
+                  metric: metric,
+                ),
+              ),
+            ),
+          ],
+          if (route != null && route.analysis.climbs.isNotEmpty) ...[
+            SliverToBoxAdapter(child: LrSectionHeader(title: S.climbs)),
+            SliverList.separated(
+              itemCount: route.analysis.climbs.length,
+              separatorBuilder: (_, _) => const SizedBox(height: 8),
+              itemBuilder: (context, index) => Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 16),
+                child: _ClimbTile(
+                  climb: route.analysis.climbs[index],
+                  index: index + 1,
+                  metric: metric,
+                ),
+              ),
+            ),
+          ],
+          if (_forecast != null) ...[
+            SliverToBoxAdapter(
+              child: LrSectionHeader(title: S.weatherAlongRoute),
+            ),
+            SliverToBoxAdapter(
+              child: RouteWeatherStrip(forecast: _forecast!, metric: metric),
+            ),
+          ],
+          SliverToBoxAdapter(
+            child: Padding(
+              padding: const EdgeInsets.fromLTRB(16, 24, 16, 32),
+              child: FilledButton.icon(
+                onPressed: route == null || _starting ? null : _navigate,
+                icon: _starting
+                    ? const SizedBox(
+                        width: 16,
+                        height: 16,
+                        child: CircularProgressIndicator(
+                          strokeWidth: 2,
+                          color: Colors.white,
+                        ),
+                      )
+                    : const Icon(Icons.navigation, size: 18),
+                label: Text(_starting ? S.preparing : S.navigate),
               ),
             ),
           ),
@@ -208,20 +320,20 @@ class _RouteDetailScreenState extends State<RouteDetailScreen> {
     final name = await showDialog<String>(
       context: context,
       builder: (dialogContext) => AlertDialog(
-        title: const Text('Rename route'),
+        title: Text(S.rename),
         content: TextField(
           controller: controller,
           autofocus: true,
-          decoration: const InputDecoration(labelText: 'Route name'),
+          decoration: InputDecoration(labelText: S.route),
         ),
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(dialogContext),
-            child: const Text('Cancel'),
+            child: Text(S.cancel),
           ),
           FilledButton(
             onPressed: () => Navigator.pop(dialogContext, controller.text),
-            child: const Text('Save'),
+            child: Text(S.save),
           ),
         ],
       ),
@@ -229,8 +341,9 @@ class _RouteDetailScreenState extends State<RouteDetailScreen> {
     controller.dispose();
     if (name == null || name.trim().isEmpty || !mounted) return;
     await AppServices.of(context).routes.rename(_summary, name);
-    if (mounted)
+    if (mounted) {
       setState(() => _summary = _summary.copyWith(name: name.trim()));
+    }
   }
 
   Future<void> _share() async {
@@ -244,17 +357,17 @@ class _RouteDetailScreenState extends State<RouteDetailScreen> {
     final confirmed = await showDialog<bool>(
       context: context,
       builder: (dialogContext) => AlertDialog(
-        title: const Text('Delete this route?'),
-        content: Text('"${_summary.name}" will be removed from this device.'),
+        title: Text(S.deleteRouteTitle),
+        content: Text(S.deleteRouteMessage(_summary.name)),
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(dialogContext, false),
-            child: const Text('Cancel'),
+            child: Text(S.cancel),
           ),
           FilledButton(
             style: FilledButton.styleFrom(backgroundColor: LR.alert),
             onPressed: () => Navigator.pop(dialogContext, true),
-            child: const Text('Delete'),
+            child: Text(S.delete),
           ),
         ],
       ),
@@ -263,4 +376,159 @@ class _RouteDetailScreenState extends State<RouteDetailScreen> {
     await AppServices.of(context).routes.delete(_summary);
     if (mounted) Navigator.of(context).pop(true);
   }
+}
+
+class _StatsRow extends StatelessWidget {
+  const _StatsRow({
+    required this.summary,
+    required this.route,
+    required this.metric,
+  });
+
+  final RouteSummary summary;
+  final RideRoute? route;
+  final bool metric;
+
+  @override
+  Widget build(BuildContext context) {
+    final duration = route?.estimatedDuration();
+    return Row(
+      children: [
+        Expanded(
+          child: LrStat(
+            label: S.distance,
+            value: Fmt.distance(summary.distanceMeters, metric: metric),
+            unit: Fmt.distanceUnit(metric: metric),
+            valueSize: 26,
+          ),
+        ),
+        Expanded(
+          child: LrStat(
+            label: S.ascent,
+            value: Fmt.elevation(summary.ascentMeters, metric: metric),
+            unit: Fmt.elevationUnit(metric: metric),
+            valueSize: 26,
+          ),
+        ),
+        Expanded(
+          child: LrStat(
+            label: S.estimatedTime,
+            value: duration == null || duration == Duration.zero
+                ? S.notAvailable
+                : Fmt.durationCompact(duration),
+            valueSize: 26,
+          ),
+        ),
+      ],
+    );
+  }
+}
+
+class _BriefingRow extends StatelessWidget {
+  const _BriefingRow({required this.line});
+
+  final BriefingLine line;
+
+  @override
+  Widget build(BuildContext context) {
+    final (icon, color) = switch (line.tone) {
+      BriefingTone.good => (Icons.check_circle_outline, LR.go),
+      BriefingTone.warning => (Icons.warning_amber_rounded, LR.alert),
+      BriefingTone.neutral => (Icons.circle, LR.lineStrong),
+    };
+    return Row(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Padding(
+          padding: const EdgeInsets.only(top: 2),
+          child: Icon(
+            icon,
+            size: line.tone == BriefingTone.neutral ? 8 : 16,
+            color: color,
+          ),
+        ),
+        SizedBox(width: line.tone == BriefingTone.neutral ? 14 : 8),
+        Expanded(
+          child: Text(
+            line.text,
+            style: LR.body.copyWith(
+              fontSize: 13.5,
+              height: 1.35,
+              color: line.tone == BriefingTone.warning ? LR.ink : LR.inkSoft,
+            ),
+          ),
+        ),
+      ],
+    );
+  }
+}
+
+class _ClimbTile extends StatelessWidget {
+  const _ClimbTile({
+    required this.climb,
+    required this.index,
+    required this.metric,
+  });
+
+  final Climb climb;
+  final int index;
+  final bool metric;
+
+  @override
+  Widget build(BuildContext context) {
+    return LrPanel(
+      padding: const EdgeInsets.all(12),
+      child: Row(
+        children: [
+          Container(
+            width: 42,
+            height: 42,
+            alignment: Alignment.center,
+            decoration: BoxDecoration(
+              color: _categoryColor(climb.category).withValues(alpha: 0.14),
+              borderRadius: BorderRadius.circular(10),
+            ),
+            child: Text(
+              climb.category.shortLabel,
+              style: LR
+                  .fieldValue(15)
+                  .copyWith(color: _categoryColor(climb.category)),
+            ),
+          ),
+          const SizedBox(width: 12),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  '$index. ${Fmt.distance(climb.lengthMeters, metric: metric)} '
+                  '${Fmt.distanceUnit(metric: metric)} · '
+                  '${climb.averageGradientPercent.toStringAsFixed(1)} %',
+                  style: LR.fieldValue(16),
+                ),
+                const SizedBox(height: 2),
+                Text(
+                  'od ${Fmt.distance(climb.startDistanceMeters, metric: metric)} '
+                  '${Fmt.distanceUnit(metric: metric)} · '
+                  '+${Fmt.elevation(climb.gainMeters, metric: metric)} '
+                  '${Fmt.elevationUnit(metric: metric)} · maks. '
+                  '${climb.maxGradientPercent.toStringAsFixed(0)} %',
+                  style: LR.body.copyWith(fontSize: 12),
+                ),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  static Color _categoryColor(ClimbCategory category) => switch (category) {
+    ClimbCategory.hc => LR.alert,
+    ClimbCategory.one => LR.alert,
+    ClimbCategory.two => const Color(0xFFE07A1F),
+    ClimbCategory.three => LR.accentDeep,
+    ClimbCategory.four => LR.accentDeep,
+    ClimbCategory.uncategorised => LR.muted,
+  };
 }

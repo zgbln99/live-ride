@@ -64,20 +64,28 @@ class WeatherSnapshot {
 }
 
 enum WeatherCondition {
-  clear('Clear'),
-  partlyCloudy('Partly cloudy'),
-  cloudy('Cloudy'),
-  fog('Fog'),
-  drizzle('Drizzle'),
-  rain('Rain'),
-  heavyRain('Heavy rain'),
-  snow('Snow'),
-  thunderstorm('Thunderstorm'),
+  clear('Bezchmurnie'),
+  partlyCloudy('Częściowe zachmurzenie'),
+  cloudy('Pochmurno'),
+  fog('Mgła'),
+  drizzle('Mżawka'),
+  rain('Deszcz'),
+  heavyRain('Ulewa'),
+  snow('Śnieg'),
+  thunderstorm('Burza'),
   unknown('--');
 
   const WeatherCondition(this.label);
 
   final String label;
+
+  /// Czy warunki wymagają ostrzeżenia zawodnika przed startem.
+  bool get isWet =>
+      this == drizzle ||
+      this == rain ||
+      this == heavyRain ||
+      this == snow ||
+      this == thunderstorm;
 }
 
 extension _FirstOrNull<T> on Iterable<T> {

@@ -233,6 +233,25 @@ class Strings {
   String get routeShapeOutAndBack => 'Tam i z powrotem';
   String get routeShapePointToPoint => 'Z punktu do punktu';
 
+  // ------------------------------------------------------- briefing trasy
+  String get briefing => 'Briefing';
+  String get briefingTitle => 'Przed startem';
+  String get climbs => 'Podjazdy';
+  String get noClimbs => 'Brak wyraźnych podjazdów na tej trasie.';
+  String get loadingForecast => 'Liczę prognozę na trasie…';
+  String get routeUnavailable => 'Nie mogę wczytać trasy';
+  String get distance => 'Dystans';
+  String get ascent => 'Przewyższenie';
+  String get descent => 'Spadek';
+  String get difficulty => 'Trudność';
+  String get estimatedTime => 'Szacowany czas';
+  String get averageGradient => 'Średnie nachylenie';
+  String get maxGradient => 'Maks. nachylenie';
+  String get climbCategory => 'Kategoria';
+  String get startNow => 'Start teraz';
+  String get addRiderWeightHint =>
+      'Uzupełnij wagę w profilu, żeby zobaczyć szacowany wydatek energii.';
+
   // ------------------------------------------------------------ historia
   String get history => 'Historia';
   String get rideSummary => 'PODSUMOWANIE PRZEJAZDU';

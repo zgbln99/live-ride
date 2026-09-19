@@ -13,6 +13,15 @@ class RiderProfile {
     this.keepScreenAwake = true,
     this.weatherEnabled = true,
     this.autoLive = false,
+    this.bio = '',
+    this.location = '',
+    this.avatarPath = '',
+    this.weightKg,
+    this.heightCm,
+    this.birthYear,
+    this.ftpWatts,
+    this.maxHeartRate,
+    this.restingHeartRate,
     this.layout = RideFieldLayout.four,
     this.fields = const <RideDataField>[
       RideDataField.speed,
@@ -29,6 +38,23 @@ class RiderProfile {
   final bool keepScreenAwake;
   final bool weatherEnabled;
   final bool autoLive;
+
+  /// Krótki opis pokazywany na profilu i w widoku LIVE.
+  final String bio;
+  final String location;
+
+  /// Ścieżka do pliku awatara na urządzeniu. Pusta, gdy zawodnik go nie ustawił.
+  final String avatarPath;
+
+  /// Dane fizjologiczne. Wszystkie opcjonalne — bez nich aplikacja po prostu
+  /// nie pokazuje tego, czego nie da się policzyć (kalorii, stref, IF).
+  final double? weightKg;
+  final double? heightCm;
+  final int? birthYear;
+  final int? ftpWatts;
+  final int? maxHeartRate;
+  final int? restingHeartRate;
+
   final RideFieldLayout layout;
   final List<RideDataField> fields;
 
@@ -43,6 +69,32 @@ class RiderProfile {
 
   bool get hasIdentity =>
       displayName.trim().isNotEmpty || username.trim().isNotEmpty;
+
+  int? get age {
+    final year = birthYear;
+    if (year == null || year < 1900) return null;
+    final age = DateTime.now().year - year;
+    return age > 0 && age < 120 ? age : null;
+  }
+
+  /// Tętno maksymalne z profilu, a gdy go nie ma — oszacowanie z wieku.
+  ///
+  /// Zwraca null, gdy nie ma ani jednego, ani drugiego: wtedy stref nie
+  /// pokazujemy wcale, zamiast pokazywać zmyślone.
+  int? get effectiveMaxHeartRate {
+    if (maxHeartRate != null && maxHeartRate! > 100) return maxHeartRate;
+    final years = age;
+    if (years == null) return null;
+    return (220 - years).round();
+  }
+
+  /// Watty na kilogram przy progu — tylko gdy znamy i FTP, i wagę.
+  double? get wattsPerKilogram {
+    final ftp = ftpWatts;
+    final weight = weightKg;
+    if (ftp == null || weight == null || weight <= 0) return null;
+    return ftp / weight;
+  }
 
   /// The configured fields trimmed/padded to the selected layout size.
   List<RideDataField> get activeFields {
@@ -67,6 +119,15 @@ class RiderProfile {
     bool? keepScreenAwake,
     bool? weatherEnabled,
     bool? autoLive,
+    String? bio,
+    String? location,
+    String? avatarPath,
+    Object? weightKg = _keep,
+    Object? heightCm = _keep,
+    Object? birthYear = _keep,
+    Object? ftpWatts = _keep,
+    Object? maxHeartRate = _keep,
+    Object? restingHeartRate = _keep,
     RideFieldLayout? layout,
     List<RideDataField>? fields,
   }) => RiderProfile(
@@ -77,6 +138,19 @@ class RiderProfile {
     keepScreenAwake: keepScreenAwake ?? this.keepScreenAwake,
     weatherEnabled: weatherEnabled ?? this.weatherEnabled,
     autoLive: autoLive ?? this.autoLive,
+    bio: bio ?? this.bio,
+    location: location ?? this.location,
+    avatarPath: avatarPath ?? this.avatarPath,
+    weightKg: weightKg == _keep ? this.weightKg : weightKg as double?,
+    heightCm: heightCm == _keep ? this.heightCm : heightCm as double?,
+    birthYear: birthYear == _keep ? this.birthYear : birthYear as int?,
+    ftpWatts: ftpWatts == _keep ? this.ftpWatts : ftpWatts as int?,
+    maxHeartRate: maxHeartRate == _keep
+        ? this.maxHeartRate
+        : maxHeartRate as int?,
+    restingHeartRate: restingHeartRate == _keep
+        ? this.restingHeartRate
+        : restingHeartRate as int?,
     layout: layout ?? this.layout,
     fields: fields ?? this.fields,
   );
@@ -89,6 +163,15 @@ class RiderProfile {
     'keep_screen_awake': keepScreenAwake,
     'weather_enabled': weatherEnabled,
     'auto_live': autoLive,
+    'bio': bio,
+    'location': location,
+    'avatar_path': avatarPath,
+    'weight_kg': weightKg,
+    'height_cm': heightCm,
+    'birth_year': birthYear,
+    'ftp_watts': ftpWatts,
+    'max_heart_rate': maxHeartRate,
+    'resting_heart_rate': restingHeartRate,
     'layout': layout.name,
     'fields': fields.map((f) => f.name).toList(),
   };
@@ -112,6 +195,15 @@ class RiderProfile {
       keepScreenAwake: json['keep_screen_awake'] as bool? ?? true,
       weatherEnabled: json['weather_enabled'] as bool? ?? true,
       autoLive: json['auto_live'] as bool? ?? false,
+      bio: json['bio'] as String? ?? '',
+      location: json['location'] as String? ?? '',
+      avatarPath: json['avatar_path'] as String? ?? '',
+      weightKg: (json['weight_kg'] as num?)?.toDouble(),
+      heightCm: (json['height_cm'] as num?)?.toDouble(),
+      birthYear: (json['birth_year'] as num?)?.toInt(),
+      ftpWatts: (json['ftp_watts'] as num?)?.toInt(),
+      maxHeartRate: (json['max_heart_rate'] as num?)?.toInt(),
+      restingHeartRate: (json['resting_heart_rate'] as num?)?.toInt(),
       layout:
           RideFieldLayout.values
               .where((value) => value.name == layoutName)
@@ -121,6 +213,10 @@ class RiderProfile {
     );
   }
 }
+
+/// Znacznik „nie zmieniaj tego pola" dla [RiderProfile.copyWith], dzięki
+/// któremu da się też wyczyścić wartość, podając jawnie null.
+const Object _keep = Object();
 
 extension _FirstOrNull<T> on Iterable<T> {
   T? get firstOrNull {

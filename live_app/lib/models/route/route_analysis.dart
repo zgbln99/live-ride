@@ -20,6 +20,16 @@ enum ClimbCategory {
   final String label;
   final double minimumScore;
 
+  /// Skrót do odznaki: „4", „3", „2", „1", „HC" albo kropka.
+  String get shortLabel => switch (this) {
+    ClimbCategory.uncategorised => '·',
+    ClimbCategory.four => '4',
+    ClimbCategory.three => '3',
+    ClimbCategory.two => '2',
+    ClimbCategory.one => '1',
+    ClimbCategory.hc => 'HC',
+  };
+
   static ClimbCategory fromScore(double score) {
     ClimbCategory result = ClimbCategory.uncategorised;
     for (final category in ClimbCategory.values) {
