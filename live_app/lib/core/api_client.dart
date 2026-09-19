@@ -166,6 +166,13 @@ class ApiClient {
   }
 
   /// The MapLibre style document, cached for the process lifetime.
+  /// Adres stylu mapy.
+  ///
+  /// Pobieranie map offline potrzebuje URL-a, a nie treści stylu: silnik
+  /// mapy sam go odpytuje i rozwiązuje z niego adresy kafelków.
+  static String get mapStyleUrl =>
+      '$serverOrigin/api/v1/map/style?theme=liberty';
+
   Future<String> fetchMapStyle() async {
     final cached = _mapStyle;
     if (cached != null) return cached;

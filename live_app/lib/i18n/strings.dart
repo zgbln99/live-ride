@@ -304,6 +304,27 @@ class Strings {
   String get autoPauseHint =>
       'Licznik zatrzymuje się na postoju i rusza, gdy ruszysz.';
 
+  // -------------------------------------------------------------- offline
+  String get offline => 'Offline i synchronizacja';
+  String get synchronisation => 'Synchronizacja';
+  String get syncExplainer =>
+      'Telefon jest źródłem prawdy. Przejazd jest zapisany i kompletny w '
+      'chwili zakończenia, a kopia na serwerze może poczekać do następnego '
+      'zasięgu.';
+  String get everythingSynced => 'Wszystko zsynchronizowane';
+  String waitingToSync(int count) => 'Czeka na wysłanie: $count';
+  String get lastSync => 'Ostatnia synchronizacja';
+  String get syncNow => 'SYNCHRONIZUJ TERAZ';
+  String get offlineMaps => 'Mapy offline';
+  String get offlineMapsExplainer =>
+      'Pobierz mapę wokół trasy, a nawigacja zadziała bez zasięgu. Pobieramy '
+      'pas 1,5 km wokół trasy w powiększeniach przydatnych w jeździe.';
+  String get offlineMapsUnsupported =>
+      'Ta platforma nie obsługuje map offline.';
+  String get noOfflineMaps => 'Nie masz pobranych map.';
+  String get downloadOfflineMap => 'Pobierz mapę offline';
+  String get offlineMapReady => 'Mapa pobrana';
+
   // ------------------------------------------------------------ integracje
   String get integrations => 'Integracje';
   String get exportAndSync => 'Eksport i synchronizacja';

@@ -28,6 +28,7 @@ import 'pace_partner.dart';
 import 'segment_matcher.dart';
 import 'safety_service.dart';
 import 'segment_service.dart';
+import 'sync_service.dart';
 import 'sensor_hub.dart';
 import 'weather_service.dart';
 
@@ -51,6 +52,7 @@ class RideRecorder extends ChangeNotifier {
     required this.safety,
     required this.segments,
     required this.pace,
+    required this.sync,
     required this.live,
     required this.weather,
     required this.profile,
@@ -68,6 +70,7 @@ class RideRecorder extends ChangeNotifier {
   final SafetyService safety;
   final SegmentService segments;
   final PacePartnerService pace;
+  final SyncService sync;
 
   /// Gdzie zawodnik jest względem podjazdów na trasie.
   final ClimbTracker climbs = ClimbTracker();

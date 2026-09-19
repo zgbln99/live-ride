@@ -214,6 +214,14 @@ func registerRoutes(se *core.ServeEvent, client meilisearch.ServiceManager) {
 	se.Router.GET("/live/{token}", routes.LiveRidePublicSnapshot)
 	se.Router.GET("/live/{token}/route", routes.LiveRidePublicRoute)
 
+	// Synchronizacja: telefon jest źródłem prawdy, serwer trzyma kopię.
+	se.Router.POST("/live-rides/sync/rides", routes.LiveRideSyncRides).Bind(apis.RequireAuth())
+	se.Router.POST("/live-rides/sync/routes", routes.LiveRideSyncRoutes).Bind(apis.RequireAuth())
+	se.Router.GET("/live-rides/sync/routes", routes.LiveRidePullRoutes).Bind(apis.RequireAuth())
+	se.Router.POST("/live-routes/{token}/copy", routes.LiveRideCopyRoute).Bind(apis.RequireAuth())
+	se.Router.GET("/live-routes/{token}", routes.LiveRidePublicRouteByToken)
+	se.Router.GET("/live-segments/{token}/leaderboard", routes.LiveRideSegmentLeaderboard)
+
 	se.Router.POST("/auth/token", routes.AuthToken)
 	se.Router.POST("/user/email", routes.UserEmailChange)
 	se.Router.POST("/waypoint/cluster", routes.WaypointCluster)

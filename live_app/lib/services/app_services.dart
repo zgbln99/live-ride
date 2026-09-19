@@ -24,7 +24,9 @@ import 'ride_recorder.dart';
 import 'ride_storage_service.dart';
 import 'pace_partner.dart';
 import 'safety_service.dart';
+import 'offline_map_service.dart';
 import 'segment_service.dart';
+import 'sync_service.dart';
 import 'route_library_service.dart';
 import 'route_weather_service.dart';
 import 'sensor_hub.dart';
@@ -50,6 +52,8 @@ class AppServices {
     required this.segments,
     required this.strava,
     required this.health,
+    required this.sync,
+    required this.offlineMaps,
     required this.pace,
     required this.profile,
     required this.weather,
@@ -82,6 +86,12 @@ class AppServices {
     final segments = SegmentService(SegmentDao(db));
     final strava = StravaService(settings: settings);
     final health = HealthService(settings: settings, rides: RideDao(db));
+    final sync = SyncService(
+      api: api,
+      rides: RideDao(db),
+      routes: RouteDao(db),
+    );
+    final offlineMaps = OfflineMapService();
     final pace = PacePartnerService();
     final live = LiveSessionController(api, heartRate, profile);
     final rides = RideStorageService(gpx, RideDao(db));
@@ -100,6 +110,8 @@ class AppServices {
       segments: segments,
       strava: strava,
       health: health,
+      sync: sync,
+      offlineMaps: offlineMaps,
       pace: pace,
       profile: profile,
       weather: weather,
@@ -125,6 +137,7 @@ class AppServices {
         health: health,
         segments: segments,
         pace: pace,
+        sync: sync,
         race: race,
         safety: safety,
         live: live,
@@ -154,6 +167,12 @@ class AppServices {
 
   /// Apple Health / Health Connect.
   final HealthService health;
+
+  /// Wysyłka lokalnych przejazdów i tras na serwer.
+  final SyncService sync;
+
+  /// Mapy offline wokół tras.
+  final OfflineMapService offlineMaps;
 
   /// Wirtualny rywal.
   final PacePartnerService pace;
@@ -202,6 +221,8 @@ class AppServices {
     unawaited(safety.restore());
     unawaited(strava.restore());
     unawaited(health.restore());
+    unawaited(sync.refreshPending().then((_) => sync.flush()));
+    unawaited(offlineMaps.refresh());
   }
 
   Future<void> dispose() async {
@@ -217,6 +238,8 @@ class AppServices {
     segments.dispose();
     strava.dispose();
     health.dispose();
+    sync.dispose();
+    offlineMaps.dispose();
     await sensors.dispose();
     await heartRate.dispose();
     await database.close();

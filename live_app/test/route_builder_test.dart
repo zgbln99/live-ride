@@ -61,6 +61,7 @@ const lublin = GeoPoint(lat: 51.2465, lon: 22.5684);
 Future<void> settle() => Future<void>.delayed(const Duration(milliseconds: 30));
 
 void main() {
+  _polylineRoundTrip();
   group('dodawanie punktów', () {
     test('pierwszy punkt jest startem, drugi metą', () async {
       final controller = buildController()..addWaypoint(warsaw);
@@ -379,6 +380,43 @@ void main() {
 
       expect(controller.error, 'Za daleko od drogi.');
       controller.dispose();
+    });
+  });
+}
+
+void _polylineRoundTrip() {
+  group('polilinia', () {
+    test('koduje i dekoduje ten sam ślad', () {
+      const points = [
+        GeoPoint(lat: 52.229676, lon: 21.012229),
+        GeoPoint(lat: 52.230100, lon: 21.013500),
+        GeoPoint(lat: 52.231000, lon: 21.015000),
+      ];
+      final encoded = encodeValhallaPolyline(points);
+      expect(encoded, isNotEmpty);
+
+      final decoded = decodeValhallaPolyline(encoded);
+      expect(decoded, hasLength(points.length));
+      for (var i = 0; i < points.length; i++) {
+        expect(decoded[i].lat, closeTo(points[i].lat, 0.000002));
+        expect(decoded[i].lon, closeTo(points[i].lon, 0.000002));
+      }
+    });
+
+    test('pusta lista daje pusty ciąg i pustą listę', () {
+      expect(encodeValhallaPolyline(const []), isEmpty);
+      expect(decodeValhallaPolyline(''), isEmpty);
+    });
+
+    test('kodowanie skraca ślad wielokrotnie', () {
+      final points = [
+        for (var i = 0; i < 500; i++)
+          GeoPoint(lat: 52.0 + i * 0.0001, lon: 21.0 + i * 0.0001),
+      ];
+      final encoded = encodeValhallaPolyline(points);
+      // Sam JSON z parami liczb to ponad 20 znaków na punkt.
+      expect(encoded.length, lessThan(points.length * 12));
+      expect(decodeValhallaPolyline(encoded), hasLength(points.length));
     });
   });
 }

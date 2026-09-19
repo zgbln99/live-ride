@@ -139,6 +139,17 @@ class _RouteDetailScreenState extends State<RouteDetailScreen> {
                 onPressed: _share,
               ),
               IconButton(
+                tooltip: S.downloadOfflineMap,
+                icon: Icon(
+                  services.offlineMaps.hasRegionFor(_summary.id)
+                      ? Icons.offline_pin
+                      : Icons.download_for_offline_outlined,
+                ),
+                onPressed: services.offlineMaps.isSupported
+                    ? _downloadOffline
+                    : null,
+              ),
+              IconButton(
                 tooltip: S.delete,
                 icon: const Icon(Icons.delete_outline),
                 onPressed: _delete,
@@ -326,6 +337,25 @@ class _RouteDetailScreenState extends State<RouteDetailScreen> {
     );
     if (!mounted) return;
     showLrMessage(context, S.segmentCreated(segment.name));
+  }
+
+  /// Pobiera mapę wokół trasy, żeby nawigacja działała bez zasięgu.
+  Future<void> _downloadOffline() async {
+    final route = _route;
+    if (route == null) return;
+    final services = AppServices.of(context);
+    if (services.offlineMaps.hasRegionFor(route.id)) {
+      final region = services.offlineMaps.regionFor(route.id);
+      if (region != null) await services.offlineMaps.deleteRegion(region.id);
+      return;
+    }
+    await services.offlineMaps.downloadForRoute(
+      routeId: route.id,
+      routeName: route.name,
+      points: route.points,
+    );
+    if (!mounted) return;
+    showLrMessage(context, S.offlineMapReady);
   }
 
   Future<void> _navigate() async {

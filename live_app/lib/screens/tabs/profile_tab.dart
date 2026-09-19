@@ -17,6 +17,7 @@ import '../data_field_editor.dart';
 import '../alert_settings_screen.dart';
 import '../garage_screen.dart';
 import '../integrations_screen.dart';
+import '../offline_screen.dart';
 import '../profile_editor_screen.dart';
 import '../safety_screen.dart';
 import '../segments_screen.dart';
@@ -245,6 +246,28 @@ class _ProfileTabState extends State<ProfileTab> {
                       onTap: () => Navigator.of(context).push(
                         MaterialPageRoute<void>(
                           builder: (_) => const WhoopScreen(),
+                        ),
+                      ),
+                    ),
+                  ),
+                  const Divider(height: 1),
+                  AnimatedBuilder(
+                    animation: Listenable.merge([
+                      services.sync,
+                      services.offlineMaps,
+                    ]),
+                    builder: (context, _) => ListTile(
+                      leading: const Icon(Icons.cloud_sync_outlined),
+                      title: Text(S.offline),
+                      subtitle: Text(
+                        services.sync.pendingCount == 0
+                            ? S.everythingSynced
+                            : S.waitingToSync(services.sync.pendingCount),
+                      ),
+                      trailing: const Icon(Icons.chevron_right),
+                      onTap: () => Navigator.of(context).push(
+                        MaterialPageRoute<void>(
+                          builder: (_) => const OfflineScreen(),
                         ),
                       ),
                     ),

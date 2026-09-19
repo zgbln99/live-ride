@@ -338,6 +338,37 @@ class RoutingService {
 }
 
 /// Dekoduje polilinię Valhalli (precyzja 6).
+/// Koduje punkty do polilinii Google/Valhalla.
+///
+/// Ślad przejazdu w JSON-ie to setki kilobajtów na przejazd; ta sama linia
+/// jako polilinia mieści się w kilkunastu, a serwer i tak nie potrzebuje
+/// pełnej precyzji surowego fixa.
+String encodeValhallaPolyline(List<GeoPoint> points, {int precision = 6}) {
+  final factor = _powerOfTen(precision);
+  final buffer = StringBuffer();
+  var previousLat = 0;
+  var previousLon = 0;
+
+  void writeValue(int value) {
+    var shifted = value < 0 ? ~(value << 1) : value << 1;
+    while (shifted >= 0x20) {
+      buffer.writeCharCode((0x20 | (shifted & 0x1f)) + 63);
+      shifted >>= 5;
+    }
+    buffer.writeCharCode(shifted + 63);
+  }
+
+  for (final point in points) {
+    final lat = (point.lat * factor).round();
+    final lon = (point.lon * factor).round();
+    writeValue(lat - previousLat);
+    writeValue(lon - previousLon);
+    previousLat = lat;
+    previousLon = lon;
+  }
+  return buffer.toString();
+}
+
 List<GeoPoint> decodeValhallaPolyline(String encoded, {int precision = 6}) {
   final points = <GeoPoint>[];
   final factor = _powerOfTen(precision);
