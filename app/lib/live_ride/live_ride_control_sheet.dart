@@ -202,7 +202,10 @@ class _CopyRow extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return InputDecorator(
-      decoration: InputDecoration(labelText: label, border: const OutlineInputBorder()),
+      decoration: InputDecoration(
+        labelText: label,
+        border: const OutlineInputBorder(),
+      ),
       child: Row(
         children: [
           Expanded(
@@ -268,7 +271,7 @@ class _HeartRateCardState extends State<_HeartRateCard> {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  const Text('Heart rate sensor'),
+                  const Text('WHOOP / heart-rate sensor'),
                   Text(
                     _bpm == null ? 'Not connected' : '$_bpm bpm',
                     style: Theme.of(context).textTheme.titleMedium,
@@ -294,6 +297,7 @@ Future<void> _showHeartRateDevices(
   await showModalBottomSheet<void>(
     context: context,
     useSafeArea: true,
+    isScrollControlled: true,
     builder: (sheetContext) => _HeartRateDevicePicker(heartRate: heartRate),
   );
 }
@@ -310,6 +314,7 @@ class _HeartRateDevicePicker extends StatefulWidget {
 class _HeartRateDevicePickerState extends State<_HeartRateDevicePicker> {
   String? _error;
   String? _connecting;
+  bool _scanning = false;
 
   @override
   void initState() {
@@ -318,10 +323,17 @@ class _HeartRateDevicePickerState extends State<_HeartRateDevicePicker> {
   }
 
   Future<void> _scan() async {
+    if (_scanning) return;
+    setState(() {
+      _scanning = true;
+      _error = null;
+    });
     try {
       await widget.heartRate.startScan();
     } catch (e) {
       if (mounted) setState(() => _error = e.toString());
+    } finally {
+      if (mounted) setState(() => _scanning = false);
     }
   }
 
@@ -333,31 +345,73 @@ class _HeartRateDevicePickerState extends State<_HeartRateDevicePicker> {
 
   @override
   Widget build(BuildContext context) {
+    final theme = Theme.of(context);
     return Padding(
       padding: const EdgeInsets.fromLTRB(16, 16, 16, 28),
       child: Column(
         mainAxisSize: MainAxisSize.min,
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          Text('Heart rate sensors', style: Theme.of(context).textTheme.titleLarge),
+          Row(
+            children: [
+              Expanded(
+                child: Text(
+                  'WHOOP / heart-rate sensor',
+                  style: theme.textTheme.titleLarge,
+                ),
+              ),
+              IconButton(
+                tooltip: 'Scan again',
+                onPressed: _connecting == null ? _scan : null,
+                icon: const Icon(Icons.refresh),
+              ),
+            ],
+          ),
           const SizedBox(height: 4),
-          const Text('Enable HR broadcast on WHOOP, then choose your device.'),
+          const Text(
+            'In the WHOOP app enable HR Broadcast, keep the strap close, then scan. '
+            'Live Ride also shows nearby Bluetooth devices as a fallback because some sensors do not advertise the HR service until connected.',
+          ),
           if (_error != null) ...[
             const SizedBox(height: 12),
-            Text(_error!, style: TextStyle(color: Theme.of(context).colorScheme.error)),
+            Container(
+              padding: const EdgeInsets.all(12),
+              decoration: BoxDecoration(
+                color: theme.colorScheme.errorContainer,
+                borderRadius: BorderRadius.circular(12),
+              ),
+              child: Text(
+                _error!,
+                style: TextStyle(color: theme.colorScheme.onErrorContainer),
+              ),
+            ),
           ],
           const SizedBox(height: 12),
           ConstrainedBox(
-            constraints: const BoxConstraints(maxHeight: 360),
+            constraints: BoxConstraints(
+              maxHeight: MediaQuery.sizeOf(context).height * 0.55,
+            ),
             child: StreamBuilder<List<BleHeartRateDevice>>(
               stream: widget.heartRate.devices,
               initialData: const [],
               builder: (context, snapshot) {
                 final devices = snapshot.data ?? const [];
                 if (devices.isEmpty) {
-                  return const Padding(
-                    padding: EdgeInsets.symmetric(vertical: 32),
-                    child: Center(child: CircularProgressIndicator()),
+                  return Padding(
+                    padding: const EdgeInsets.symmetric(vertical: 28),
+                    child: Column(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        if (_scanning) const CircularProgressIndicator(),
+                        if (_scanning) const SizedBox(height: 16),
+                        Text(
+                          _scanning
+                              ? 'Scanning nearby Bluetooth devices…'
+                              : 'Nothing found yet. Check HR Broadcast and tap refresh.',
+                          textAlign: TextAlign.center,
+                        ),
+                      ],
+                    ),
                   );
                 }
                 return ListView.separated(
@@ -367,9 +421,20 @@ class _HeartRateDevicePickerState extends State<_HeartRateDevicePicker> {
                   itemBuilder: (context, index) {
                     final device = devices[index];
                     return ListTile(
-                      leading: const Icon(Icons.monitor_heart_outlined),
+                      leading: Icon(
+                        device.isLikelyHeartRateSensor
+                            ? Icons.monitor_heart
+                            : Icons.bluetooth,
+                        color: device.isLikelyHeartRateSensor
+                            ? Colors.redAccent
+                            : null,
+                      ),
                       title: Text(device.name),
-                      subtitle: Text('${device.rssi} dBm'),
+                      subtitle: Text(
+                        device.isLikelyHeartRateSensor
+                            ? 'Heart-rate candidate • ${device.rssi} dBm'
+                            : 'Nearby Bluetooth • ${device.rssi} dBm',
+                      ),
                       trailing: _connecting == device.id
                           ? const SizedBox(
                               width: 20,
@@ -380,7 +445,10 @@ class _HeartRateDevicePickerState extends State<_HeartRateDevicePicker> {
                       onTap: _connecting != null
                           ? null
                           : () async {
-                              setState(() => _connecting = device.id);
+                              setState(() {
+                                _connecting = device.id;
+                                _error = null;
+                              });
                               try {
                                 await widget.heartRate.connect(device.id);
                                 if (context.mounted) Navigator.pop(context);
@@ -390,6 +458,7 @@ class _HeartRateDevicePickerState extends State<_HeartRateDevicePicker> {
                                     _connecting = null;
                                     _error = e.toString();
                                   });
+                                  unawaited(_scan());
                                 }
                               }
                             },
