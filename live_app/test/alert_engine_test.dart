@@ -1,5 +1,6 @@
 import 'package:flutter_test/flutter_test.dart';
 import 'package:live_ride/models/ride_alert.dart';
+import 'package:live_ride/services/alert_controller.dart';
 import 'package:live_ride/services/alert_engine.dart';
 
 final DateTime _start = DateTime(2026, 5, 1, 10);
@@ -39,6 +40,7 @@ Set<AlertKind> _kinds(List<RideAlert> alerts) =>
     alerts.map((alert) => alert.kind).toSet();
 
 void main() {
+  _controllerTests();
   group('rytm picia i jedzenia', () {
     test('milczy, dopóki nie minie ustawiony czas', () {
       final engine = AlertEngine();
@@ -295,5 +297,83 @@ void main() {
     expect(restored.isEnabled(AlertKind.powerHigh), isTrue);
     expect(restored.ruleFor(AlertKind.powerHigh).threshold, 320);
     expect(restored.ruleFor(AlertKind.drink).everyMinutes, 20);
+  });
+}
+
+/// Kontroler powiadomień: wibracja, mowa i historia.
+void _controllerTests() {
+  group('AlertController', () {
+    // Wibracja i mowa sięgają po kanały platformy, więc test potrzebuje
+    // zainicjowanego bindingu — inaczej wywala się na czymś, czego wcale
+    // nie sprawdza.
+    setUpAll(TestWidgetsFlutterBinding.ensureInitialized);
+
+    test('bez ustawień czyta domyślne reguły', () {
+      final controller = AlertController();
+      expect(controller.settings.isEnabled(AlertKind.drink), isTrue);
+      expect(controller.settings.isEnabled(AlertKind.powerHigh), isFalse);
+      expect(controller.hapticsEnabled, isTrue);
+      // Mowa domyślnie wyłączona: nagły głos w uchu podczas jazdy to
+      // decyzja zawodnika, nie aplikacji.
+      expect(controller.speechEnabled, isFalse);
+    });
+
+    test('najpilniejsze powiadomienie trafia na ekran, reszta do historii', () {
+      final controller = AlertController(
+        engine: AlertEngine(
+          settings: AlertSettings.defaults.withRule(
+            const AlertRule(
+              kind: AlertKind.heartRateHigh,
+              enabled: true,
+              threshold: 150,
+            ),
+          ),
+        ),
+      );
+
+      controller.feed(
+        AlertContext(
+          now: DateTime(2026, 5, 1, 10),
+          elapsed: const Duration(minutes: 20),
+          distanceMeters: 20000,
+          heartRate: 180,
+          offRoute: true,
+        ),
+      );
+
+      // Zjazd z trasy potrzebuje kilkunastu sekund, więc na ekranie jest
+      // ostrzeżenie o tętnie, a przypomnienie o piciu czeka w historii.
+      expect(controller.current, isNotNull);
+      expect(controller.current!.severity, AlertSeverity.warning);
+      expect(controller.history.length, greaterThanOrEqualTo(2));
+    });
+
+    test('zamknięcie kasuje bieżące powiadomienie', () {
+      final controller = AlertController();
+      controller.show(
+        RideAlert(
+          kind: AlertKind.drink,
+          message: 'Napij się',
+          at: DateTime.now(),
+        ),
+      );
+      expect(controller.current, isNotNull);
+      controller.dismiss();
+      expect(controller.current, isNull);
+    });
+
+    test('reset czyści historię i ekran', () {
+      final controller = AlertController();
+      controller.show(
+        RideAlert(
+          kind: AlertKind.eat,
+          message: 'Zjedz coś',
+          at: DateTime.now(),
+        ),
+      );
+      controller.reset();
+      expect(controller.current, isNull);
+      expect(controller.history, isEmpty);
+    });
   });
 }

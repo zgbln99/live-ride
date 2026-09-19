@@ -49,6 +49,12 @@ class AlertSettingsScreen extends StatelessWidget {
                 value: controller.hapticsEnabled,
                 onChanged: controller.setHaptics,
               ),
+              SwitchListTile(
+                title: Text(S.speech),
+                subtitle: Text(S.speechHint),
+                value: controller.speechEnabled,
+                onChanged: controller.setSpeech,
+              ),
               const Divider(height: 1),
               LrSectionHeader(title: S.alerts),
               for (final kind in AlertKind.values)

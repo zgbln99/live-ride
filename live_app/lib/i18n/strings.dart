@@ -294,6 +294,10 @@ class Strings {
   String get haptics => 'Wibracje';
   String get hapticsHint =>
       'Krótka wibracja przy powiadomieniu — czytelna nawet w rękawiczkach.';
+  String get speech => 'Czytaj na głos';
+  String get speechHint =>
+      'Krótkie zdanie po polsku, słyszalne przez słuchawkę albo głośnik '
+      'telefonu.';
   String get everyMinutes => 'Co ile minut';
   String get everyKilometers => 'Co ile km';
   String get threshold => 'Próg';

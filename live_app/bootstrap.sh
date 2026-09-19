@@ -116,17 +116,23 @@ text = manifest.read_text()
 perms = '''    <uses-permission android:name="android.permission.ACCESS_FINE_LOCATION" />\n    <uses-permission android:name="android.permission.ACCESS_COARSE_LOCATION" />\n    <uses-permission android:name="android.permission.ACCESS_BACKGROUND_LOCATION" />\n    <uses-permission android:name="android.permission.BLUETOOTH_SCAN" android:usesPermissionFlags="neverForLocation" />\n    <uses-permission android:name="android.permission.BLUETOOTH_CONNECT" />\n    <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />\n    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_LOCATION" />\n    <uses-permission android:name="android.permission.WAKE_LOCK" />\n    <uses-permission android:name="android.permission.INTERNET" />\n    <uses-permission android:name="android.permission.HIGH_SAMPLING_RATE_SENSORS" />\n    <uses-permission android:name="android.permission.health.WRITE_EXERCISE" />\n    <uses-permission android:name="android.permission.health.WRITE_DISTANCE" />\n    <uses-permission android:name="android.permission.health.WRITE_ACTIVE_CALORIES_BURNED" />\n'''
 # Android 11+ wymaga deklaracji, do jakich aplikacji chcemy strzelać
 # intentem — bez tego alarm SOS nie znalazłby aplikacji SMS ani telefonu.
-queries = (
-    '  <queries>\n'
-    '    <intent><action android:name="android.intent.action.SENDTO" />'
+entries = (
+    '        <intent><action android:name="android.intent.action.SENDTO" />'
     '<data android:scheme="smsto" /></intent>\n'
-    '    <intent><action android:name="android.intent.action.DIAL" />'
+    '        <intent><action android:name="android.intent.action.DIAL" />'
     '<data android:scheme="tel" /></intent>\n'
-    '    <package android:name="com.google.android.apps.healthdata" />\n'
-    '  </queries>\n'
+    '        <package android:name="com.google.android.apps.healthdata" />\n'
 )
-if '<queries>' not in text:
-    text = text.replace('</manifest>', queries + '</manifest>')
+if 'android.intent.action.SENDTO' not in text:
+    if '<queries>' in text:
+        # Szablon Fluttera ma już swój blok <queries> — dokładamy się do
+        # niego zamiast dodawać drugi, którego Android i tak by nie przyjął.
+        text = text.replace('    </queries>', entries + '    </queries>', 1)
+    else:
+        text = text.replace(
+            '</manifest>',
+            '    <queries>\n' + entries + '    </queries>\n</manifest>',
+        )
 
 if 'android.permission.BLUETOOTH_SCAN' not in text:
     text = text.replace('<manifest xmlns:android="http://schemas.android.com/apk/res/android">', '<manifest xmlns:android="http://schemas.android.com/apk/res/android">\n' + perms)

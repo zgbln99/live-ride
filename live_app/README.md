@@ -1,138 +1,138 @@
-# Live Ride — mobile app
+# Live Ride — aplikacja mobilna
 
-Live Ride is a self-hosted cycling platform. This package is the rider-facing
-Flutter client: a cycling computer, a GPX navigator, a ride recorder and a LIVE
-broadcaster. It shares a server with the web project in `../web`, but none of
-its UI, layouts or components.
+Live Ride to własny, samodzielnie hostowany komputer rowerowy i platforma
+tras. Ten katalog zawiera klienta w Flutterze: licznik, nawigację, rejestrator
+przejazdów i nadajnik LIVE. Dzieli serwer z projektem webowym w `../web`, ale
+nie dzieli z nim ani jednego widoku.
 
-Server: `https://ride.76-13-3-214.sslip.io` (override with
-`--dart-define=LIVE_RIDE_SERVER=…`).
+Serwer: `https://ride.76-13-3-214.sslip.io`
+(zmiana: `--dart-define=LIVE_RIDE_SERVER=…`).
 
-## What it does
+Cała aplikacja i publiczny podgląd LIVE mówią po polsku.
 
-**Ride computer** — One screen serves a free ride and a navigated route, so the
-instrument never changes between them. Configurable Garmin-style data fields
-(2, 4, 6 or 8), large tabular numerals, hairline separators, no decoration.
-Fields available: speed, average speed, max speed, distance, elapsed, moving
-time, elevation, ascent, gradient, heart rate, average HR, max HR, GPS
-accuracy, temperature, wind, rain chance, time of day, remaining distance, ETA.
+---
 
-**Quiet mode** — Five seconds after the last touch the ride computer stops
-being an app. The secondary controls fade out, the control bar collapses and
-gives its space to the map, and what remains is the instrument: map, route,
-rider, next turn, distance left, ETA and every data field. One tap anywhere
-brings the controls straight back. Retiring is unhurried (420 ms); returning is
-near-instant (150 ms). Hidden chrome stops accepting touches the moment it
-starts fading, so a tap can never land on a half-transparent FINISH button.
-Nothing retires while the ride is paused, while a sheet or dialog is open, or
-while an error is showing; the recenter button stays up whenever the map is not
-following the rider, and the GPS/LIVE strip stays up whenever it is carrying a
-warning rather than a reassurance. The gesture is explained once per ride with
-a small note that fades itself out.
+## Co potrafi
 
-**Navigation** — Valhalla map-matched turn-by-turn on top of an imported GPX:
-maneuver arrow, distance to the turn, instruction, street name, remaining
-distance and ETA. Route progress comes from projecting the rider onto the route
-geometry, never from the straight line to the finish, and the same projection
-drives the off-route warning. If the routing service is unreachable the raw GPX
-is navigated instead and the header says so rather than pretending.
+### Jazda
 
-**Map and GPS** — The rider marker is a real map marker bound to its
-geographic coordinates. Follow mode keeps the camera on the rider; a manual pan
-turns it off; the recenter button turns it back on. With heading-up enabled the
-camera bearing follows the rider and the marker is rotated by
-`heading − camera bearing`, so it is never rotated twice.
+**Komputer rowerowy** — jeden ekran obsługuje wolną jazdę i nawigację, więc
+przyrząd nie zmienia się między nimi. Stron może być dowolnie wiele i
+przesuwa się je palcem w bok; każda ma własny układ (1, 2, 3, 4, 6 albo 8
+pól) i własny zestaw z ponad czterdziestu pól: prędkość, dystans, czas,
+wysokość, nachylenie, VAM, tętno i jego strefy, moc chwilowa i uśredniana
+(3 s, 10 s, 30 s), moc normalizowana, IF, TSS, W/kg, balans, praca w kJ,
+kadencja, dystans do mety, ETA, pogoda. Przytrzymanie pola zmienia je w
+miejscu. Gotowe zestawy stron: podstawowy, treningowy, nawigacyjny, górski,
+wyścigowy.
 
-**Ride recording** — Start, pause, resume, finish. Rides survive screen
-rebuilds and tab switches because the recorder is a single long-lived service,
-not screen state. On finish the ride is saved locally with its full track and
-can be exported as GPX (with heart rate in the Garmin TrackPointExtension).
+**Tryb cichy** — pięć sekund po ostatnim dotknięciu komputer przestaje być
+aplikacją. Drugorzędne przyciski gasną, pasek sterowania zwija się i oddaje
+miejsce mapie, a zostaje przyrząd: mapa, trasa, zawodnik, następny zakręt,
+dystans do mety, ETA i wszystkie pola danych. Jedno dotknięcie przywraca
+sterowanie. Chowanie trwa 420 ms, powrót 150 ms. Ukryte sterowanie przestaje
+przyjmować dotknięcia w chwili, gdy zaczyna gasnąć, więc dotknięcie nigdy nie
+trafi w półprzezroczysty przycisk ZAKOŃCZ.
 
-**GPX import** — A tolerant streaming parser: unknown namespaces, extension
-blocks, multiple tracks and segments, `rte`/`wpt` fallbacks, malformed
-elevation and time values, UTF-16 and BOM-prefixed files, truncated downloads
-and very large tracks. Files that arrive as bytes, as a path or as a stream are
-all handled, and a file iCloud has not materialised yet produces a message that
-says exactly that. Import failures never report a generic error.
+**Tryb wyścigu i blokada ekranu** — tryb wyścigu chowa sterowanie i podbija
+jasność, żeby dało się odczytać liczby w pełnym słońcu. Dotknięcie go nie
+przerywa, ale świadome przytrzymanie zawsze przywraca sterowanie. Blokada
+ekranu połyka dotknięcia i odblokowuje się przytrzymaniem — pomaga w deszczu,
+gdy krople naciskają przyciski same.
 
-**LIVE** — Start or join a session, share one spectator link, see the join
-code, rider name, speed, distance and HR. Telemetry uploads every three seconds
-while recording and a failed upload never interrupts the ride.
+**Automatyczna pauza** — licznik zatrzymuje się na postoju i rusza, gdy
+zawodnik ruszy. Próg i opóźnienie są w ustawieniach, bo „stoję" znaczy co
+innego na światłach i na podjeździe. Ręczna pauza nigdy nie wznawia się sama.
 
-**Weather** — Open-Meteo by default: no API key, no account. Temperature, feels
-like, wind speed and direction, precipitation probability and condition, shown
-as a map widget and as data fields. Weather is never awaited on a path that
-matters; when it fails the fields read `--`.
+**ClimbPro** — na wykrytym podjeździe pojawia się panel: ile zostało do
+szczytu, ile w pionie, jak stromo jest teraz, z pozycją na profilu. Na
+szczycie zostaje wynik z czasem i VAM.
 
-**WHOOP and heart rate** — A dedicated sensor screen: live BPM with a trace,
-battery, signal strength, skin-contact state, and the four WHOOP steps that
-actually matter (a WHOOP strap does not advertise heart rate until Broadcast
-Heart Rate is switched on, which is why it looks missing). The connection is
-owned by a service, not a screen, so it survives navigation and reconnects by
-itself with backoff when the strap drops out mid-ride.
+**Segmenty** — wytnij podjazd z trasy, a Live Ride zacznie mierzyć na nim
+czas. Wjazd wymaga właściwego kierunku jazdy, zjazd z linii przerywa próbę,
+a przejazd do końca podbija rekord. W trakcie widać deltę wobec rekordu.
 
-**Music** — Spotify sign-in with Authorization Code + PKCE, running in
-`ASWebAuthenticationSession` on iOS, so no client secret is compiled in and the
-Spotify cookie is never handed to Live Ride. Now playing with live progress,
-transport controls sized for a gloved thumb, device switching, shuffle, volume,
-and your recently played and playlists to start from. A compact music sheet is
-one tap from the ride screen.
+**Wirtualny rywal** — stała prędkość, czas na trasie albo ghost z
+wcześniejszego przejazdu, jadący dokładnie tak jak Ty wtedy. Różnica pokazana
+w sekundach, nie w metrach.
 
-**Lock Screen Live Activity** — A real WidgetKit extension with ActivityKit, so
-a ride shows speed, distance, elapsed, heart rate and the next turn on the Lock
-Screen and in the Dynamic Island. It starts and ends with the ride, not with a
-screen. Every value is preformatted in Dart, so the widget has no unit logic of
-its own to disagree with the handlebar.
+**Treningi** — kroki z limitem czasu albo dystansu i celem mocy, tętna,
+kadencji lub prędkości. Pasek pokazuje, co teraz, ile zostało i czy jesteś w
+celu; o wyjściu z celu aplikacja mówi dopiero po kilku sekundach, bo jedna
+próbka to wyjście zza zakrętu.
 
-**Profile** — Display name, username, units, heading-up, screen-awake, weather
-and the data field layout. The display name falls back to the account username,
-and is what LIVE spectators and saved rides show. "Rider" appears only when the
-account carries no identity at all.
+**Powiadomienia** — picie, jedzenie, odstępy czasowe i dystansowe, progi
+tętna, mocy i kadencji, zjazd z trasy, podjazd przed tobą, słaba bateria
+sensora, deszcz, zmrok. Wibracja, pasek na ekranie i opcjonalnie czytanie na
+głos po polsku.
 
-## Metric quality
+**Bezpieczeństwo** — wykrywanie upadku szuka trzech rzeczy naraz: uderzenia,
+nagłego spadku prędkości i bezruchu po nim. Alarm przechodzi przez odliczanie
+z wielkim przyciskiem „nic mi nie jest", a wiadomość otwiera się w aplikacji
+SMS z pozycją i linkiem LIVE. Ręczne SOS idzie tą samą drogą.
 
-Raw GPS lies, so the accumulator (`lib/core/ride_metrics_accumulator.dart`)
-applies explicit rules, each covered by tests:
+### Trasy
 
-- fixes worse than 60 m accuracy are dropped once there is a fix;
-- steps implying more than 30 m/s are rejected, and three in a row are treated
-  as a re-acquisition that resynchronises without crediting distance;
-- a drift gate scaled to the reported accuracy stops a parked bike accumulating
-  metres, unless a confident speed reading says the rider is moving;
-- moving time only accrues above 3.6 km/h, so average speed is a riding
-  average and not a stop-inclusive one;
-- elevation is exponentially smoothed with 3 m hysteresis before ascent counts;
-- gradient is measured over roughly 120 m of road, clamped to ±35 %.
+**Kreator tras** — rysowanie po mapie z przyciąganiem do dróg, waypointy z
+przeciąganiem i zmianą kolejności, cofanie i ponawianie, pętla, „tam i z
+powrotem", odwracanie kierunku, profil roweru i charakter trasy (szybko,
+widokowo, unikaj ruchu), preferencje nawierzchni, wysokości z serwera.
 
-## Layout
+**Briefing trasy** — po otwarciu trasy Live Ride mówi, co Cię czeka: dystans,
+przewyższenie, szacowany czas, największy podjazd z kategorią, strome
+fragmenty, wiatr czołowy względem kierunku jazdy, pierwszy deszcz, zachód
+słońca, szacowany wydatek energii i sugerowane postoje. Każde zdanie ma
+pokrycie w danych — bez wysokości nie ma zdań o podjazdach, bez wagi w
+profilu nie ma szacunku kalorii.
 
-```
-lib/
-  core/      geo maths, metric accumulator, idle-chrome controller, API
-             client, theme, formatters
-  models/    route, navigation plan, ride record, metrics, profile, weather
-  services/  gpx, route library, ride recorder, storage, profile, weather,
-             live, heart rate, spotify, live activity, location, local
-             store, service container
-  screens/   ride computer, home shell + tabs, route detail, ride summary,
-             login, WHOOP, live sheet, music sheet, data field editor
-  widgets/   navigation header, ride map, data grid, controls, chrome fade,
-             weather field, music controls, bpm trace, track preview,
-             elevation profile, primitives
+**Import GPX** — z Plików, iCloud Drive albo dowolnej chmury, z obsługą
+plików w UTF‑16 i z preambułą, którą dokleja część eksporterów.
 
-ios_native/  Swift sources copied into the generated ios/ by bootstrap.sh
-  Shared/            RideActivityAttributes.swift (app + widget)
-  Runner/            LiveRideActivityBridge.swift (method channel)
-  LiveRideWidgets/   widget bundle, Lock Screen UI, extension Info.plist
-  scripts/           add_live_activity_target.rb (adds the Xcode target)
-```
+**Mapy offline** — pobranie pasa 1,5 km wokół trasy w powiększeniach
+przydatnych w jeździe, z postępem i możliwością usunięcia.
 
-Persistence is plain JSON and GPX files under the app documents directory:
-`profile/profile.json`, `routes/index.json` plus one GPX per route, and one
-JSON per ride under `rides/`. Writes go through a temporary file and a rename,
-so an interrupted write cannot corrupt an index.
+### Po jeździe
 
-## First setup on a Mac
+**Historia i statystyki** — tydzień, miesiąc, rok i całość z sumami,
+wykresem dystansu i porównaniem z poprzednim okresem. Rekordy: najdłuższy
+przejazd, najdłużej w siodle, najwięcej w pionie, najwyższa średnia i
+prędkość, najlepsza moc normalizowana. Kalendarz z intensywnością dnia i
+mapa cieplna wszystkich śladów.
+
+**Eksport i integracje** — GPX i TCX do udostępnienia, wysyłka do Stravy
+przez jej API (z czekaniem na przetworzenie pliku, zanim powiemy „wysłano"),
+zapis do Apple Health / Health Connect. Komoot i Garmin nie mają publicznego
+API dla aplikacji spoza swoich programów partnerskich — zamiast martwego
+przycisku „Połącz" jest wyjaśnienie i eksport pliku, który oba zaimportują.
+
+### LIVE i grupa
+
+**Śledzenie na żywo** — jedna sesja, jeden link, zero kont po stronie
+oglądających. Zawodnik decyduje, co widzą: pozycję, prędkość, tętno i moc
+przełącza się osobno, a pola nieudostępnione w ogóle nie opuszczają telefonu.
+
+**Jazda grupowa** — dołączenie kodem, wszyscy na jednej mapie, punkt zbiórki
+i szybkie wiadomości do jednego dotknięcia.
+
+**Live Activity** — na ekranie blokady i w Dynamic Island: prędkość, dystans,
+czas, tętno, a przy nawigacji następny zakręt. Napędzana przez rejestrator, a
+nie przez widok, więc żyje tak długo jak przejazd.
+
+### Sprzęt
+
+**Sensory BLE** — tętno (w tym WHOOP), kadencja, prędkość z koła, moc i
+trenażery FTMS, z baterią, siłą sygnału i automatycznym łączeniem. Bez
+sensora pola pokazują „--", nigdy zera.
+
+**Garaż** — rowery z licznikiem przebiegu, który rośnie razem z przejazdami,
+i komponenty z limitem kilometrów albo dni: łańcuch, kaseta, klocki, opony,
+uszczelniacz.
+
+**Spotify** — sterowanie tym, co już gra, bez wychodzenia z ekranu jazdy.
+
+---
+
+## Pierwsze uruchomienie na Macu
 
 ```bash
 cd live_app
@@ -140,14 +140,15 @@ chmod +x bootstrap.sh
 ./bootstrap.sh
 ```
 
-The bootstrap generates fresh iOS/Android shells and restores the Live Ride
-source. It configures the display name, the iOS bundle id
-(`pl.marekpiatak.liveride`), location and background-location permissions,
-Bluetooth, the Android foreground-service and wake-lock permissions, and the
-supported orientations.
+Bootstrap generuje świeże powłoki iOS i Androida, przywraca źródła Live Ride i
+konfiguruje: nazwę, bundle id (`pl.marekpiatak.liveride`), uprawnienia
+lokalizacji (także w tle), Bluetooth, ruch (wykrywanie upadku), HealthKit,
+usługę pierwszoplanową i wake lock na Androidzie, schemat `liveride://` dla
+Spotify i Stravy, zapytania o aplikacje SMS i telefonu (SOS) oraz rozszerzenie
+widgetu Live Activity.
 
-In Xcode choose **Runner → Signing & Capabilities → Automatically manage
-signing → your Personal Team**, then:
+Potem w Xcode: **Runner → Signing & Capabilities → Automatically manage
+signing → Twój zespół**, to samo dla celu **LiveRideWidgets**, i:
 
 ```bash
 flutter pub get
@@ -156,96 +157,125 @@ flutter test
 flutter run --release
 ```
 
-## Build-time configuration
+### Live Activity i „Cycle inside Runner"
 
-| Define | Default | Purpose |
+Rozszerzenie widgetu dodaje skrypt `ios_native/scripts/add_live_activity_target.rb`,
+który uruchamia bootstrap. Skrypt ustawia też kolejność faz budowania: faza
+kopiująca `.appex` musi wykonać się **przed** flutterowym „Thin Binary", który
+czyta gotowy pakiet. Bez tego Xcode 15+ odmawia budowania z błędem
+„Cycle inside Runner". Gdyby `pod install` albo aktualizacja Xcode kiedykolwiek
+przestawiły fazy z powrotem:
+
+```bash
+ruby ios_native/scripts/add_live_activity_target.rb ios --order-only
+```
+
+Tryb `--order-only` nie rusza targetu — tylko przywraca kolejność.
+
+Bootstrap bez widgetu: `./bootstrap.sh --no-live-activity`.
+
+---
+
+## Konfiguracja przy budowaniu
+
+| Define | Domyślnie | Do czego |
 | --- | --- | --- |
-| `LIVE_RIDE_SERVER` | `https://ride.76-13-3-214.sslip.io` | Live Ride server origin |
-| `LIVE_RIDE_WEATHER_URL` | `https://api.open-meteo.com/v1/forecast` | Weather endpoint |
-| `LIVE_RIDE_WEATHER_KEY` | *(empty)* | Only for providers that need a key |
-| `LIVE_RIDE_SPOTIFY_CLIENT_ID` | *(empty)* | Optional; can also be pasted in the app |
+| `LIVE_RIDE_SERVER` | `https://ride.76-13-3-214.sslip.io` | adres serwera Live Ride |
+| `LIVE_RIDE_WEATHER_URL` | `https://api.open-meteo.com/v1/forecast` | pogoda |
+| `LIVE_RIDE_WEATHER_KEY` | *(puste)* | tylko dla dostawców wymagających klucza |
+| `LIVE_RIDE_SPOTIFY_CLIENT_ID` | *(puste)* | opcjonalnie; da się też wkleić w aplikacji |
 
-No secret is compiled in. The default weather provider needs no key; supply one
-only if you point the app at a paid or self-hosted endpoint:
+**Żaden sekret nie jest wkompilowany.** Domyślny dostawca pogody nie wymaga
+klucza. Poświadczenia Spotify i Stravy podaje sam zawodnik i leżą wyłącznie na
+jego urządzeniu.
 
-```bash
-flutter run --release \
-  --dart-define=LIVE_RIDE_WEATHER_URL=https://example.com/v1/forecast \
-  --dart-define=LIVE_RIDE_WEATHER_KEY=…
-```
+---
 
-## Spotify setup
+## Integracje wymagające własnych poświadczeń
 
-Spotify requires every app to use its own client ID, so Live Ride ships without
-one. Setting it up takes a minute and does not need a rebuild — the Music tab
-has a field for it.
+### Spotify
 
-1. Open [developer.spotify.com/dashboard](https://developer.spotify.com/dashboard)
-   and create an app (the free tier is enough).
-2. Add this redirect URI **exactly**:
+1. [developer.spotify.com/dashboard](https://developer.spotify.com/dashboard) → utwórz aplikację.
+2. Redirect URI **dokładnie**: `liveride://spotify-callback`
+3. Zaznacz **Web API** i zapisz.
+4. Wklej client ID w zakładce Muzyka.
 
-   ```
-   liveride://spotify-callback
-   ```
+Sterowanie odtwarzaniem wymaga Spotify **Premium** — to reguła Spotify dla
+każdej aplikacji zewnętrznej, nie ograniczenie Live Ride.
 
-3. Tick **Web API** and save.
-4. Paste the client ID into the Music tab, or build with
-   `--dart-define=LIVE_RIDE_SPOTIFY_CLIENT_ID=…`.
+### Strava
 
-Playback control needs Spotify **Premium** — that is Spotify's rule for any
-third-party app, not a Live Ride limitation. Reading what is playing works on
-free accounts. Spotify also needs one active device: start a track in the
-Spotify app once and Live Ride takes the controls from there.
+1. [strava.com/settings/api](https://www.strava.com/settings/api) → utwórz aplikację.
+2. Authorization Callback Domain: `liveride`
+3. Skopiuj **Client ID** i **Client Secret** do ekranu Eksport i synchronizacja.
 
-## Testing on a real iPhone
+Strava nie wspiera PKCE, więc wymiana kodu na token potrzebuje sekretu
+aplikacji. W aplikacji rozdawanej wszystkim byłby to błąd; tutaj sekret należy
+do Ciebie i nie opuszcza telefonu.
 
-```bash
-cd live_app
-./bootstrap.sh            # add --no-live-activity to skip the widget target
-open ios/Runner.xcworkspace
-```
+### Apple Health / Health Connect
 
-In Xcode, select **your team** under Signing & Capabilities for **both**
-`Runner` **and** `LiveRideWidgets`, then:
+Zapis jest jednostronny, tylko na żądanie i domyślnie wyłączony. Na Androidzie
+potrzebny jest zainstalowany Health Connect.
 
-```bash
-flutter run --release
-```
+---
 
-What to check, in order:
+## Co sprawdzić na prawdziwym iPhonie
 
-| # | Where | What you should see |
+| # | Gdzie | Co powinno się zdarzyć |
 | --- | --- | --- |
-| 1 | Launch | Login screen on the dark Live Ride wordmark. Create an account or sign in; your username becomes the rider name. |
-| 2 | Every tab | One visual system: white instrument panels, hairline rules, black type, one cyan accent. |
-| 3 | LIVE tab → heart rate card | The WHOOP screen. With Broadcast Heart Rate on in the WHOOP app, the strap appears with a WHOOP badge; connecting shows live BPM, a trace, battery and signal. |
-| 4 | Music tab | The Spotify setup card, then sign-in in the system browser sheet, then now playing with working transport controls. |
-| 5 | START RIDE | The ride computer. After five seconds untouched, the controls retire; one tap brings them back. |
-| 6 | Lock the phone during a ride | The Live Activity: speed, distance, elapsed, HR — and the next turn when navigating. Long-press the Dynamic Island for the expanded view. |
+| 1 | Start | Ekran logowania po polsku. Konto albo logowanie; nazwa użytkownika staje się nazwą zawodnika. |
+| 2 | Każda zakładka | Jeden system wizualny: białe panele, włosowe linie, czarny druk, jeden cyjanowy akcent. |
+| 3 | LIVE → karta tętna | Ekran WHOOP. Z włączonym Broadcast Heart Rate opaska pojawia się z odznaką WHOOP; po połączeniu widać BPM, wykres, baterię i sygnał. |
+| 4 | Profil → Sensory | Skan wykrywa czujniki kadencji, prędkości, mocy i trenażery; wartości na żywo u góry. |
+| 5 | Muzyka | Karta konfiguracji Spotify, logowanie w arkuszu przeglądarki systemowej, potem sterowanie odtwarzaniem. |
+| 6 | ROZPOCZNIJ JAZDĘ | Komputer rowerowy. Po pięciu sekundach bez dotknięcia sterowanie znika; jedno dotknięcie je przywraca. Przesuwanie w bok zmienia stronę pól. |
+| 7 | Zablokuj telefon w trakcie jazdy | Live Activity: prędkość, dystans, czas, tętno — a przy nawigacji następny zakręt. Przytrzymanie Dynamic Island rozwija widok. |
+| 8 | Ustawienia jazdy → Tryb wyścigu | Sterowanie znika, jasność rośnie; przytrzymanie ekranu je przywraca. |
+| 9 | Ustawienia jazdy → SOS | Pełnoekranowe odliczanie z przyciskiem „nic mi nie jest"; wysyłka otwiera aplikację SMS z gotową treścią. |
 
-If the Lock Screen card does not appear, check Settings → Live Ride → Live
-Activities. The Profile tab reports whether iOS has them enabled.
+Jeśli karta na ekranie blokady się nie pojawia: Ustawienia → Live Ride →
+Aktywności na żywo. Zakładka Profil mówi, czy iOS ma je włączone.
 
-## Known limits
+---
 
-- The Swift sources were written and contract-tested but **not compiled** in
-  the environment that produced them: no iOS SDK. They compile on your Mac, and
-  a mismatch between the Dart and Swift ends of the Live Activity is covered by
-  `test/live_activity_contract_test.dart`, but the first real build is yours.
-- The Live Activity needs iOS 16.2+. Below that the Profile tab says so and
-  rides work exactly as before.
-- Spotify playback control needs Premium and one active Spotify device, both
-  of which are Spotify's rules for third-party apps.
-- Quiet mode hides Live Ride's own controls, not the operating system status
-  bar. Hiding that too is a one-line change if you would rather see nothing but
-  the instrument, at the cost of the clock and the battery indicator.
-- Background recording depends on the rider granting "Always"/background
-  location. Without it the platform suspends updates with the screen locked and
-  the ride resumes when the app returns to the foreground. Nothing in the app
-  assumes otherwise.
-- Map tiles are fetched from the server; there is no offline tile cache yet. A
-  ride with no tiles still records and still shows every number and maneuver.
-- Turn-by-turn instructions require the server's Valhalla endpoint. Without it
-  the imported track is navigated without turn callouts.
-- The LIVE spectator page shows a planned route only when the session was
-  attached to a server-side trail; a GPX imported on the phone stays local.
+## Testy
+
+```bash
+flutter test          # 501 testów aplikacji
+cd ../db && go test ./routes/...
+cd ../web && npx svelte-check
+```
+
+Testy obejmują między innymi: dekodery BLE (HR, CSC, moc, FTMS) na prawdziwych
+ramkach bajtów, wykrywanie podjazdów i fałszywego przewyższenia z szumu
+wysokościomierza, briefing trasy, wiatr względem kierunku jazdy, wykrywanie
+upadku na sekwencjach (dziura, światła, upuszczony telefon, prawdziwy upadek),
+segmenty, wirtualnego rywala, treningi, zapytania statystyczne w SQLite,
+kontrakt Dart↔Swift dla Live Activity oraz kolejność faz budowania w Xcode.
+
+---
+
+## Znane ograniczenia
+
+- Źródła Swift zostały napisane i objęte testami kontraktowymi, ale **nie
+  skompilowane** w środowisku, w którym powstały — nie ma w nim SDK iOS.
+  Kompilują się na Macu, a rozjazd między stroną Dart i Swift wyłapuje
+  `test/live_activity_contract_test.dart`. Pierwszy prawdziwy build jest Twój.
+- Live Activity wymaga iOS 16.2+. Poniżej zakładka Profil mówi to wprost, a
+  jazda działa bez zmian.
+- Sterowanie Spotify wymaga Premium i jednego aktywnego urządzenia Spotify —
+  obie rzeczy to reguły Spotify.
+- Komoot i Garmin Connect nie udostępniają publicznego API aplikacjom spoza
+  swoich programów partnerskich. Live Ride nie udaje, że się z nimi łączy;
+  daje eksport pliku, który oba zaimportują.
+- Automatyczna wysyłka SMS bez udziału użytkownika nie jest możliwa na iOS.
+  Alarm otwiera aplikację SMS z gotową treścią — ekran mówi to wprost.
+- Nagrywanie w tle zależy od zgody na lokalizację „zawsze". Bez niej system
+  wstrzymuje aktualizacje przy zablokowanym ekranie.
+- Mapy offline działają na iOS i Androidzie; na innych platformach ekran mówi,
+  że ich nie ma, zamiast pokazywać przycisk bez działania.
+- Instrukcje zakręt po zakręcie wymagają endpointu Valhalli na serwerze. Bez
+  niego zaimportowany ślad jest nawigowany bez zapowiedzi zakrętów.
+- Aplikacja jest mobilna; `flutter build web` wymaga wcześniejszego
+  `flutter create . --platforms=web` i służy tylko do sprawdzenia kompilacji.
