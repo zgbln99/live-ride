@@ -26,6 +26,14 @@ p['CFBundleName'] = 'Live Ride'
 p['NSLocationWhenInUseUsageDescription'] = 'Live Ride uses your location for cycling navigation and ride recording.'
 p['NSLocationAlwaysAndWhenInUseUsageDescription'] = 'Live Ride uses your location in the background so navigation and LIVE tracking continue with the screen locked.'
 p['NSBluetoothAlwaysUsageDescription'] = 'Live Ride uses Bluetooth to receive live heart rate from WHOOP and other heart-rate sensors.'
+p['NSMotionUsageDescription'] = 'Live Ride uses motion data to keep speed and distance accurate while riding.'
+# The ride computer is read at arm's length on a handlebar mount, so it is
+# portrait-and-landscape but never upside down.
+p['UISupportedInterfaceOrientations'] = [
+    'UIInterfaceOrientationPortrait',
+    'UIInterfaceOrientationLandscapeLeft',
+    'UIInterfaceOrientationLandscapeRight',
+]
 modes = list(dict.fromkeys([*(p.get('UIBackgroundModes') or []), 'location', 'bluetooth-central']))
 p['UIBackgroundModes'] = modes
 with plist_path.open('wb') as f:
@@ -56,7 +64,7 @@ for path in Path('android').rglob('*'):
 
 manifest = Path('android/app/src/main/AndroidManifest.xml')
 text = manifest.read_text()
-perms = '''    <uses-permission android:name="android.permission.ACCESS_FINE_LOCATION" />\n    <uses-permission android:name="android.permission.ACCESS_COARSE_LOCATION" />\n    <uses-permission android:name="android.permission.ACCESS_BACKGROUND_LOCATION" />\n    <uses-permission android:name="android.permission.BLUETOOTH_SCAN" android:usesPermissionFlags="neverForLocation" />\n    <uses-permission android:name="android.permission.BLUETOOTH_CONNECT" />\n'''
+perms = '''    <uses-permission android:name="android.permission.ACCESS_FINE_LOCATION" />\n    <uses-permission android:name="android.permission.ACCESS_COARSE_LOCATION" />\n    <uses-permission android:name="android.permission.ACCESS_BACKGROUND_LOCATION" />\n    <uses-permission android:name="android.permission.BLUETOOTH_SCAN" android:usesPermissionFlags="neverForLocation" />\n    <uses-permission android:name="android.permission.BLUETOOTH_CONNECT" />\n    <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />\n    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_LOCATION" />\n    <uses-permission android:name="android.permission.WAKE_LOCK" />\n    <uses-permission android:name="android.permission.INTERNET" />\n'''
 if 'android.permission.BLUETOOTH_SCAN' not in text:
     text = text.replace('<manifest xmlns:android="http://schemas.android.com/apk/res/android">', '<manifest xmlns:android="http://schemas.android.com/apk/res/android">\n' + perms)
 text = re.sub(r'android:label="[^"]*"', 'android:label="Live Ride"', text)
@@ -68,4 +76,5 @@ flutter pub get
 echo
 echo "Live Ride native shells created."
 echo "iOS bundle: pl.marekpiatak.liveride"
+echo "Configured: location (incl. background), Bluetooth, foreground service, wake lock."
 echo "Next: open ios/Runner.xcworkspace, choose your Personal Team, then flutter run --release"

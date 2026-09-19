@@ -1,0 +1,88 @@
+/// A normalised current-conditions snapshot.
+///
+/// Weather is strictly optional decoration on a ride: every consumer must cope
+/// with this being null.
+class WeatherSnapshot {
+  const WeatherSnapshot({
+    required this.temperatureCelsius,
+    required this.apparentTemperatureCelsius,
+    required this.windSpeedKmh,
+    required this.windDirectionDegrees,
+    required this.condition,
+    required this.isDay,
+    required this.observedAt,
+    this.precipitationProbability,
+    this.precipitationMm,
+    this.locationLabel,
+  });
+
+  final double temperatureCelsius;
+  final double apparentTemperatureCelsius;
+  final double windSpeedKmh;
+  final double windDirectionDegrees;
+  final WeatherCondition condition;
+  final bool isDay;
+  final DateTime observedAt;
+  final int? precipitationProbability;
+  final double? precipitationMm;
+  final String? locationLabel;
+
+  bool get isStale =>
+      DateTime.now().difference(observedAt) > const Duration(minutes: 90);
+
+  Map<String, dynamic> toJson() => {
+    'temperature_c': temperatureCelsius,
+    'apparent_c': apparentTemperatureCelsius,
+    'wind_kmh': windSpeedKmh,
+    'wind_dir': windDirectionDegrees,
+    'condition': condition.name,
+    'is_day': isDay,
+    'observed_at': observedAt.toIso8601String(),
+    'precip_probability': precipitationProbability,
+    'precip_mm': precipitationMm,
+  };
+
+  factory WeatherSnapshot.fromJson(Map<String, dynamic> json) =>
+      WeatherSnapshot(
+        temperatureCelsius: (json['temperature_c'] as num?)?.toDouble() ?? 0,
+        apparentTemperatureCelsius:
+            (json['apparent_c'] as num?)?.toDouble() ?? 0,
+        windSpeedKmh: (json['wind_kmh'] as num?)?.toDouble() ?? 0,
+        windDirectionDegrees: (json['wind_dir'] as num?)?.toDouble() ?? 0,
+        condition:
+            WeatherCondition.values
+                .where((value) => value.name == json['condition'])
+                .firstOrNull ??
+            WeatherCondition.unknown,
+        isDay: json['is_day'] as bool? ?? true,
+        observedAt:
+            DateTime.tryParse(json['observed_at'] as String? ?? '') ??
+            DateTime.now(),
+        precipitationProbability: (json['precip_probability'] as num?)?.toInt(),
+        precipitationMm: (json['precip_mm'] as num?)?.toDouble(),
+      );
+}
+
+enum WeatherCondition {
+  clear('Clear'),
+  partlyCloudy('Partly cloudy'),
+  cloudy('Cloudy'),
+  fog('Fog'),
+  drizzle('Drizzle'),
+  rain('Rain'),
+  heavyRain('Heavy rain'),
+  snow('Snow'),
+  thunderstorm('Thunderstorm'),
+  unknown('--');
+
+  const WeatherCondition(this.label);
+
+  final String label;
+}
+
+extension _FirstOrNull<T> on Iterable<T> {
+  T? get firstOrNull {
+    final iterator = this.iterator;
+    return iterator.moveNext() ? iterator.current : null;
+  }
+}

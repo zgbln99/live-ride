@@ -24,7 +24,8 @@ class HeartRateService {
   final CentralManager _central = CentralManager();
   final _devices = <String, HeartRateDevice>{};
   final _peripherals = <String, Peripheral>{};
-  final _devicesController = StreamController<List<HeartRateDevice>>.broadcast();
+  final _devicesController =
+      StreamController<List<HeartRateDevice>>.broadcast();
   final _bpmController = StreamController<int>.broadcast();
 
   StreamSubscription<DiscoveredEventArgs>? _discoverySub;
@@ -41,7 +42,7 @@ class HeartRateService {
   Future<void> startScan() async {
     if (Platform.isAndroid) {
       final ok = await _central.authorize();
-      if (!ok) throw StateError('Brak uprawnienia Bluetooth.');
+      if (!ok) throw StateError('Bluetooth permission was denied.');
     }
 
     await stopScan();
@@ -52,7 +53,9 @@ class HeartRateService {
     _discoverySub = _central.discovered.listen((event) {
       final id = event.peripheral.uuid.toString();
       final advertised = event.advertisement.name?.trim();
-      final name = advertised?.isNotEmpty == true ? advertised! : 'Urządzenie Bluetooth';
+      final name = advertised?.isNotEmpty == true
+          ? advertised!
+          : 'Bluetooth device';
       final advertisesHr = event.advertisement.serviceUUIDs.contains(
         UUID.short(_hrServiceUuid),
       );
@@ -88,7 +91,8 @@ class HeartRateService {
 
   Future<void> connect(String id) async {
     final peripheral = _peripherals[id];
-    if (peripheral == null) throw StateError('Urządzenie zniknęło. Skanuj ponownie.');
+    if (peripheral == null)
+      throw StateError('That sensor is no longer advertising. Scan again.');
 
     await stopScan();
     await disconnect();
@@ -107,7 +111,10 @@ class HeartRateService {
         }
       }
       if (measurement == null) {
-        throw StateError('Brak Heart Rate Service. W WHOOP włącz HR Broadcast.');
+        throw StateError(
+          'This device does not expose the Heart Rate service. On WHOOP, turn '
+          'on Broadcast Heart Rate first.',
+        );
       }
 
       _connected = peripheral;

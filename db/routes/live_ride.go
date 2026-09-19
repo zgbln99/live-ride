@@ -343,22 +343,22 @@ func activeLiveRideByID(e *core.RequestEvent, id string) (*core.Record, error) {
 }
 
 func ensureLiveRideParticipant(e *core.RequestEvent, session *core.Record, displayName string) (*core.Record, error) {
+	displayName = liveRideDisplayName(e, displayName)
+
 	if existing, err := e.App.FindFirstRecordByFilter(
 		"live_ride_participants",
 		"session={:session} && user={:user}",
 		dbx.Params{"session": session.Id, "user": e.Auth.Id},
 	); err == nil {
+		// A rider who renamed themselves in the app must not stay published
+		// under the name captured when they first joined.
+		if existing.GetString("display_name") != displayName {
+			existing.Set("display_name", displayName)
+			if err := e.App.Save(existing); err != nil {
+				return nil, err
+			}
+		}
 		return existing, nil
-	}
-
-	if displayName == "" {
-		displayName = strings.TrimSpace(e.Auth.GetString("name"))
-	}
-	if displayName == "" {
-		displayName = "Rider"
-	}
-	if len(displayName) > 80 {
-		displayName = displayName[:80]
 	}
 
 	collection, err := e.App.FindCollectionByNameOrId("live_ride_participants")
@@ -373,6 +373,27 @@ func ensureLiveRideParticipant(e *core.RequestEvent, session *core.Record, displ
 		return nil, err
 	}
 	return participant, nil
+}
+
+// liveRideDisplayName resolves the name spectators see, preferring what the
+// app sent, then the account profile name, then the username. "Rider" is only
+// used when the account carries no identity at all.
+func liveRideDisplayName(e *core.RequestEvent, requested string) string {
+	candidates := []string{
+		strings.TrimSpace(requested),
+		strings.TrimSpace(e.Auth.GetString("name")),
+		strings.TrimSpace(e.Auth.GetString("username")),
+	}
+	for _, candidate := range candidates {
+		if candidate == "" {
+			continue
+		}
+		if len(candidate) > 80 {
+			candidate = candidate[:80]
+		}
+		return candidate
+	}
+	return "Rider"
 }
 
 func normalizeLiveRideJoinToken(token string) string {

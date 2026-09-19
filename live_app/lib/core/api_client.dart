@@ -5,7 +5,19 @@ import 'package:dio/dio.dart';
 import 'package:dio_cookie_manager/dio_cookie_manager.dart';
 import 'package:path_provider/path_provider.dart';
 
+import '../models/navigation_plan.dart';
 import '../models/ride_route.dart';
+import 'geo.dart';
+
+/// An error worth showing to a rider.
+class ApiException implements Exception {
+  const ApiException(this.message);
+
+  final String message;
+
+  @override
+  String toString() => message;
+}
 
 class LiveSession {
   const LiveSession({
@@ -21,18 +33,32 @@ class LiveSession {
   final String joinToken;
 
   factory LiveSession.fromJson(Map<String, dynamic> json) => LiveSession(
-        id: json['id'] as String,
-        participantId: json['participant_id'] as String,
-        shareToken: json['share_token'] as String,
-        joinToken: json['join_token'] as String,
-      );
+    id: json['id'] as String,
+    participantId: json['participant_id'] as String? ?? '',
+    shareToken: json['share_token'] as String? ?? '',
+    joinToken: json['join_token'] as String? ?? '',
+  );
+}
+
+class AccountIdentity {
+  const AccountIdentity({required this.username, required this.name});
+
+  final String username;
+  final String name;
 }
 
 class ApiClient {
-  static const String serverOrigin = 'https://ride.76-13-3-214.sslip.io';
+  /// Overridable at build time:
+  /// `flutter run --dart-define=LIVE_RIDE_SERVER=https://ride.example.com`
+  static const String serverOrigin = String.fromEnvironment(
+    'LIVE_RIDE_SERVER',
+    defaultValue: 'https://ride.76-13-3-214.sslip.io',
+  );
 
   late final Dio dio;
   late final PersistCookieJar cookieJar;
+
+  String? _mapStyle;
 
   Future<void> init() async {
     final dir = await getApplicationSupportDirectory();
@@ -43,71 +69,133 @@ class ApiClient {
     dio = Dio(
       BaseOptions(
         baseUrl: '$serverOrigin/api/v1',
-        connectTimeout: const Duration(seconds: 10),
-        receiveTimeout: const Duration(seconds: 20),
+        connectTimeout: const Duration(seconds: 12),
+        receiveTimeout: const Duration(seconds: 25),
       ),
     );
     dio.interceptors.add(CookieManager(cookieJar));
   }
 
   Future<bool> hasSession() async {
-    // PersistCookieJar already drops expired cookies when ignoreExpires=false,
-    // so the presence of pb_auth is enough to restore the local session.
+    // PersistCookieJar drops expired cookies when ignoreExpires is false, so
+    // the presence of pb_auth is enough to restore the local session.
     final cookies = await cookieJar.loadForRequest(Uri.parse(serverOrigin));
-    return cookies.any((c) => c.name == 'pb_auth');
+    return cookies.any((cookie) => cookie.name == 'pb_auth');
   }
 
-  Future<void> login(String username, String password) async {
-    await dio.post(
-      '/auth/login',
-      data: {'username': username.trim(), 'password': password},
-    );
+  /// Signs in and returns whatever identity the server knows about the rider,
+  /// so the app never has to show a generic name.
+  Future<AccountIdentity> login(String username, String password) async {
+    try {
+      final response = await dio.post(
+        '/auth/login',
+        data: {'username': username.trim(), 'password': password},
+      );
+      return _identityFrom(response.data, fallbackUsername: username.trim());
+    } on DioException catch (e) {
+      throw ApiException(
+        _describe(e, unauthorized: 'Wrong username or password.'),
+      );
+    }
   }
 
-  Future<void> register(String username, String email, String password) async {
-    await dio.put(
-      '/user',
-      data: {
-        'username': username.trim(),
-        'email': email.trim(),
-        'password': password,
-        'passwordConfirm': password,
-      },
-    );
-    await login(username, password);
+  Future<AccountIdentity> register(
+    String username,
+    String email,
+    String password,
+  ) async {
+    try {
+      await dio.put(
+        '/user',
+        data: {
+          'username': username.trim(),
+          'email': email.trim(),
+          'password': password,
+          'passwordConfirm': password,
+        },
+      );
+    } on DioException catch (e) {
+      throw ApiException(
+        _describe(e, badRequest: 'That username or email is already taken.'),
+      );
+    }
+    return login(username, password);
+  }
+
+  AccountIdentity _identityFrom(
+    Object? data, {
+    required String fallbackUsername,
+  }) {
+    if (data is Map) {
+      final record = data['record'];
+      if (record is Map) {
+        return AccountIdentity(
+          username: (record['username'] as String? ?? fallbackUsername).trim(),
+          name: (record['name'] as String? ?? '').trim(),
+        );
+      }
+    }
+    return AccountIdentity(username: fallbackUsername, name: '');
   }
 
   Future<void> logout() async {
     await cookieJar.deleteAll();
   }
 
+  /// The MapLibre style document, cached for the process lifetime.
   Future<String> fetchMapStyle() async {
-    final response = await dio.get('/map/style', queryParameters: {'theme': 'liberty'});
-    final data = response.data;
-    if (data is String) return data;
-    if (data is Map || data is List) return jsonEncode(data);
-    throw StateError('Map style response is invalid');
+    final cached = _mapStyle;
+    if (cached != null) return cached;
+    try {
+      final response = await dio.get(
+        '/map/style',
+        queryParameters: {'theme': 'liberty'},
+      );
+      final data = response.data;
+      final style = data is String ? data : jsonEncode(data);
+      _mapStyle = style;
+      return style;
+    } on DioException catch (e) {
+      throw ApiException(
+        _describe(e, generic: 'Could not load the map style.'),
+      );
+    }
   }
 
-  Future<NavigationPlan> buildNavigation(RideRoute route) async {
-    final sampled = _sampleShape(route.points, 500);
+  /// Map-matches a route and returns turn-by-turn instructions.
+  ///
+  /// Falls back to the raw GPX geometry whenever the routing service cannot
+  /// help: a rider with a GPX file must always be able to ride it.
+  Future<NavigationPlan> buildNavigation(
+    RideRoute route, {
+    String language = 'en-US',
+  }) async {
+    if (route.points.length < 2) return NavigationPlan.fromRoute(route);
+    final sampled = samplePolyline(simplifyPolyline(route.points, 8), 480);
     try {
       final response = await dio.post(
         '/valhalla/navigate',
         data: {
-          'shape': [for (final p in sampled) {'lat': p.lat, 'lon': p.lon}],
+          'shape': [
+            for (final point in sampled) {'lat': point.lat, 'lon': point.lon},
+          ],
           'costing': 'bicycle',
+          'language': language,
         },
       );
-      final plan = NavigationPlan.fromJson(
-        Map<String, dynamic>.from(response.data as Map),
-      );
-      if (plan.shape.length < 2) return NavigationPlan.fallback(route);
+      final data = response.data;
+      if (data is! Map) return NavigationPlan.fromRoute(route);
+      final plan = NavigationPlan.fromJson(Map<String, dynamic>.from(data));
+      if (plan.shape.length < 2) return NavigationPlan.fromRoute(route);
+      // A map-match that drifts far from the imported file is worse than the
+      // file itself; trust the rider's GPX in that case.
+      final drift =
+          (plan.totalMeters - route.distanceMeters).abs() /
+          (route.distanceMeters == 0 ? 1 : route.distanceMeters);
+      if (drift > 0.25) return NavigationPlan.fromRoute(route);
       return plan;
-    } on DioException {
-      return NavigationPlan.fallback(route);
     } catch (_) {
-      return NavigationPlan.fallback(route);
+      return NavigationPlan.fromRoute(route);
     }
   }
 
@@ -115,30 +203,53 @@ class ApiClient {
     required String title,
     String? displayName,
   }) async {
-    final response = await dio.post(
-      '/live-rides',
-      data: {
-        'title': title,
-        if (displayName != null && displayName.trim().isNotEmpty)
-          'display_name': displayName.trim(),
-      },
-    );
-    return LiveSession.fromJson(Map<String, dynamic>.from(response.data as Map));
+    try {
+      final response = await dio.post(
+        '/live-rides',
+        data: {
+          'title': title,
+          if (displayName != null && displayName.trim().isNotEmpty)
+            'display_name': displayName.trim(),
+        },
+      );
+      return LiveSession.fromJson(
+        Map<String, dynamic>.from(response.data as Map),
+      );
+    } on DioException catch (e) {
+      throw ApiException(
+        _describe(e, unauthorized: 'Sign in again to start a LIVE session.'),
+      );
+    }
   }
 
   Future<LiveSession> joinLive(String code, {String? displayName}) async {
-    final response = await dio.post(
-      '/live-rides/join',
-      data: {
-        'join_token': code.trim().toUpperCase(),
-        if (displayName != null && displayName.trim().isNotEmpty)
-          'display_name': displayName.trim(),
-      },
-    );
-    return LiveSession.fromJson(Map<String, dynamic>.from(response.data as Map));
+    try {
+      final response = await dio.post(
+        '/live-rides/join',
+        data: {
+          'join_token': code.trim().toUpperCase(),
+          if (displayName != null && displayName.trim().isNotEmpty)
+            'display_name': displayName.trim(),
+        },
+      );
+      return LiveSession.fromJson(
+        Map<String, dynamic>.from(response.data as Map),
+      );
+    } on DioException catch (e) {
+      throw ApiException(
+        _describe(
+          e,
+          notFound: 'No active LIVE session uses that code.',
+          badRequest: 'That LIVE code does not look right.',
+        ),
+      );
+    }
   }
 
-  Future<void> sendTelemetry(String sessionId, Map<String, dynamic> point) async {
+  Future<void> sendTelemetry(
+    String sessionId,
+    Map<String, dynamic> point,
+  ) async {
     await dio.post(
       '/live-rides/$sessionId/telemetry',
       data: {
@@ -153,14 +264,36 @@ class ApiClient {
 
   String viewerUrl(String shareToken) => '$serverOrigin/live/$shareToken';
 
-  List<RidePoint> _sampleShape(List<RidePoint> points, int maxPoints) {
-    if (points.length <= maxPoints) return points;
-    final step = (points.length / (maxPoints - 1)).ceil();
-    final out = <RidePoint>[];
-    for (var i = 0; i < points.length; i += step) {
-      out.add(points[i]);
+  String _describe(
+    DioException error, {
+    String? unauthorized,
+    String? notFound,
+    String? badRequest,
+    String generic = 'The Live Ride server could not be reached.',
+  }) {
+    switch (error.type) {
+      case DioExceptionType.connectionTimeout:
+      case DioExceptionType.receiveTimeout:
+      case DioExceptionType.sendTimeout:
+        return 'The Live Ride server timed out. Check your connection.';
+      case DioExceptionType.connectionError:
+      case DioExceptionType.unknown:
+        return 'No connection to $serverOrigin.';
+      case DioExceptionType.badResponse:
+        final status = error.response?.statusCode;
+        if (status == 401 || status == 403) {
+          return unauthorized ?? 'You are not signed in.';
+        }
+        if (status == 404) return notFound ?? 'Not found on the server.';
+        if (status == 400)
+          return badRequest ?? 'The server rejected the request.';
+        return 'Server error $status.';
+      case DioExceptionType.cancel:
+        return 'Request cancelled.';
+      case DioExceptionType.badCertificate:
+        return 'The server certificate could not be verified.';
+      default:
+        return generic;
     }
-    if (out.last != points.last) out.add(points.last);
-    return out;
   }
 }

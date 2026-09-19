@@ -1,5 +1,5 @@
 name: live_ride
-description: Live Ride cycling navigation and live tracking
+description: Live Ride — cycling navigation, ride recording and live tracking
 publish_to: 'none'
 version: 0.1.0+1
 
@@ -15,10 +15,15 @@ dependencies:
   dio_cookie_manager: ^3.4.0
   file_picker: ^11.0.2
   geolocator: ^14.0.0
-  gpx: ^2.3.0
   maplibre: 0.3.5
   path_provider: ^2.1.5
   share_plus: ^12.0.2
+  # Live Ride parses GPX itself (tolerant, streaming) instead of using a
+  # strict document model, so only the XML event reader is needed.
+  xml: ^7.0.0
+  # Keeps the ride computer readable on a handlebar mount without the rider
+  # tapping the screen every 30 seconds.
+  wakelock_plus: ^1.5.2
 
 dev_dependencies:
   flutter_test:

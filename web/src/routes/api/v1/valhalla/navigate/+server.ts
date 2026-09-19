@@ -94,7 +94,7 @@ export async function POST(event: RequestEvent) {
       costing: body.costing,
       directions_type: "instructions",
       shape_match: "map_snap",
-      language: "pl-PL",
+      language: body.language,
     };
 
     const res = await event.fetch(navigateUrl, {
@@ -127,15 +127,25 @@ export async function POST(event: RequestEvent) {
       for (const m of leg.maneuvers ?? []) {
         maneuvers.push({
           instruction: m.instruction,
+          verbal_post_instruction: m.verbal_post_transition_instruction,
+          street_names: m.street_names ?? m.begin_street_names,
           length: m.length,
+          time: m.time ?? 0,
           begin_shape_index: offset + m.begin_shape_index,
+          end_shape_index: offset + (m.end_shape_index ?? m.begin_shape_index),
           bearing: m.bearing_after ?? m.bearing_before ?? 0,
           type: m.type ?? 0,
+          roundabout_exit_count: m.roundabout_exit_count,
         });
       }
     }
 
-    return json({ maneuvers, shape });
+    const summary = {
+      length: trip.summary?.length ?? 0,
+      time: trip.summary?.time ?? 0,
+    };
+
+    return json({ maneuvers, shape, summary });
   } catch (e: any) {
     return handleError(e);
   }
