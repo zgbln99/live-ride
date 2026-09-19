@@ -3,6 +3,7 @@ import 'dart:async';
 import 'package:flutter/foundation.dart';
 import 'package:geolocator/geolocator.dart';
 
+import '../i18n/strings.dart';
 import '../core/geo.dart';
 import '../core/ride_metrics_accumulator.dart';
 import '../models/navigation_plan.dart';
@@ -135,6 +136,17 @@ class RideRecorder extends ChangeNotifier {
       onError: _onPositionError,
     );
 
+    // Ekran blokady jest napędzany rejestratorem, a nie widokiem jazdy:
+    // aktywność startuje razem z przejazdem i żyje tak długo jak on, nawet
+    // gdy komputer rowerowy nie jest na wierzchu.
+    unawaited(
+      liveActivity.start(
+        riderName: profile.riderName,
+        title: _defaultRideName(_startedAt!),
+        navigating: plan != null,
+      ),
+    );
+
     _ticker = Timer.periodic(const Duration(seconds: 1), (_) {
       if (_state != RideState.recording) return;
       _publish();
@@ -252,20 +264,14 @@ class RideRecorder extends ChangeNotifier {
     final routeName = _route?.name;
     if (routeName != null && routeName.trim().isNotEmpty) return routeName;
     final hour = started.hour;
-    final part = hour < 11
-        ? 'Morning ride'
-        : hour < 15
-        ? 'Midday ride'
-        : hour < 19
-        ? 'Afternoon ride'
-        : 'Evening ride';
-    return part;
+    if (hour < 11) return S.rideMorning;
+    if (hour < 15) return S.rideMidday;
+    if (hour < 19) return S.rideAfternoon;
+    return S.rideEvening;
   }
 
   void _onPositionError(Object error) {
-    _error = error is LocationUnavailable
-        ? error.message
-        : 'Lost the GPS signal.';
+    _error = error is LocationUnavailable ? error.message : S.lostGpsSignal;
     notifyListeners();
   }
 

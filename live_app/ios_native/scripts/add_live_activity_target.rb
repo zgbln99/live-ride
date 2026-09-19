@@ -13,12 +13,19 @@
 # adding a second one.
 #
 # Usage: ruby add_live_activity_target.rb <path-to-ios-dir> <app-bundle-id>
+#        ruby add_live_activity_target.rb <path-to-ios-dir> --order-only
+#
+# `--order-only` skips the target surgery and just re-applies the build-phase
+# order. Run it if `pod install` or an Xcode upgrade ever reintroduces the
+# "Cycle inside Runner" error.
 
 require 'xcodeproj'
 require 'fileutils'
 
 ios_dir = ARGV[0] || 'ios'
-app_bundle_id = ARGV[1] || 'pl.marekpiatak.liveride'
+order_only = ARGV.include?('--order-only')
+app_bundle_id = ARGV.reject { |arg| arg.start_with?('--') }[1] ||
+                'pl.marekpiatak.liveride'
 
 TARGET_NAME = 'LiveRideWidgets'
 DEPLOYMENT_TARGET = '16.2'
@@ -31,6 +38,7 @@ runner = project.targets.find { |target| target.name == 'Runner' }
 abort 'No Runner target in the project' if runner.nil?
 
 # ---------------------------------------------------------------- clean slate
+unless order_only
 existing = project.targets.select { |target| target.name == TARGET_NAME }
 existing.each do |target|
   target.build_phases.each { |phase| phase.remove_from_project }
@@ -126,11 +134,63 @@ end
 embed ||= runner.new_copy_files_build_phase('Embed Foundation Extensions')
 embed.symbol_dst_subfolder_spec = :plug_ins
 embed.dst_path = ''
+embed.run_only_for_deployment_postprocessing = '0'
 build_file = embed.add_file_reference(widget.product_reference)
 build_file.settings = { 'ATTRIBUTES' => ['RemoveHeadersOnCopy'] }
+end
+
+# ----------------------------------------------------- break the build cycle
+#
+# Flutter's generated "Thin Binary" run-script phase reads the whole built
+# .app, and the embed phase writes an .appex into that same .app. Left in the
+# order Xcode creates them (embed last), Xcode 15+ refuses the build with
+# "Cycle inside Runner; building could produce unreliable results", naming the
+# Thin Binary script and the Embed Foundation Extensions copy phase.
+#
+# The fix is purely an ordering one: the extension has to be embedded BEFORE
+# the binary is thinned, so the script sees a finished bundle. Doing it here
+# means nobody has to drag phases around in Xcode after regenerating the
+# shell, which is exactly the manual step this project refuses to require.
+def flutter_script_phase?(phase)
+  return false unless phase.is_a?(Xcodeproj::Project::Object::PBXShellScriptBuildPhase)
+
+  name = phase.name.to_s
+  script = phase.shell_script.to_s
+  name.include?('Thin Binary') ||
+    script.include?('embed_and_thin') ||
+    script.include?('xcode_backend.sh\" thin') ||
+    script.include?("xcode_backend.sh' thin")
+end
+
+embed_phase = runner.copy_files_build_phases.find do |phase|
+  phase.symbol_dst_subfolder_spec == :plug_ins
+end
+
+phases = runner.build_phases.to_a
+thin_index = phases.index { |phase| flutter_script_phase?(phase) }
+embed_index = embed_phase && phases.index(embed_phase)
+
+if thin_index && embed_index && embed_index > thin_index
+  phases.delete_at(embed_index)
+  phases.insert(thin_index, embed_phase)
+  runner.build_phases.clear
+  phases.each { |phase| runner.build_phases << phase }
+  puts 'Moved "Embed Foundation Extensions" before "Thin Binary" ' \
+       '(breaks the Xcode dependency cycle).'
+elsif thin_index.nil?
+  warn 'No Flutter "Thin Binary" phase found — check the phase order by hand ' \
+       'if Xcode reports a dependency cycle.'
+end
 
 project.save
 
-puts "Added #{TARGET_NAME} (#{app_bundle_id}.#{TARGET_NAME}), " \
-     "iOS #{DEPLOYMENT_TARGET}+."
+unless order_only
+  puts "Added #{TARGET_NAME} (#{app_bundle_id}.#{TARGET_NAME}), " \
+       "iOS #{DEPLOYMENT_TARGET}+."
+end
+puts 'Build phase order on Runner:'
+runner.build_phases.each_with_index do |phase, index|
+  label = phase.respond_to?(:name) && phase.name ? phase.name : phase.isa
+  puts format('  %<index>d. %<label>s', index: index + 1, label: label)
+end
 puts 'Open Runner.xcworkspace and pick your team for both targets if Xcode asks.'

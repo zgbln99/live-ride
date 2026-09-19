@@ -130,6 +130,54 @@ void main() {
     }
   });
 
+  group('the Xcode target script', () {
+    final script = File('ios_native/scripts/add_live_activity_target.rb');
+
+    test('embeds the extension before Flutter thins the binary', () {
+      final ruby = script.readAsStringSync();
+      // Xcode 15 refuses to build when the copy phase that writes the .appex
+      // runs after the script that reads the finished bundle. The script has
+      // to fix the order itself: dragging phases in Xcode after every
+      // regeneration is exactly the manual step this project refuses.
+      expect(ruby, contains('Thin Binary'));
+      expect(ruby, contains('embed_and_thin'));
+      expect(ruby, contains('phases.insert(thin_index, embed_phase)'));
+    });
+
+    test('can re-apply the order without touching the target', () {
+      final ruby = script.readAsStringSync();
+      expect(ruby, contains('--order-only'));
+      expect(ruby, contains('unless order_only'));
+    });
+
+    test('bootstrap runs it', () {
+      final bootstrap = File('bootstrap.sh').readAsStringSync();
+      expect(bootstrap, contains('add_live_activity_target.rb'));
+    });
+  });
+
+  test('the recorder, not a screen, owns the activity lifecycle', () {
+    final recorder = File('lib/services/ride_recorder.dart').readAsStringSync();
+    // A Lock Screen that only lives while the ride screen is mounted is the
+    // bug this guards against.
+    expect(recorder, contains('liveActivity.start('));
+    expect(recorder, contains('liveActivity.update('));
+    expect(recorder, contains('liveActivity.end()'));
+
+    final screens = Directory('lib/screens')
+        .listSync(recursive: true)
+        .whereType<File>()
+        .where((file) => file.path.endsWith('.dart'));
+    for (final screen in screens) {
+      final source = screen.readAsStringSync();
+      expect(
+        source.contains('liveActivity.start('),
+        isFalse,
+        reason: '${screen.path} starts the Live Activity from the UI',
+      );
+    }
+  });
+
   test('the widget declares itself a WidgetKit extension', () {
     final xml = plist.readAsStringSync();
     expect(xml.contains('com.apple.widgetkit-extension'), isTrue);

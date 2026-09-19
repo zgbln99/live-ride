@@ -204,3 +204,11 @@ if [ "$LIVE_ACTIVITY" = "1" ]; then
 fi
 echo "Next: open ios/Runner.xcworkspace, choose your Personal Team for BOTH"
 echo "      targets, then flutter run --release"
+if [ "$LIVE_ACTIVITY" = "1" ]; then
+  echo
+  echo "The widget is embedded BEFORE Flutter's Thin Binary phase, which is"
+  echo "what keeps Xcode from reporting 'Cycle inside Runner'. If a future"
+  echo "pod install or Xcode upgrade ever puts it back, re-apply the order"
+  echo "without touching the target:"
+  echo "    ruby ios_native/scripts/add_live_activity_target.rb ios --order-only"
+fi

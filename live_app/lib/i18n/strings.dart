@@ -233,6 +233,11 @@ class Strings {
   String get routeShapeOutAndBack => 'Tam i z powrotem';
   String get routeShapePointToPoint => 'Z punktu do punktu';
 
+  String get rideMorning => 'Poranna jazda';
+  String get rideMidday => 'Południowa jazda';
+  String get rideAfternoon => 'Popołudniowa jazda';
+  String get rideEvening => 'Wieczorna jazda';
+
   // ------------------------------------------------------- briefing trasy
   String get briefing => 'Briefing';
   String get briefingTitle => 'Przed startem';
