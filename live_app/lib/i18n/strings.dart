@@ -650,7 +650,8 @@ class Strings {
   String get searchingSensors => 'Szukam sensorów…';
   String get sensorSources => 'Źródła danych';
   String get speedSource => 'Prędkość';
-  String get cadenceSource => 'Kadencja';
+  String get speedSourceHint =>
+      'automatycznie: czujnik koła, gdy nadaje, w przeciwnym razie GPS';
   String get wheelCircumference => 'Obwód koła';
   String get wheelCircumferenceHint =>
       '2105 mm to typowe 700×25c. Zły obwód przekłamie dystans z czujnika.';

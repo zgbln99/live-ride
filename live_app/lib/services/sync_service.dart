@@ -7,8 +7,10 @@ import '../core/api_client.dart';
 import '../data/database.dart';
 import '../data/ride_dao.dart';
 import '../data/route_dao.dart';
+import '../data/segment_dao.dart';
 import '../models/ride_record.dart';
 import '../models/ride_route.dart';
+import '../models/segment.dart';
 import 'routing_service.dart';
 
 /// Co dzieje się z synchronizacją.
@@ -25,9 +27,11 @@ class SyncService extends ChangeNotifier {
     required ApiClient api,
     required RideDao rides,
     required RouteDao routes,
+    SegmentDao? segments,
   }) : _api = api,
        _rides = rides,
-       _routes = routes;
+       _routes = routes,
+       _segments = segments;
 
   /// Ile rekordów leci w jednym żądaniu. Serwer przyjmuje do pięćdziesięciu.
   static const int batchSize = 20;
@@ -39,6 +43,7 @@ class SyncService extends ChangeNotifier {
   final ApiClient _api;
   final RideDao _rides;
   final RouteDao _routes;
+  final SegmentDao? _segments;
 
   SyncPhase _phase = SyncPhase.idle;
   DateTime? _lastSuccess;
@@ -75,6 +80,7 @@ class SyncService extends ChangeNotifier {
     try {
       await _pushRides();
       await _pushRoutes();
+      await _pushSegments();
       _lastSuccess = DateTime.now();
       _lastError = null;
       _phase = SyncPhase.idle;
@@ -154,6 +160,56 @@ class SyncService extends ChangeNotifier {
       );
     }
   }
+
+  /// Wysyła segmenty razem z próbami.
+  ///
+  /// Próba bez swojego segmentu byłaby czasem, którego nie ma z czym
+  /// porównać, a na telefonie zawsze powstają razem.
+  Future<void> _pushSegments() async {
+    final dao = _segments;
+    if (dao == null) return;
+    final all = await dao.listSegments();
+    if (all.isEmpty) return;
+
+    for (var offset = 0; offset < all.length; offset += batchSize) {
+      final slice = all.skip(offset).take(batchSize).toList();
+      final payload = <Map<String, dynamic>>[];
+      for (final segment in slice) {
+        payload.add({
+          ...segmentToJson(segment),
+          'attempts': [
+            for (final attempt in await dao.attempts(segment.id))
+              attemptToJson(attempt),
+          ],
+        });
+      }
+      await _api.dio.post<Map<String, dynamic>>(
+        '/live-rides/sync/segments',
+        data: {'segments': payload},
+      );
+    }
+  }
+
+  @visibleForTesting
+  static Map<String, dynamic> segmentToJson(Segment segment) => {
+    'client_id': segment.id,
+    'name': segment.name,
+    'distance_m': segment.distanceMeters,
+    'ascent_m': segment.ascentMeters,
+    'avg_gradient': segment.averageGradientPercent,
+    'polyline': encodeValhallaPolyline(segment.points),
+    'privacy': 'private',
+  };
+
+  @visibleForTesting
+  static Map<String, dynamic> attemptToJson(SegmentAttempt attempt) => {
+    'client_id': attempt.id,
+    'started_at': attempt.startedAt.toUtc().toIso8601String(),
+    'duration_seconds': attempt.duration.inSeconds,
+    'avg_speed_kmh': attempt.averageSpeedKmh,
+    'avg_heart_rate': attempt.averageHeartRate ?? 0,
+    'avg_power': attempt.averagePower ?? 0,
+  };
 
   /// Oznacza jako zsynchronizowane tylko to, co serwer potwierdził.
   ///

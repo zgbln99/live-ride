@@ -310,7 +310,7 @@ class _SourceControls extends StatelessWidget {
       children: [
         ListTile(
           title: Text(S.speedSource),
-          subtitle: Text(sources.speed.label),
+          subtitle: Text('${sources.speed.label} · ${S.speedSourceHint}'),
           trailing: DropdownButton<MetricSource>(
             value: sources.speed,
             underline: const SizedBox.shrink(),
@@ -321,21 +321,6 @@ class _SourceControls extends StatelessWidget {
             onChanged: (value) => value == null
                 ? null
                 : hub.updateSources(sources.copyWith(speed: value)),
-          ),
-        ),
-        ListTile(
-          title: Text(S.cadenceSource),
-          subtitle: Text(sources.cadence.label),
-          trailing: DropdownButton<MetricSource>(
-            value: sources.cadence,
-            underline: const SizedBox.shrink(),
-            items: [
-              for (final source in MetricSource.values)
-                DropdownMenuItem(value: source, child: Text(source.label)),
-            ],
-            onChanged: (value) => value == null
-                ? null
-                : hub.updateSources(sources.copyWith(cadence: value)),
           ),
         ),
         ListTile(

@@ -238,6 +238,133 @@ func LiveRideSyncRoutes(e *core.RequestEvent) error {
 	return e.JSON(http.StatusOK, map[string]any{"synced": synced})
 }
 
+type liveRideSegmentPayload struct {
+	ClientID  string  `json:"client_id"`
+	Name      string  `json:"name"`
+	DistanceM float64 `json:"distance_m"`
+	AscentM   float64 `json:"ascent_m"`
+	Gradient  float64 `json:"avg_gradient"`
+	Polyline  string  `json:"polyline"`
+	Privacy   string  `json:"privacy"`
+
+	Attempts []liveRideAttemptPayload `json:"attempts"`
+}
+
+type liveRideAttemptPayload struct {
+	ClientID        string    `json:"client_id"`
+	StartedAt       time.Time `json:"started_at"`
+	DurationSeconds int       `json:"duration_seconds"`
+	AvgSpeedKmh     float64   `json:"avg_speed_kmh"`
+	AvgHeartRate    int       `json:"avg_heart_rate"`
+	AvgPower        int       `json:"avg_power"`
+}
+
+// LiveRideSyncSegments stores the caller's segments and their attempts.
+//
+// Attempts ride along with their segment rather than through a separate call:
+// an attempt without its segment would be a time with nothing to compare it
+// to, and the two are always produced together on the phone.
+func LiveRideSyncSegments(e *core.RequestEvent) error {
+	user := e.Auth
+	if user == nil {
+		return apis.NewUnauthorizedError("Authentication required", nil)
+	}
+
+	var data struct {
+		Segments []liveRideSegmentPayload `json:"segments"`
+	}
+	if err := e.BindBody(&data); err != nil {
+		return apis.NewBadRequestError("Failed to read request data", err)
+	}
+	if len(data.Segments) > liveRideMaxSyncBatch {
+		return apis.NewBadRequestError("Too many segments in one request", nil)
+	}
+
+	segments, err := e.App.FindCollectionByNameOrId("live_ride_segments")
+	if err != nil {
+		return apis.NewNotFoundError("Live Ride segments collection is missing", err)
+	}
+	attempts, err := e.App.FindCollectionByNameOrId("live_ride_segment_attempts")
+	if err != nil {
+		return apis.NewNotFoundError("Live Ride attempts collection is missing", err)
+	}
+
+	type syncedSegment struct {
+		ClientID   string `json:"client_id"`
+		ID         string `json:"id"`
+		ShareToken string `json:"share_token"`
+	}
+	synced := make([]syncedSegment, 0, len(data.Segments))
+
+	for _, payload := range data.Segments {
+		if strings.TrimSpace(payload.ClientID) == "" ||
+			strings.TrimSpace(payload.Name) == "" ||
+			strings.TrimSpace(payload.Polyline) == "" {
+			return apis.NewBadRequestError("client_id, name and polyline are required", nil)
+		}
+		if len(payload.Polyline) > liveRideMaxPolylineBytes {
+			return apis.NewBadRequestError("polyline is too large", nil)
+		}
+
+		record, err := findLiveRideByClientID(e, segments, user.Id, payload.ClientID)
+		if err != nil {
+			return err
+		}
+		if record == nil {
+			record = core.NewRecord(segments)
+			record.Set("owner", user.Id)
+			record.Set("client_id", payload.ClientID)
+		}
+		record.Set("name", strings.TrimSpace(payload.Name))
+		record.Set("distance_m", payload.DistanceM)
+		record.Set("ascent_m", payload.AscentM)
+		record.Set("avg_gradient", payload.Gradient)
+		record.Set("polyline", payload.Polyline)
+		record.Set("privacy", normalizeLiveRidePrivacy(payload.Privacy))
+		if record.GetString("privacy") != "private" && record.GetString("share_token") == "" {
+			record.Set("share_token", security.RandomString(liveRideShareTokenBytes))
+		}
+		if err := e.App.Save(record); err != nil {
+			return apis.NewBadRequestError("Failed to store the segment", err)
+		}
+
+		for _, attempt := range payload.Attempts {
+			if strings.TrimSpace(attempt.ClientID) == "" {
+				continue
+			}
+			if attempt.DurationSeconds <= 0 || attempt.DurationSeconds > 24*3600 {
+				continue
+			}
+			existing, err := findLiveRideByClientID(e, attempts, user.Id, attempt.ClientID)
+			if err != nil {
+				return err
+			}
+			if existing == nil {
+				existing = core.NewRecord(attempts)
+				existing.Set("user", user.Id)
+				existing.Set("client_id", attempt.ClientID)
+			}
+			existing.Set("segment", record.Id)
+			existing.Set("started_at", attempt.StartedAt.UTC())
+			existing.Set("duration_seconds", attempt.DurationSeconds)
+			existing.Set("avg_speed_kmh", attempt.AvgSpeedKmh)
+			existing.Set("avg_heart_rate", attempt.AvgHeartRate)
+			existing.Set("avg_power", attempt.AvgPower)
+			if err := e.App.Save(existing); err != nil {
+				return apis.NewBadRequestError("Failed to store the attempt", err)
+			}
+		}
+
+		synced = append(synced, syncedSegment{
+			ClientID:   payload.ClientID,
+			ID:         record.Id,
+			ShareToken: record.GetString("share_token"),
+		})
+	}
+
+	return e.JSON(http.StatusOK, map[string]any{"synced": synced})
+}
+
 // LiveRidePullRoutes returns the signed-in user's routes changed since a
 // timestamp, so a freshly installed phone can catch up without downloading
 // everything again.

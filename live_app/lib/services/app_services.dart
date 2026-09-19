@@ -97,6 +97,7 @@ class AppServices {
       api: api,
       rides: RideDao(db),
       routes: RouteDao(db),
+      segments: SegmentDao(db),
     );
     final offlineMaps = OfflineMapService();
     final pace = PacePartnerService();

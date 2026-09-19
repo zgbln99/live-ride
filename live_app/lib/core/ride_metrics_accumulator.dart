@@ -1,5 +1,6 @@
 import 'dart:math' as math;
 
+import '../models/sensor_device.dart';
 import '../models/training.dart';
 import '../models/ride_metrics.dart';
 import 'geo.dart';
@@ -88,13 +89,43 @@ class RideMetricsAccumulator {
   double _cadenceMax = 0;
   double? _cadence;
   double? _sensorSpeedKmh;
+  DateTime? _sensorSpeedAt;
+  MetricSource _speedSource = MetricSource.auto;
   double _workJoules = 0;
   DateTime? _lastPowerAt;
 
   double get distanceMeters => _distanceMeters;
   Duration get movingTime =>
       Duration(milliseconds: _movingMilliseconds.round());
-  double get speedKmh => _speedMps * 3.6;
+
+  /// Prędkość pokazywana zawodnikowi.
+  ///
+  /// „Automatycznie" znaczy: czujnik koła, kiedy nadaje, bo jest szybszy i
+  /// nie gubi się w tunelu; GPS, kiedy czujnika nie ma albo zamilkł. Wybór
+  /// wprost nadpisuje tę logikę, ale nigdy nie wymyśla wartości — gdy
+  /// wskazane źródło milczy, zostaje drugie.
+  double get speedKmh {
+    final sensor = _freshSensorSpeed;
+    return switch (_speedSource) {
+      MetricSource.sensor => sensor ?? _speedMps * 3.6,
+      MetricSource.gps => _speedMps * 3.6,
+      MetricSource.auto => sensor ?? _speedMps * 3.6,
+    };
+  }
+
+  /// Prędkość z czujnika, o ile nie jest przeterminowana.
+  double? get _freshSensorSpeed {
+    final value = _sensorSpeedKmh;
+    final at = _sensorSpeedAt;
+    if (value == null || at == null) return null;
+    // Czujnik koła przestaje nadawać, gdy koło stoi; po trzech sekundach
+    // milczenia trzymanie ostatniej wartości byłoby kłamstwem.
+    if (DateTime.now().difference(at) > const Duration(seconds: 3)) return null;
+    return value;
+  }
+
+  /// Z którego źródła ma iść prędkość.
+  set speedSource(MetricSource source) => _speedSource = source;
   double get maxSpeedKmh => _maxSpeedKmh;
   double get elevationGainMeters => _elevation.gainMeters;
   double get elevationLossMeters => _elevation.lossMeters;
@@ -256,8 +287,15 @@ class RideMetricsAccumulator {
   }
 
   /// Prędkość z czujnika koła — nadpisuje GPS tylko wtedy, gdy ktoś ją poda.
-  void setSensorSpeed(double? kmh) {
-    _sensorSpeedKmh = kmh != null && kmh >= 0 && kmh < 150 ? kmh : null;
+  void setSensorSpeed(double? kmh, {DateTime? at}) {
+    if (kmh == null || kmh < 0 || kmh >= 150) {
+      _sensorSpeedKmh = null;
+      _sensorSpeedAt = null;
+      _sensorSpeedAt = null;
+      return;
+    }
+    _sensorSpeedKmh = kmh;
+    _sensorSpeedAt = at ?? DateTime.now();
   }
 
   RideMetrics build({
@@ -313,6 +351,7 @@ class RideMetricsAccumulator {
     _cadenceMax = 0;
     _cadence = null;
     _sensorSpeedKmh = null;
+    _sensorSpeedAt = null;
     _workJoules = 0;
     _lastPowerAt = null;
   }

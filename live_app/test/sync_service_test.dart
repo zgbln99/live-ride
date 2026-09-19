@@ -2,6 +2,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:live_ride/core/geo.dart';
 import 'package:live_ride/models/ride_record.dart';
 import 'package:live_ride/models/ride_route.dart';
+import 'package:live_ride/models/segment.dart';
 import 'package:live_ride/models/route/route_preferences.dart';
 import 'package:live_ride/models/route/route_waypoint.dart';
 import 'package:live_ride/services/routing_service.dart';
@@ -31,6 +32,7 @@ RecordedRide _ride() => RecordedRide(
 );
 
 void main() {
+  _segmentPayloadTests();
   group('ładunek przejazdu', () {
     test('niesie client_id, po którym serwer rozpozna powtórkę', () {
       final json = SyncService.rideToJson(_ride());
@@ -117,6 +119,47 @@ void main() {
     test('znacznik zmiany pozwala serwerowi rozstrzygnąć konflikt', () {
       final json = SyncService.routeToJson(route());
       expect(json['client_updated_at'], '2026-05-01T12:00:00.000Z');
+    });
+  });
+}
+
+/// Ładunek segmentu i jego prób.
+void _segmentPayloadTests() {
+  group('ładunek segmentu', () {
+    final segment = Segment(
+      id: 'seg_abc',
+      name: 'Podjazd pod las',
+      createdAt: DateTime.utc(2026, 4, 1),
+      points: [
+        for (var i = 0; i < 30; i++)
+          GeoPoint(lat: 52.0 + i * 0.0005, lon: 21.0, elevation: 100 + i * 2.0),
+      ],
+    );
+
+    test('niesie geometrię jako polilinię i liczby z analizy', () {
+      final json = SyncService.segmentToJson(segment);
+      expect(json['client_id'], 'seg_abc');
+      expect(json['name'], 'Podjazd pod las');
+      expect((json['polyline'] as String), isNotEmpty);
+      expect(json['distance_m'], greaterThan(0));
+      expect(json['privacy'], 'private');
+    });
+
+    test('próba niesie czas i client_id', () {
+      final json = SyncService.attemptToJson(
+        SegmentAttempt(
+          id: 'att_1',
+          segmentId: 'seg_abc',
+          startedAt: DateTime.utc(2026, 5, 1, 9),
+          duration: const Duration(minutes: 7, seconds: 30),
+          averageSpeedKmh: 18.4,
+        ),
+      );
+      expect(json['client_id'], 'att_1');
+      expect(json['duration_seconds'], 450);
+      expect(json['started_at'], endsWith('Z'));
+      // Brak miernika to zero, a nie null — serwer ma pole liczbowe.
+      expect(json['avg_power'], 0);
     });
   });
 }

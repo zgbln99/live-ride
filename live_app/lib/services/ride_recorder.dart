@@ -515,7 +515,9 @@ class RideRecorder extends ChangeNotifier {
         balancePercent: snapshot.pedalBalancePercent,
       );
     }
-    _accumulator.setSensorSpeed(snapshot.speedKmh);
+    _accumulator
+      ..speedSource = sensors.sources.speed
+      ..setSensorSpeed(snapshot.speedKmh);
   }
 
   /// Zatrzymuje i wznawia licznik na postoju.

@@ -2,11 +2,13 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:live_ride/core/ride_metrics_accumulator.dart';
 import 'package:live_ride/models/ride_data_field.dart';
 import 'package:live_ride/models/ride_metrics.dart';
+import 'package:live_ride/models/sensor_device.dart';
 import 'package:live_ride/models/ride_pages.dart';
 import 'package:live_ride/models/rider_profile.dart';
 import 'package:live_ride/models/training.dart';
 
 void main() {
+  _speedSourceTests();
   group('RideDataPage', () {
     const page = RideDataPage(
       name: 'Jazda',
@@ -260,6 +262,75 @@ void main() {
       expect(metrics.power, isNull);
       expect(metrics.cadenceRpm, isNull);
       expect(metrics.workKj, isNull);
+    });
+  });
+}
+
+/// Wybór źródła prędkości: czujnik koła czy GPS.
+void _speedSourceTests() {
+  group('źródło prędkości', () {
+    final start = DateTime(2026, 5, 1, 12);
+
+    RideMetricsAccumulator withGps(double kmh) {
+      final accumulator = RideMetricsAccumulator();
+      // Dwie próbki oddalone o sekundę dają akumulatorowi prędkość z GPS.
+      final metersPerSecond = kmh / 3.6;
+      accumulator.add(
+        RideSample(lat: 52.0, lon: 21.0, timestamp: start, accuracyMeters: 5),
+      );
+      accumulator.add(
+        RideSample(
+          lat: 52.0,
+          lon: 21.0 + metersPerSecond / 68500,
+          timestamp: start.add(const Duration(seconds: 1)),
+          speedMps: metersPerSecond,
+          accuracyMeters: 5,
+        ),
+      );
+      return accumulator;
+    }
+
+    test('bez czujnika liczy się GPS', () {
+      final accumulator = withGps(30);
+      expect(accumulator.speedKmh, greaterThan(20));
+    });
+
+    test('automatycznie woli czujnik koła', () {
+      final accumulator = withGps(30)
+        ..speedSource = MetricSource.auto
+        ..setSensorSpeed(34, at: DateTime.now());
+      expect(accumulator.speedKmh, 34);
+    });
+
+    test('wymuszony GPS ignoruje czujnik', () {
+      final accumulator = withGps(30)
+        ..speedSource = MetricSource.gps
+        ..setSensorSpeed(34, at: DateTime.now());
+      expect(accumulator.speedKmh, isNot(34));
+    });
+
+    test('wymuszony czujnik spada na GPS, gdy czujnik milczy', () {
+      final accumulator = withGps(30)
+        ..speedSource = MetricSource.sensor
+        ..setSensorSpeed(null);
+      expect(accumulator.speedKmh, greaterThan(20));
+    });
+
+    test('przeterminowany odczyt czujnika nie udaje aktualnego', () {
+      final accumulator = withGps(30)
+        ..speedSource = MetricSource.auto
+        ..setSensorSpeed(
+          34,
+          at: DateTime.now().subtract(const Duration(seconds: 10)),
+        );
+      expect(accumulator.speedKmh, isNot(34));
+    });
+
+    test('absurdalna prędkość z czujnika jest odrzucana', () {
+      final accumulator = withGps(30)
+        ..speedSource = MetricSource.sensor
+        ..setSensorSpeed(400, at: DateTime.now());
+      expect(accumulator.speedKmh, lessThan(100));
     });
   });
 }

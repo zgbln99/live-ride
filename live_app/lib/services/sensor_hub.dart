@@ -64,36 +64,33 @@ const Object _keep = Object();
 class SensorSourceSettings {
   const SensorSourceSettings({
     this.speed = MetricSource.auto,
-    this.cadence = MetricSource.auto,
     this.wheelCircumferenceMm = 2105,
   });
 
+  /// Skąd brać prędkość. Kadencji nie ma na tej liście, bo jej jedynym
+  /// źródłem jest sensor — wybór „GPS albo czujnik" byłby wyborem
+  /// pozornym.
   final MetricSource speed;
-  final MetricSource cadence;
 
   /// Obwód koła w milimetrach — 2105 to domyślne 700×25c.
   final double wheelCircumferenceMm;
 
   SensorSourceSettings copyWith({
     MetricSource? speed,
-    MetricSource? cadence,
     double? wheelCircumferenceMm,
   }) => SensorSourceSettings(
     speed: speed ?? this.speed,
-    cadence: cadence ?? this.cadence,
     wheelCircumferenceMm: wheelCircumferenceMm ?? this.wheelCircumferenceMm,
   );
 
   Map<String, dynamic> toJson() => {
     'speed': speed.name,
-    'cadence': cadence.name,
     'wheel_mm': wheelCircumferenceMm,
   };
 
   factory SensorSourceSettings.fromJson(Map<String, dynamic> json) =>
       SensorSourceSettings(
         speed: MetricSource.parse(json['speed'] as String?),
-        cadence: MetricSource.parse(json['cadence'] as String?),
         wheelCircumferenceMm: (json['wheel_mm'] as num?)?.toDouble() ?? 2105,
       );
 }
