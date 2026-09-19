@@ -1,6 +1,5 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:flutter_svg/flutter_svg.dart';
 import 'package:wanderer/components/base/wanderer_button.dart';
 import 'package:wanderer/components/welcome/oauth_provider_buttons.dart';
 import 'package:wanderer/components/welcome/server_selctor.dart';
@@ -17,40 +16,53 @@ class WelcomeScreen extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final serverSelection = ref.watch(serverSelectionProvider);
     final authState = ref.watch(authProvider);
-
     final router = ref.watch(routerProvider);
+    final theme = Theme.of(context);
 
     return Scaffold(
       body: Stack(
         children: [
-          Positioned.fill(child: TopographyBackground()),
-
+          const Positioned.fill(child: TopographyBackground()),
           SafeArea(
             child: Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 32.0),
+              padding: const EdgeInsets.symmetric(horizontal: 32),
               child: Column(
                 children: [
-                  const Spacer(flex: 1),
-
-                  SvgPicture.asset(
-                    "assets/svgs/logo_text_${Theme.of(context).brightness.name}.svg",
-                    semanticsLabel: 'wanderer logo',
-                    height: 80,
-                  ),
-                  const SizedBox(height: 16),
-                  Text(
-                    "${AppLocalizations.of(context)!.welcome_to} wanderer",
-                    textAlign: TextAlign.center,
-                    style: Theme.of(context).textTheme.headlineMedium?.copyWith(
-                      fontWeight: FontWeight.bold,
-                      letterSpacing: -0.5,
+                  const Spacer(),
+                  Container(
+                    width: 82,
+                    height: 82,
+                    decoration: BoxDecoration(
+                      color: theme.colorScheme.onSurface,
+                      borderRadius: BorderRadius.circular(24),
+                    ),
+                    child: Icon(
+                      Icons.navigation_rounded,
+                      color: theme.colorScheme.surface,
+                      size: 48,
                     ),
                   ),
-
-                  const Spacer(flex: 1),
+                  const SizedBox(height: 18),
+                  Text(
+                    'LIVE RIDE',
+                    textAlign: TextAlign.center,
+                    style: theme.textTheme.displaySmall?.copyWith(
+                      fontWeight: FontWeight.w900,
+                      letterSpacing: 2.5,
+                    ),
+                  ),
+                  const SizedBox(height: 8),
+                  Text(
+                    '${AppLocalizations.of(context)!.welcome_to} Live Ride',
+                    textAlign: TextAlign.center,
+                    style: theme.textTheme.titleMedium?.copyWith(
+                      color: theme.colorScheme.onSurface.withValues(alpha: 0.65),
+                      fontWeight: FontWeight.w600,
+                    ),
+                  ),
+                  const Spacer(),
                   const Spacer(flex: 2),
-
-                  ServerSelector(),
+                  const ServerSelector(),
                   const SizedBox(height: 24),
                   Column(
                     crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -58,7 +70,7 @@ class WelcomeScreen extends ConsumerWidget {
                       WandererButton(
                         onPressed: authState.isLoading
                             ? null
-                            : () => {router.push('/login')},
+                            : () => router.push('/login'),
                         primary: true,
                         disabled: serverSelection.value?.selectedServer == null,
                         child: Text(AppLocalizations.of(context)!.login),
@@ -67,7 +79,7 @@ class WelcomeScreen extends ConsumerWidget {
                       WandererButton(
                         onPressed: authState.isLoading
                             ? null
-                            : () => {router.push('/register')},
+                            : () => router.push('/register'),
                         secondary: true,
                         disabled: serverSelection.value?.selectedServer == null,
                         child: Text(AppLocalizations.of(context)!.register),
