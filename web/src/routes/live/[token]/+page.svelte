@@ -221,6 +221,7 @@
 <svelte:head>
     <title>{snapshot?.title ?? "Live Ride"} · Live Ride</title>
     <meta name="theme-color" content="#f5f6f8" />
+    <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Crect width='64' height='64' rx='16' fill='%23111827'/%3E%3Cpath d='M20 44L32 16l12 28-12-7-12 7z' fill='white'/%3E%3C/svg%3E" />
 </svelte:head>
 
 <div class="live-shell">
