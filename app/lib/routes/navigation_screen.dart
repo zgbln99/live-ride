@@ -9,10 +9,14 @@ import 'package:wanderer/entities/active_navigation_entity.dart';
 import 'package:wanderer/models/navigate_response.dart';
 import 'package:wanderer/provider/local_settings_provider.dart';
 import 'package:wanderer/provider/navigation_provider.dart';
+import 'package:wanderer/provider/navigation_stats_provider.dart';
 import 'package:wanderer/util/format.dart';
 import 'package:wanderer/util/geo/polyline.dart';
 import 'package:wanderer/routes/navigation_screen_legacy.dart' as legacy;
 
+/// Garmin Edge-inspired presentation layered over the proven Live Ride
+/// navigation engine. The map remains native/interactive while the visible HUD
+/// follows a flat cycling-computer layout instead of card-based mobile UI.
 class NavigationScreen extends ConsumerStatefulWidget {
   final String id;
   final NavigateResponse response;
@@ -40,6 +44,7 @@ class NavigationScreen extends ConsumerStatefulWidget {
 class _NavigationScreenState extends ConsumerState<NavigationScreen> {
   late final int? _resumeManeuverIndex;
   late final List<Wpt>? _resumeBreadcrumb;
+  late final NavigationStatsSeed? _resumeStats;
 
   @override
   void initState() {
@@ -68,6 +73,17 @@ class _NavigationScreenState extends ConsumerState<NavigationScreen> {
           ),
         )
         .toList();
+
+    _resumeStats = resume == null
+        ? null
+        : NavigationStatsSeed(
+            distanceMeters: resume.distanceMeters,
+            elevationGainMeters: resume.elevationGainMeters,
+            elevationLossMeters: resume.elevationLossMeters,
+            elapsed: Duration(seconds: resume.currentElapsedSeconds),
+            pausedAccum: Duration(seconds: resume.pausedAccumSeconds),
+            isPaused: resume.isPaused,
+          );
   }
 
   @override
@@ -77,9 +93,15 @@ class _NavigationScreenState extends ConsumerState<NavigationScreen> {
       resumeManeuverIndex: _resumeManeuverIndex,
       resumeBreadcrumb: _resumeBreadcrumb,
     );
+    final statsProvider = navigationStatsProvider(
+      widget.response,
+      resume: _resumeStats,
+    );
+
     final currentIndex = ref.watch(
       navProvider.select((state) => state.currentManeuverIndex),
     );
+    final stats = ref.watch(statsProvider);
     final unit = ref.watch(unitProvider);
 
     return Stack(
@@ -95,18 +117,19 @@ class _NavigationScreenState extends ConsumerState<NavigationScreen> {
           recordingCosting: widget.recordingCosting,
         ),
         if (!widget.isRecording)
-          _LiveRideTurnBar(
+          _GarminHeader(
             maneuvers: widget.response.maneuvers,
             currentIndex: currentIndex,
             unit: unit,
           ),
+        _GarminDataBar(stats: stats, unit: unit),
       ],
     );
   }
 }
 
-class _LiveRideTurnBar extends StatelessWidget {
-  const _LiveRideTurnBar({
+class _GarminHeader extends StatelessWidget {
+  const _GarminHeader({
     required this.maneuvers,
     required this.currentIndex,
     required this.unit,
@@ -130,86 +153,96 @@ class _LiveRideTurnBar extends StatelessWidget {
       top: 0,
       left: 0,
       right: 0,
-      child: SafeArea(
-        bottom: false,
+      child: IgnorePointer(
         child: Material(
-          color: const Color(0xF5111111),
-          elevation: 6,
-          child: SizedBox(
-            height: 104,
-            child: Padding(
-              padding: const EdgeInsets.fromLTRB(14, 10, 14, 10),
-              child: Row(
+          color: Colors.white,
+          elevation: 0,
+          child: SafeArea(
+            bottom: false,
+            child: Container(
+              height: 154,
+              padding: const EdgeInsets.fromLTRB(12, 6, 12, 8),
+              decoration: const BoxDecoration(
+                border: Border(
+                  bottom: BorderSide(color: Color(0x22000000), width: 1),
+                ),
+              ),
+              child: Column(
                 children: [
-                  SizedBox(
-                    width: 62,
-                    child: Center(
-                      child: Icon(
-                        _maneuverIcon(maneuver.type),
-                        color: Colors.white,
-                        size: 50,
+                  Row(
+                    children: [
+                      const Icon(Icons.sports_score, color: Colors.black, size: 23),
+                      const SizedBox(width: 6),
+                      Text(
+                        formatDistance(remainingMeters, unit: unit),
+                        style: const TextStyle(
+                          color: Colors.black,
+                          fontSize: 21,
+                          fontWeight: FontWeight.w800,
+                          height: 1,
+                        ),
                       ),
-                    ),
+                      const Spacer(),
+                      const Text(
+                        '100 m',
+                        style: TextStyle(
+                          color: Colors.black,
+                          fontSize: 18,
+                          fontWeight: FontWeight.w800,
+                          height: 1,
+                        ),
+                      ),
+                    ],
                   ),
-                  const SizedBox(width: 10),
-                  Expanded(
-                    child: Column(
-                      mainAxisAlignment: MainAxisAlignment.center,
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Row(
-                          crossAxisAlignment: CrossAxisAlignment.end,
+                  const Spacer(),
+                  Row(
+                    crossAxisAlignment: CrossAxisAlignment.center,
+                    children: [
+                      SizedBox(
+                        width: 112,
+                        height: 92,
+                        child: Center(
+                          child: Icon(
+                            _maneuverIcon(maneuver.type),
+                            color: Colors.black,
+                            size: 82,
+                          ),
+                        ),
+                      ),
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          mainAxisSize: MainAxisSize.min,
                           children: [
-                            Expanded(
+                            FittedBox(
+                              fit: BoxFit.scaleDown,
+                              alignment: Alignment.centerLeft,
                               child: Text(
                                 formatDistance(nextMeters, unit: unit),
-                                maxLines: 1,
-                                overflow: TextOverflow.fade,
-                                softWrap: false,
                                 style: const TextStyle(
-                                  color: Colors.white,
-                                  fontSize: 36,
-                                  height: 0.95,
+                                  color: Colors.black,
+                                  fontSize: 62,
+                                  height: .88,
                                   fontWeight: FontWeight.w900,
-                                  letterSpacing: -1.4,
+                                  letterSpacing: -2.5,
                                 ),
                               ),
                             ),
-                            Container(
-                              margin: const EdgeInsets.only(bottom: 3),
-                              padding: const EdgeInsets.symmetric(
-                                horizontal: 9,
-                                vertical: 5,
-                              ),
-                              decoration: BoxDecoration(
-                                color: Colors.white.withValues(alpha: 0.12),
-                                borderRadius: BorderRadius.circular(999),
-                              ),
-                              child: Text(
-                                formatDistance(remainingMeters, unit: unit),
-                                style: const TextStyle(
-                                  color: Colors.white70,
-                                  fontSize: 11,
-                                  fontWeight: FontWeight.w800,
-                                ),
+                            const SizedBox(height: 5),
+                            Text(
+                              maneuver.instruction,
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                              style: const TextStyle(
+                                color: Colors.black87,
+                                fontSize: 14,
+                                fontWeight: FontWeight.w700,
                               ),
                             ),
                           ],
                         ),
-                        const SizedBox(height: 7),
-                        Text(
-                          maneuver.instruction,
-                          maxLines: 1,
-                          overflow: TextOverflow.ellipsis,
-                          style: const TextStyle(
-                            color: Colors.white,
-                            fontSize: 14,
-                            height: 1,
-                            fontWeight: FontWeight.w700,
-                          ),
-                        ),
-                      ],
-                    ),
+                      ),
+                    ],
                   ),
                 ],
               ),
@@ -221,17 +254,143 @@ class _LiveRideTurnBar extends StatelessWidget {
   }
 
   static IconData _maneuverIcon(int type) => switch (type) {
-    4 || 5 || 6 => Icons.flag_rounded,
-    7 || 8 || 17 || 22 => Icons.straight_rounded,
-    9 || 18 || 20 || 23 || 37 => Icons.turn_slight_right_rounded,
-    10 => Icons.turn_right_rounded,
-    11 => Icons.turn_sharp_right_rounded,
-    12 => Icons.u_turn_right_rounded,
-    13 => Icons.u_turn_left_rounded,
-    14 => Icons.turn_sharp_left_rounded,
-    15 => Icons.turn_left_rounded,
-    16 || 19 || 21 || 24 || 38 => Icons.turn_slight_left_rounded,
-    26 || 27 => Icons.roundabout_right_rounded,
-    _ => Icons.navigation_rounded,
+    4 || 5 || 6 => Icons.flag,
+    7 || 8 || 17 || 22 => Icons.straight,
+    9 || 18 || 20 || 23 || 37 => Icons.turn_slight_right,
+    10 => Icons.turn_right,
+    11 => Icons.turn_sharp_right,
+    12 => Icons.u_turn_right,
+    13 => Icons.u_turn_left,
+    14 => Icons.turn_sharp_left,
+    15 => Icons.turn_left,
+    16 || 19 || 21 || 24 || 38 => Icons.turn_slight_left,
+    26 || 27 => Icons.roundabout_right,
+    _ => Icons.navigation,
   };
+}
+
+class _GarminDataBar extends StatelessWidget {
+  const _GarminDataBar({required this.stats, required this.unit});
+
+  final NavigationStats stats;
+  final String unit;
+
+  @override
+  Widget build(BuildContext context) {
+    return Positioned(
+      left: 0,
+      right: 0,
+      bottom: 0,
+      child: IgnorePointer(
+        child: Material(
+          color: Colors.white,
+          elevation: 0,
+          child: SafeArea(
+            top: false,
+            child: Container(
+              height: 132,
+              decoration: const BoxDecoration(
+                border: Border(
+                  top: BorderSide(color: Color(0xFFE53935), width: 1.2),
+                ),
+              ),
+              child: Row(
+                children: [
+                  Expanded(
+                    child: _GarminMetric(
+                      label: 'Speed',
+                      value: _speedNumber(stats.currentSpeedKmh, unit),
+                      suffix: unit == 'metric' ? 'km/h' : 'mph',
+                    ),
+                  ),
+                  Container(width: 1.2, color: const Color(0xFFE53935)),
+                  Expanded(
+                    child: _GarminMetric(
+                      label: 'Distance',
+                      value: _distanceNumber(stats.distanceMeters, unit),
+                      suffix: unit == 'metric' ? 'km' : 'mi',
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
+  static String _speedNumber(double kmh, String unit) {
+    final value = unit == 'metric' ? kmh : kmh * 0.621371;
+    return value.toStringAsFixed(1);
+  }
+
+  static String _distanceNumber(double meters, String unit) {
+    final value = unit == 'metric' ? meters / 1000 : meters * 0.000621371;
+    return value.toStringAsFixed(2);
+  }
+}
+
+class _GarminMetric extends StatelessWidget {
+  const _GarminMetric({
+    required this.label,
+    required this.value,
+    required this.suffix,
+  });
+
+  final String label;
+  final String value;
+  final String suffix;
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(8, 7, 8, 7),
+      child: Column(
+        mainAxisAlignment: MainAxisAlignment.center,
+        children: [
+          Text(
+            label,
+            style: const TextStyle(
+              color: Colors.black,
+              fontSize: 16,
+              height: 1,
+              fontWeight: FontWeight.w600,
+            ),
+          ),
+          const SizedBox(height: 9),
+          FittedBox(
+            fit: BoxFit.scaleDown,
+            child: Row(
+              crossAxisAlignment: CrossAxisAlignment.end,
+              children: [
+                Text(
+                  value,
+                  style: const TextStyle(
+                    color: Colors.black,
+                    fontSize: 53,
+                    height: .8,
+                    fontWeight: FontWeight.w900,
+                    letterSpacing: -2.2,
+                  ),
+                ),
+                const SizedBox(width: 4),
+                Padding(
+                  padding: const EdgeInsets.only(bottom: 2),
+                  child: Text(
+                    suffix,
+                    style: const TextStyle(
+                      color: Colors.black,
+                      fontSize: 16,
+                      fontWeight: FontWeight.w600,
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
 }
