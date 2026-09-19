@@ -3,7 +3,7 @@ set -euo pipefail
 
 cd "$(dirname "$0")"
 TMP="$(mktemp -d)"
-trap 'rm -rf "$TMP" lib.restored' EXIT
+trap 'rm -rf "$TMP" lib.restored test.restored' EXIT
 
 # The Lock Screen Live Activity needs an extra Xcode target. Skip it with
 # --no-live-activity if you want the plainest possible project.
@@ -17,6 +17,8 @@ done
 
 cp pubspec.yaml "$TMP/pubspec.yaml"
 cp -R lib "$TMP/lib"
+cp -R test "$TMP/test"
+cp analysis_options.yaml "$TMP/analysis_options.yaml"
 
 flutter create . --platforms=ios,android --org pl.marekpiatak --project-name live_ride
 
@@ -28,10 +30,19 @@ cp "$TMP/pubspec.yaml" pubspec.yaml
 # copy is complete, so a failure mid-copy can never leave lib/ missing —
 # which would take the whole application down with it, including
 # lib/data/.
-rm -rf lib.restored
+rm -rf lib.restored test.restored
 cp -R "$TMP/lib" lib.restored
-rm -rf lib
+cp -R "$TMP/test" test.restored
+rm -rf lib test
 mv lib.restored lib
+mv test.restored test
+
+# `flutter create` dokłada własny zestaw reguł lintera i licznikowy
+# widget_test.dart odwołujący się do MyApp, którego w tym projekcie nie ma.
+# Bez tego `flutter analyze` i `flutter test` dawałyby inny wynik po
+# bootstrapie niż na świeżym klonie — a bootstrap jest pierwszą rzeczą,
+# którą robi się po sklonowaniu.
+cp "$TMP/analysis_options.yaml" analysis_options.yaml
 
 python3 <<'PY'
 from pathlib import Path

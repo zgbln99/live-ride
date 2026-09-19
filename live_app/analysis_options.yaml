@@ -1,0 +1,17 @@
+# Statyczna analiza Live Ride.
+#
+# Plik jest w repozytorium celowo. `flutter create` generuje swoją wersję przy
+# każdym bootstrapie, więc bez tego zestaw reguł zależałby od tego, czy ktoś
+# uruchomił bootstrap — a `flutter analyze` dawałby inny wynik na świeżym
+# klonie niż po nim.
+include: package:flutter_lints/flutter.yaml
+
+analyzer:
+  exclude:
+    - build/**
+    - android/**
+    - ios/**
+    - linux/**
+    - macos/**
+    - windows/**
+    - web/**

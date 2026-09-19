@@ -6,6 +6,12 @@ build/
 .flutter-plugins-dependencies
 .packages
 
+# Ślady po `flutter create`, którego używa bootstrap.sh. Nie są nasze i nie
+# mają po co trafiać do repozytorium.
+.metadata
+.idea/
+*.iml
+
 # Native shells are generated locally by bootstrap.sh.
 /android/
 /ios/

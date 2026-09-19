@@ -210,11 +210,12 @@ class _StubAdapter implements HttpClientAdapter {
     Future<void>? cancelFuture,
   ) async {
     calls++;
-    if (fail)
+    if (fail) {
       throw DioException.connectionError(
         requestOptions: options,
         reason: 'brak sieci',
       );
+    }
 
     final latitudes = '${options.queryParameters['latitude']}'.split(',');
     final times = [

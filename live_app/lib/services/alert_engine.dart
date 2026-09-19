@@ -52,8 +52,7 @@ class AlertContext {
 /// o czymś, czego nie da się stwierdzić — bez miernika mocy nie ma
 /// powiadomień o mocy, bez paska nie ma o tętnie.
 class AlertEngine {
-  AlertEngine({AlertSettings settings = AlertSettings.defaults})
-    : _settings = settings;
+  AlertEngine({this.settings = AlertSettings.defaults});
 
   /// Minimalna przerwa między dwoma powiadomieniami tego samego rodzaju,
   /// gdy warunek trwa (np. wciąż jesteś poza trasą).
@@ -63,9 +62,9 @@ class AlertEngine {
   /// nie jest pomyłką nawigacyjną.
   static const Duration offRouteGrace = Duration(seconds: 12);
 
-  AlertSettings _settings;
-  AlertSettings get settings => _settings;
-  set settings(AlertSettings value) => _settings = value;
+  /// Reguły, po których silnik decyduje. Podmienialne w locie, bo zawodnik
+  /// może zmienić ustawienia w środku jazdy.
+  AlertSettings settings;
 
   final Map<AlertKind, DateTime> _lastFired = {};
   final Map<AlertKind, double> _lastDistance = {};
@@ -112,7 +111,7 @@ class AlertEngine {
       AlertKind.eat,
       AlertKind.timeInterval,
     ]) {
-      final rule = _settings.ruleFor(kind);
+      final rule = settings.ruleFor(kind);
       final minutes = rule.everyMinutes;
       if (!rule.enabled || minutes == null || minutes <= 0) continue;
       final last = _lastFired[kind];
@@ -125,7 +124,7 @@ class AlertEngine {
     }
 
     // --- co ile kilometrów ----------------------------------------------
-    final distanceRule = _settings.ruleFor(AlertKind.distanceInterval);
+    final distanceRule = settings.ruleFor(AlertKind.distanceInterval);
     final everyKm = distanceRule.everyKilometers;
     if (distanceRule.enabled && everyKm != null && everyKm > 0) {
       final last = _lastDistance[AlertKind.distanceInterval] ?? 0;
@@ -141,7 +140,7 @@ class AlertEngine {
     }
 
     // --- progi z sensorów -------------------------------------------------
-    final hrRule = _settings.ruleFor(AlertKind.heartRateHigh);
+    final hrRule = settings.ruleFor(AlertKind.heartRateHigh);
     final hr = context.heartRate;
     if (hrRule.enabled &&
         hr != null &&
@@ -155,7 +154,7 @@ class AlertEngine {
       );
     }
 
-    final powerRule = _settings.ruleFor(AlertKind.powerHigh);
+    final powerRule = settings.ruleFor(AlertKind.powerHigh);
     final power = context.powerWatts;
     if (powerRule.enabled &&
         power != null &&
@@ -169,7 +168,7 @@ class AlertEngine {
       );
     }
 
-    final cadenceRule = _settings.ruleFor(AlertKind.cadenceLow);
+    final cadenceRule = settings.ruleFor(AlertKind.cadenceLow);
     final cadence = context.cadenceRpm;
     if (cadenceRule.enabled &&
         cadence != null &&
@@ -185,7 +184,7 @@ class AlertEngine {
     }
 
     // --- zjazd z trasy ----------------------------------------------------
-    final offRouteRule = _settings.ruleFor(AlertKind.offRoute);
+    final offRouteRule = settings.ruleFor(AlertKind.offRoute);
     if (offRouteRule.enabled && context.offRoute) {
       final since = _offRouteSince ??= context.now;
       if (context.now.difference(since) >= offRouteGrace &&
@@ -201,7 +200,7 @@ class AlertEngine {
     }
 
     // --- podjazd przed tobą ------------------------------------------------
-    final climbRule = _settings.ruleFor(AlertKind.climbAhead);
+    final climbRule = settings.ruleFor(AlertKind.climbAhead);
     final climbAhead = context.climbAheadMeters;
     if (climbRule.enabled &&
         climbAhead != null &&
@@ -219,7 +218,7 @@ class AlertEngine {
     }
 
     // --- bateria sensora ---------------------------------------------------
-    final batteryRule = _settings.ruleFor(AlertKind.sensorBattery);
+    final batteryRule = settings.ruleFor(AlertKind.sensorBattery);
     final battery = context.lowestSensorBatteryPercent;
     if (batteryRule.enabled &&
         battery != null &&
@@ -234,7 +233,7 @@ class AlertEngine {
     }
 
     // --- pogoda i zmrok ----------------------------------------------------
-    final rainRule = _settings.ruleFor(AlertKind.rain);
+    final rainRule = settings.ruleFor(AlertKind.rain);
     final rain = context.rainProbability;
     if (rainRule.enabled && rain != null && !_rainAnnounced) {
       final threshold = rainRule.threshold ?? 60;
@@ -244,7 +243,7 @@ class AlertEngine {
       }
     }
 
-    final sunsetRule = _settings.ruleFor(AlertKind.sunset);
+    final sunsetRule = settings.ruleFor(AlertKind.sunset);
     final toSunset = context.minutesToSunset;
     if (sunsetRule.enabled && toSunset != null && !_sunsetAnnounced) {
       final threshold = sunsetRule.threshold ?? 30;

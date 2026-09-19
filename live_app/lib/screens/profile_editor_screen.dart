@@ -20,7 +20,7 @@ class ProfileEditorScreen extends StatefulWidget {
 
 class _ProfileEditorScreenState extends State<ProfileEditorScreen> {
   late final AppServices _services = AppServices.of(context);
-  late RiderProfile _profile = _services.profile.profile;
+  late final RiderProfile _profile = _services.profile.profile;
 
   late final TextEditingController _name = TextEditingController(
     text: _profile.displayName,

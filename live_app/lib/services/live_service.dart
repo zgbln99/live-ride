@@ -138,10 +138,7 @@ class LiveSessionController extends ChangeNotifier {
     _messagesFetchedAt = DateTime.now();
     try {
       final raw = await api.fetchLiveMessages(active.shareToken);
-      _messages = [
-        for (final entry in raw)
-          if (LiveMessage.fromJson(entry) case final message?) message,
-      ];
+      _messages = [for (final entry in raw) ?LiveMessage.fromJson(entry)];
       notifyListeners();
     } catch (_) {
       // Brak wiadomości nie może przerwać jazdy.

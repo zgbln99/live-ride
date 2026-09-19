@@ -90,7 +90,7 @@ class _AlertRuleTile extends StatelessWidget {
       if (rule.everyKilometers != null)
         'co ${rule.everyKilometers!.round()} km',
       if (rule.threshold != null) _thresholdLabel(),
-      if (missing != null) missing!,
+      ?missing,
     ];
 
     return Column(

@@ -148,7 +148,7 @@ class LrSectionHeader extends StatelessWidget {
     child: Row(
       children: [
         Expanded(child: Text(title.toUpperCase(), style: LR.sectionTitle)),
-        if (trailing != null) trailing!,
+        ?trailing,
       ],
     ),
   );
