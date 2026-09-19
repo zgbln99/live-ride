@@ -16,6 +16,10 @@ for arg in "$@"; do
 done
 
 cp pubspec.yaml "$TMP/pubspec.yaml"
+# `flutter create` rozwiązuje zależności dla swojego szablonu i przepisuje
+# lock. Bez odłożenia go bootstrap zmieniałby wersje przechodnich pakietów
+# przy każdym uruchomieniu.
+cp pubspec.lock "$TMP/pubspec.lock"
 cp -R lib "$TMP/lib"
 cp -R test "$TMP/test"
 cp analysis_options.yaml "$TMP/analysis_options.yaml"
@@ -23,6 +27,7 @@ cp analysis_options.yaml "$TMP/analysis_options.yaml"
 flutter create . --platforms=ios,android --org pl.marekpiatak --project-name live_ride
 
 cp "$TMP/pubspec.yaml" pubspec.yaml
+cp "$TMP/pubspec.lock" pubspec.lock
 
 # Restore our sources over whatever `flutter create` left behind.
 #
