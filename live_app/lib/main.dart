@@ -6,6 +6,7 @@ import 'screens/login_screen.dart';
 import 'services/gpx_service.dart';
 import 'services/heart_rate_service.dart';
 import 'services/live_service.dart';
+import 'services/ride_storage_service.dart';
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -25,8 +26,10 @@ class LiveRideApp extends StatefulWidget {
 
 class _LiveRideAppState extends State<LiveRideApp> {
   late final GpxService _gpx = GpxService();
+  late final RideStorageService _rideStorage = RideStorageService();
   late final HeartRateService _heartRate = HeartRateService();
-  late final LiveSessionController _live = LiveSessionController(widget.api, _heartRate);
+  late final LiveSessionController _live =
+      LiveSessionController(widget.api, _heartRate);
   late Future<bool> _session = widget.api.hasSession();
 
   @override
@@ -65,7 +68,11 @@ class _LiveRideAppState extends State<LiveRideApp> {
           backgroundColor: Color(0xFFF7F9FB),
           surfaceTintColor: Colors.transparent,
           centerTitle: false,
-          titleTextStyle: TextStyle(color: Color(0xFF071018), fontSize: 24, fontWeight: FontWeight.w900),
+          titleTextStyle: TextStyle(
+            color: Color(0xFF071018),
+            fontSize: 24,
+            fontWeight: FontWeight.w900,
+          ),
         ),
         navigationBarTheme: const NavigationBarThemeData(
           backgroundColor: Colors.white,
@@ -76,7 +83,9 @@ class _LiveRideAppState extends State<LiveRideApp> {
         future: _session,
         builder: (context, snapshot) {
           if (!snapshot.hasData) {
-            return const Scaffold(body: Center(child: CircularProgressIndicator()));
+            return const Scaffold(
+              body: Center(child: CircularProgressIndicator()),
+            );
           }
           if (snapshot.data != true) {
             return LoginScreen(api: widget.api, onLoggedIn: _loggedIn);
@@ -84,6 +93,7 @@ class _LiveRideAppState extends State<LiveRideApp> {
           return HomeScreen(
             api: widget.api,
             gpx: _gpx,
+            rideStorage: _rideStorage,
             heartRate: _heartRate,
             live: _live,
             onLogout: _loggedOut,
