@@ -223,23 +223,39 @@ class _NavigationScreenState extends State<NavigationScreen> {
             }
           },
           layers: const [],
-          children: const [],
-        ),
-        IgnorePointer(
-          child: Align(
-            alignment: const Alignment(0, .28),
-            child: Container(
-              width: 54,
-              height: 54,
-              decoration: BoxDecoration(
-                color: const Color(0xFF1677FF),
-                shape: BoxShape.circle,
-                border: Border.all(color: Colors.white, width: 4),
-                boxShadow: const [BoxShadow(color: Colors.black26, blurRadius: 8)],
+          children: [
+            if (_position != null)
+              ml.WidgetLayer(
+                markers: [
+                  ml.Marker(
+                    point: ml.Geographic(
+                      lat: _position!.latitude,
+                      lon: _position!.longitude,
+                    ),
+                    size: const Size(58, 58),
+                    child: IgnorePointer(
+                      child: Container(
+                        width: 54,
+                        height: 54,
+                        decoration: BoxDecoration(
+                          color: const Color(0xFF1677FF),
+                          shape: BoxShape.circle,
+                          border: Border.all(color: Colors.white, width: 4),
+                          boxShadow: const [
+                            BoxShadow(color: Colors.black26, blurRadius: 8),
+                          ],
+                        ),
+                        child: const Icon(
+                          Icons.navigation_rounded,
+                          color: Colors.white,
+                          size: 32,
+                        ),
+                      ),
+                    ),
+                  ),
+                ],
               ),
-              child: const Icon(Icons.navigation_rounded, color: Colors.white, size: 32),
-            ),
-          ),
+          ],
         ),
         Positioned(
           top: 12,
@@ -409,9 +425,9 @@ class _NavigationScreenState extends State<NavigationScreen> {
             decoration: const BoxDecoration(border: Border(top: BorderSide(color: Color(0xFFE53935), width: 1.2))),
             child: Row(
               children: [
-                Expanded(child: _metric('Speed', speed.toStringAsFixed(1), 'km/h')),
+                Expanded(child: _metric('Prędkość', speed.toStringAsFixed(1), 'km/h')),
                 Container(width: 1.2, color: const Color(0xFFE53935)),
-                Expanded(child: _metric('Distance', (_rideDistance / 1000).toStringAsFixed(2), 'km')),
+                Expanded(child: _metric('Dystans', (_rideDistance / 1000).toStringAsFixed(2), 'km')),
               ],
             ),
           ),
@@ -612,7 +628,7 @@ class _NavigationScreenState extends State<NavigationScreen> {
         10 => Icons.turn_right,
         11 => Icons.turn_sharp_right,
         12 => Icons.u_turn_right,
-        13 => Icons.u_turn_left,
+      13 => Icons.u_turn_left,
         14 => Icons.turn_sharp_left,
         15 => Icons.turn_left,
         16 || 19 || 21 || 24 || 38 => Icons.turn_slight_left,

@@ -94,6 +94,7 @@ export async function POST(event: RequestEvent) {
       costing: body.costing,
       directions_type: "instructions",
       shape_match: "map_snap",
+      language: "pl-PL",
     };
 
     const res = await event.fetch(navigateUrl, {
