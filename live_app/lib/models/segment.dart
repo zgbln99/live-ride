@@ -1,4 +1,5 @@
 import '../core/geo.dart';
+import 'route/route_analysis.dart';
 
 /// Własny segment: fragment trasy, na którym chcesz się ścigać ze sobą.
 class Segment {
@@ -17,15 +18,15 @@ class Segment {
   final String? sourceRouteId;
   final List<double> cumulative;
 
+  RouteAnalysis? _analysis;
+
+  /// Ta sama analiza, co dla tras — żeby te same metry w profilu trasy i na
+  /// segmencie dawały tę samą liczbę.
+  RouteAnalysis get analysis => _analysis ??= RouteAnalyzer.analyze(points);
+
   double get distanceMeters => cumulative.isEmpty ? 0 : cumulative.last;
 
-  double get ascentMeters {
-    final accumulator = ElevationAccumulator(thresholdMeters: 2);
-    for (final point in points) {
-      accumulator.add(point.elevation);
-    }
-    return accumulator.gainMeters;
-  }
+  double get ascentMeters => analysis.ascentMeters;
 
   double get averageGradientPercent =>
       distanceMeters <= 0 ? 0 : ascentMeters / distanceMeters * 100;

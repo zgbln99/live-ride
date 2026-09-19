@@ -17,6 +17,7 @@ import '../alert_settings_screen.dart';
 import '../garage_screen.dart';
 import '../profile_editor_screen.dart';
 import '../safety_screen.dart';
+import '../segments_screen.dart';
 import '../sensors_screen.dart';
 import '../training_zones_screen.dart';
 import '../whoop_screen.dart';
@@ -242,6 +243,29 @@ class _ProfileTabState extends State<ProfileTab> {
                       onTap: () => Navigator.of(context).push(
                         MaterialPageRoute<void>(
                           builder: (_) => const WhoopScreen(),
+                        ),
+                      ),
+                    ),
+                  ),
+                  const Divider(height: 1),
+                  AnimatedBuilder(
+                    animation: services.segments,
+                    builder: (context, _) => ListTile(
+                      leading: const Icon(Icons.timer_outlined),
+                      title: Text(S.segments),
+                      subtitle: Text(
+                        services.segments.segments.isEmpty
+                            ? S.noSegments
+                            : services.segments.segments
+                                  .map((segment) => segment.name)
+                                  .join(' · '),
+                        maxLines: 2,
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                      trailing: const Icon(Icons.chevron_right),
+                      onTap: () => Navigator.of(context).push(
+                        MaterialPageRoute<void>(
+                          builder: (_) => const SegmentsScreen(),
                         ),
                       ),
                     ),

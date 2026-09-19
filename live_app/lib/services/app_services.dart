@@ -7,6 +7,7 @@ import '../data/database.dart';
 import '../data/ride_dao.dart';
 import '../data/bike_dao.dart';
 import '../data/route_dao.dart';
+import '../data/segment_dao.dart';
 import '../data/settings_dao.dart';
 import 'alert_controller.dart';
 import 'garage_service.dart';
@@ -20,7 +21,9 @@ import 'profile_service.dart';
 import 'race_mode_controller.dart';
 import 'ride_recorder.dart';
 import 'ride_storage_service.dart';
+import 'pace_partner.dart';
 import 'safety_service.dart';
+import 'segment_service.dart';
 import 'route_library_service.dart';
 import 'route_weather_service.dart';
 import 'sensor_hub.dart';
@@ -42,6 +45,8 @@ class AppServices {
     required this.routes,
     required this.rides,
     required this.garage,
+    required this.segments,
+    required this.pace,
     required this.profile,
     required this.weather,
     required this.routeWeather,
@@ -70,6 +75,8 @@ class AppServices {
     final garage = GarageService(BikeDao(db));
     final race = RaceModeController(settings: settings);
     final safety = SafetyService(settings: settings);
+    final segments = SegmentService(SegmentDao(db));
+    final pace = PacePartnerService();
     final live = LiveSessionController(api, heartRate, profile);
     final rides = RideStorageService(gpx, RideDao(db));
     final weather = WeatherService();
@@ -84,6 +91,8 @@ class AppServices {
       routes: RouteLibraryService(gpx, RouteDao(db)),
       rides: rides,
       garage: garage,
+      segments: segments,
+      pace: pace,
       profile: profile,
       weather: weather,
       routeWeather: RouteWeatherService(),
@@ -105,6 +114,8 @@ class AppServices {
         sensors: sensors,
         alerts: alerts,
         garage: garage,
+        segments: segments,
+        pace: pace,
         race: race,
         safety: safety,
         live: live,
@@ -125,6 +136,12 @@ class AppServices {
 
   /// Garaż: rowery, liczniki i serwis.
   final GarageService garage;
+
+  /// Segmenty i rekordy na nich.
+  final SegmentService segments;
+
+  /// Wirtualny rywal.
+  final PacePartnerService pace;
   final ProfileService profile;
   final WeatherService weather;
 
@@ -159,6 +176,7 @@ class AppServices {
     await routes.migrateLegacyFiles();
     await profile.load();
     await garage.load();
+    await segments.load();
     // These reach the filesystem and the Bluetooth radio, so they run in the
     // background rather than holding up the first frame.
     unawaited(spotify.restore());
@@ -179,6 +197,7 @@ class AppServices {
     race.dispose();
     safety.dispose();
     garage.dispose();
+    segments.dispose();
     await sensors.dispose();
     await heartRate.dispose();
     await database.close();

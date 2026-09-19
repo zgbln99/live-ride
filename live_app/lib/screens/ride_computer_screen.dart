@@ -24,10 +24,12 @@ import '../widgets/ride_controls.dart';
 import '../widgets/ride_alert_overlay.dart';
 import '../widgets/ride_page_view.dart';
 import '../widgets/screen_lock_overlay.dart';
+import '../widgets/segment_banner.dart';
 import '../widgets/sos_overlay.dart';
 import '../widgets/ride_map.dart';
 import '../widgets/weather_field.dart';
 import 'data_field_editor.dart';
+import 'pace_partner_sheet.dart';
 import 'live_sheet.dart';
 import 'music_sheet.dart';
 import 'ride_summary_screen.dart';
@@ -205,7 +207,22 @@ class _RideComputerScreenState extends State<RideComputerScreen> {
                                 // ClimbPro wchodzi tylko wtedy, gdy zawodnik jest
                                 // na wykrytym podjeździe; poza nim nie zabiera
                                 // mapie ani piksela.
-                                if (recorder.climbProgress != null)
+                                // Segment i rywal mają pierwszeństwo nad ClimbPro:
+                                // gdy trwa próba na segmencie, to ona jest tym, o
+                                // czym zawodnik myśli.
+                                if (recorder.segmentProgress != null)
+                                  SegmentBanner(
+                                    progress: recorder.segmentProgress!,
+                                    metric: profile.metricUnits,
+                                  )
+                                else if (recorder.paceComparison != null)
+                                  PaceBanner(
+                                    comparison: recorder.paceComparison!,
+                                    label: services.pace.target?.label ?? '',
+                                    metric: profile.metricUnits,
+                                  ),
+                                if (recorder.segmentProgress == null &&
+                                    recorder.climbProgress != null)
                                   ClimbProPanel(
                                     progress: recorder.climbProgress!,
                                     profile:
@@ -634,6 +651,7 @@ class _RideComputerScreenState extends State<RideComputerScreen> {
 
   Future<void> _showRideSettings() async {
     final services = _services;
+    final recorderRoute = services.recorder.route;
     await showModalBottomSheet<void>(
       context: context,
       showDragHandle: true,
@@ -714,6 +732,25 @@ class _RideComputerScreenState extends State<RideComputerScreen> {
                     },
                     title: Text(S.boostBrightness),
                   ),
+                ListTile(
+                  leading: const Icon(Icons.speed),
+                  title: Text(S.pacePartner),
+                  subtitle: Text(
+                    services.pace.target?.label ?? S.pacePartnerHint,
+                    maxLines: 2,
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                  onTap: () {
+                    Navigator.pop(sheetContext);
+                    unawaited(
+                      showPacePartnerSheet(
+                        context,
+                        services,
+                        route: recorderRoute,
+                      ),
+                    );
+                  },
+                ),
                 ListTile(
                   leading: const Icon(
                     Icons.report_problem_outlined,

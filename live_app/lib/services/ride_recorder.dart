@@ -22,7 +22,11 @@ import 'alert_engine.dart';
 import 'climb_tracker.dart';
 import 'garage_service.dart';
 import 'race_mode_controller.dart';
+import '../models/pace_partner.dart';
+import 'pace_partner.dart';
+import 'segment_matcher.dart';
 import 'safety_service.dart';
+import 'segment_service.dart';
 import 'sensor_hub.dart';
 import 'weather_service.dart';
 
@@ -43,6 +47,8 @@ class RideRecorder extends ChangeNotifier {
     required this.garage,
     required this.race,
     required this.safety,
+    required this.segments,
+    required this.pace,
     required this.live,
     required this.weather,
     required this.profile,
@@ -57,6 +63,8 @@ class RideRecorder extends ChangeNotifier {
   final GarageService garage;
   final RaceModeController race;
   final SafetyService safety;
+  final SegmentService segments;
+  final PacePartnerService pace;
 
   /// Gdzie zawodnik jest względem podjazdów na trasie.
   final ClimbTracker climbs = ClimbTracker();
@@ -169,6 +177,7 @@ class RideRecorder extends ChangeNotifier {
     );
 
     safety.startWatching();
+    segments.matcher.reset();
 
     // Ekran blokady jest napędzany rejestratorem, a nie widokiem jazdy:
     // aktywność startuje razem z przejazdem i żyje tak długo jak on, nawet
@@ -320,12 +329,16 @@ class RideRecorder extends ChangeNotifier {
         bikeId: ride.bikeId,
         distanceMeters: ride.distanceMeters,
       );
+      // Próby na segmentach zapisują się razem z przejazdem, żeby rekord
+      // i przejazd, w którym padł, zawsze wskazywały na siebie nawzajem.
+      await segments.storeRuns(segments.matcher.finished, rideId: ride.id);
     }
 
     // Tryb wyścigu nie ma prawa przeżyć przejazdu i zostawić telefonu
     // z podkręconą jasnością.
     unawaited(race.reset());
     safety.stopWatching();
+    pace.stop();
 
     _state = RideState.idle;
     _metrics = finalMetrics;
@@ -421,6 +434,7 @@ class RideRecorder extends ChangeNotifier {
 
     _updateProgress(sample.point);
     _updateClimb(sample.point);
+    segments.matcher.update(sample.point, now: sample.timestamp);
     safety.updateRide(
       speedKmh: _rawSpeedKmh ?? _accumulator.speedKmh,
       position: sample.point,
@@ -434,6 +448,13 @@ class RideRecorder extends ChangeNotifier {
 
   /// Stan aktualnego podjazdu albo null, gdy zawodnik na żadnym nie jest.
   ClimbProgress? get climbProgress => climbs.progress;
+
+  /// Stan aktualnego segmentu albo null.
+  SegmentProgress? get segmentProgress => segments.matcher.progress;
+
+  /// Porównanie z wirtualnym rywalem albo null, gdy żadnego nie ma.
+  PaceComparison? get paceComparison =>
+      pace.compare(riderMeters: _accumulator.distanceMeters, elapsed: elapsed);
 
   void _updateClimb(GeoPoint point) {
     if (_route == null) return;

@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:share_plus/share_plus.dart';
 
 import '../core/formatters.dart';
+import '../core/geo.dart';
 import '../core/lr_theme.dart';
 import '../i18n/strings.dart';
 import '../models/ride_route.dart';
@@ -263,6 +264,8 @@ class _RouteDetailScreenState extends State<RouteDetailScreen> {
                   climb: route.analysis.climbs[index],
                   index: index + 1,
                   metric: metric,
+                  onCreateSegment: () =>
+                      _createSegment(route, route.analysis.climbs[index]),
                 ),
               ),
             ),
@@ -297,6 +300,32 @@ class _RouteDetailScreenState extends State<RouteDetailScreen> {
         ],
       ),
     );
+  }
+
+  /// Wycina podjazd z trasy i zapisuje go jako segment.
+  ///
+  /// Segment bierze dokładnie te punkty trasy, które składają się na
+  /// podjazd — nie przybliżenie po prostej — żeby dopasowanie w czasie
+  /// jazdy szło po tej samej geometrii, na której liczono nachylenie.
+  Future<void> _createSegment(RideRoute route, Climb climb) async {
+    final cumulative = route.cumulativeMeters;
+    final points = <GeoPoint>[];
+    for (var i = 0; i < route.points.length; i++) {
+      final along = cumulative[i];
+      if (along < climb.startDistanceMeters) continue;
+      if (along > climb.endDistanceMeters) break;
+      points.add(route.points[i]);
+    }
+    if (points.length < 3) return;
+
+    final services = AppServices.of(context);
+    final segment = await services.segments.create(
+      name: '${route.name} — ${climb.category.label}',
+      points: points,
+      sourceRouteId: route.id,
+    );
+    if (!mounted) return;
+    showLrMessage(context, S.segmentCreated(segment.name));
   }
 
   Future<void> _navigate() async {
@@ -468,11 +497,13 @@ class _ClimbTile extends StatelessWidget {
     required this.climb,
     required this.index,
     required this.metric,
+    this.onCreateSegment,
   });
 
   final Climb climb;
   final int index;
   final bool metric;
+  final VoidCallback? onCreateSegment;
 
   @override
   Widget build(BuildContext context) {
@@ -518,6 +549,12 @@ class _ClimbTile extends StatelessWidget {
               ],
             ),
           ),
+          if (onCreateSegment != null)
+            IconButton(
+              tooltip: S.newSegment,
+              icon: const Icon(Icons.timer_outlined, size: 20),
+              onPressed: onCreateSegment,
+            ),
         ],
       ),
     );

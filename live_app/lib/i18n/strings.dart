@@ -346,6 +346,34 @@ class Strings {
       'wysłaniem. Automatyczna wysyłka bez Twojego udziału nie jest możliwa '
       'na iOS i Live Ride nie udaje, że jest.';
 
+  // ------------------------------------------------------------- segmenty
+  String get segments => 'Segmenty';
+  String get segment => 'Segment';
+  String get newSegment => 'Nowy segment';
+  String get segmentName => 'Nazwa segmentu';
+  String get noSegments => 'Nie masz jeszcze segmentów';
+  String get noSegmentsMessage =>
+      'Wytnij fragment trasy albo przejazdu, a Live Ride zacznie mierzyć na '
+      'nim czas i porównywać go z Twoim rekordem.';
+  String segmentCreated(String name) => 'Segment „$name" zapisany';
+  String get attempts => 'Próby';
+  String get noAttempts => 'Jeszcze nie przejechałeś tego segmentu.';
+  String get personalBest => 'Rekord';
+  String aheadOfRecord(String seconds) => '$seconds s przed rekordem';
+  String behindRecord(String seconds) => '$seconds s za rekordem';
+  String get aheadShort => 'PRZED';
+  String get behindShort => 'ZA';
+  String get pacePartner => 'Wirtualny rywal';
+  String get pacePartnerHint =>
+      'Ścigaj się ze stałą prędkością, z czasem na trasie albo ze swoim '
+      'wcześniejszym przejazdem.';
+  String get startPacePartner => 'Uruchom rywala';
+  String get stopPacePartner => 'Wyłącz rywala';
+  String get targetSpeed => 'Prędkość docelowa';
+  String get targetTime => 'Czas docelowy';
+  String get ghostNeedsRide =>
+      'Ghost potrzebuje wcześniejszego przejazdu z zapisanym śladem.';
+
   String get raceMode => 'Tryb wyścigu';
   String get raceModeHint =>
       'Tylko liczby, bez przycisków, z podbitą jasnością ekranu.';
