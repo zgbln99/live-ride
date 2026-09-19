@@ -99,10 +99,14 @@ class ApiClient {
           'costing': 'bicycle',
         },
       );
-      return NavigationPlan.fromJson(
+      final plan = NavigationPlan.fromJson(
         Map<String, dynamic>.from(response.data as Map),
       );
+      if (plan.shape.length < 2) return NavigationPlan.fallback(route);
+      return plan;
     } on DioException {
+      return NavigationPlan.fallback(route);
+    } catch (_) {
       return NavigationPlan.fallback(route);
     }
   }
