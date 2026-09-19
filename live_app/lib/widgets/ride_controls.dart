@@ -30,51 +30,51 @@ class RideControls extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final paused = state == RideState.paused;
+    // No SafeArea here: the ride computer keeps a permanent bottom inset below
+    // this bar, so the bar itself can collapse away without exposing a data
+    // field to the home indicator.
     return Container(
       color: LR.surface,
       padding: const EdgeInsets.fromLTRB(12, 10, 12, 10),
-      child: SafeArea(
-        top: false,
-        child: Row(
-          children: [
-            if (onLive != null) ...[
-              // Icon only: the label would be the first thing to overflow on a
-              // narrow phone, and the colour already says whether LIVE is on.
-              _ControlButton(
-                icon: Icons.sensors,
-                label: '',
-                tooltip: liveActive ? 'LIVE is on' : 'Start LIVE',
-                onPressed: busy ? null : onLive,
-                background: liveActive ? LR.alert : LR.surface,
-                foreground: liveActive ? Colors.white : LR.ink,
-                border: liveActive ? LR.alert : LR.lineStrong,
-                width: 56,
-              ),
-              const SizedBox(width: 10),
-            ],
-            Expanded(
-              child: _ControlButton(
-                icon: paused ? Icons.play_arrow_rounded : Icons.pause_rounded,
-                label: paused ? 'RESUME' : 'PAUSE',
-                onPressed: busy ? null : (paused ? onResume : onPause),
-                background: paused ? LR.accent : LR.surface,
-                foreground: LR.ink,
-                border: paused ? LR.accentDeep : LR.lineStrong,
-              ),
+      child: Row(
+        children: [
+          if (onLive != null) ...[
+            // Icon only: the label would be the first thing to overflow on a
+            // narrow phone, and the colour already says whether LIVE is on.
+            _ControlButton(
+              icon: Icons.sensors,
+              label: '',
+              tooltip: liveActive ? 'LIVE is on' : 'Start LIVE',
+              onPressed: busy ? null : onLive,
+              background: liveActive ? LR.alert : LR.surface,
+              foreground: liveActive ? Colors.white : LR.ink,
+              border: liveActive ? LR.alert : LR.lineStrong,
+              width: 56,
             ),
             const SizedBox(width: 10),
-            Expanded(
-              child: _ControlButton(
-                icon: Icons.stop_rounded,
-                label: busy ? 'SAVING' : 'FINISH',
-                onPressed: busy ? null : onStop,
-                background: LR.ink,
-                foreground: Colors.white,
-                border: LR.ink,
-              ),
-            ),
           ],
-        ),
+          Expanded(
+            child: _ControlButton(
+              icon: paused ? Icons.play_arrow_rounded : Icons.pause_rounded,
+              label: paused ? 'RESUME' : 'PAUSE',
+              onPressed: busy ? null : (paused ? onResume : onPause),
+              background: paused ? LR.accent : LR.surface,
+              foreground: LR.ink,
+              border: paused ? LR.accentDeep : LR.lineStrong,
+            ),
+          ),
+          const SizedBox(width: 10),
+          Expanded(
+            child: _ControlButton(
+              icon: Icons.stop_rounded,
+              label: busy ? 'SAVING' : 'FINISH',
+              onPressed: busy ? null : onStop,
+              background: LR.ink,
+              foreground: Colors.white,
+              border: LR.ink,
+            ),
+          ),
+        ],
       ),
     );
   }

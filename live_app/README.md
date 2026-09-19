@@ -17,6 +17,19 @@ Fields available: speed, average speed, max speed, distance, elapsed, moving
 time, elevation, ascent, gradient, heart rate, average HR, max HR, GPS
 accuracy, temperature, wind, rain chance, time of day, remaining distance, ETA.
 
+**Quiet mode** — Five seconds after the last touch the ride computer stops
+being an app. The secondary controls fade out, the control bar collapses and
+gives its space to the map, and what remains is the instrument: map, route,
+rider, next turn, distance left, ETA and every data field. One tap anywhere
+brings the controls straight back. Retiring is unhurried (420 ms); returning is
+near-instant (150 ms). Hidden chrome stops accepting touches the moment it
+starts fading, so a tap can never land on a half-transparent FINISH button.
+Nothing retires while the ride is paused, while a sheet or dialog is open, or
+while an error is showing; the recenter button stays up whenever the map is not
+following the rider, and the GPS/LIVE strip stays up whenever it is carrying a
+warning rather than a reassurance. The gesture is explained once per ride with
+a small note that fades itself out.
+
 **Navigation** — Valhalla map-matched turn-by-turn on top of an imported GPX:
 maneuver arrow, distance to the turn, instruction, street name, remaining
 distance and ETA. Route progress comes from projecting the rider onto the route
@@ -75,14 +88,15 @@ applies explicit rules, each covered by tests:
 
 ```
 lib/
-  core/      geo maths, metric accumulator, API client, theme, formatters
+  core/      geo maths, metric accumulator, idle-chrome controller, API
+             client, theme, formatters
   models/    route, navigation plan, ride record, metrics, profile, weather
   services/  gpx, route library, ride recorder, storage, profile, weather,
              live, heart rate, location, local store, service container
   screens/   ride computer, home shell + tabs, route detail, ride summary,
              login, live sheet, data field editor
-  widgets/   navigation header, ride map, data grid, controls, weather field,
-             track preview, elevation profile, shared primitives
+  widgets/   navigation header, ride map, data grid, controls, chrome fade,
+             weather field, track preview, elevation profile, primitives
 ```
 
 Persistence is plain JSON and GPX files under the app documents directory:
@@ -133,6 +147,9 @@ flutter run --release \
 
 ## Known limits
 
+- Quiet mode hides Live Ride's own controls, not the operating system status
+  bar. Hiding that too is a one-line change if you would rather see nothing but
+  the instrument, at the cost of the clock and the battery indicator.
 - Background recording depends on the rider granting "Always"/background
   location. Without it the platform suspends updates with the screen locked and
   the ride resumes when the app returns to the foreground. Nothing in the app

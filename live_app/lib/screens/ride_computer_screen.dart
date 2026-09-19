@@ -1,9 +1,11 @@
 import 'dart:async';
+import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
 import 'package:wakelock_plus/wakelock_plus.dart';
 
 import '../core/formatters.dart';
+import '../core/idle_chrome_controller.dart';
 import '../core/lr_theme.dart';
 import '../models/navigation_plan.dart';
 import '../models/ride_data_field.dart';
@@ -12,6 +14,7 @@ import '../models/ride_route.dart';
 import '../services/app_services.dart';
 import '../services/location_service.dart';
 import '../services/ride_recorder.dart';
+import '../widgets/chrome_fade.dart';
 import '../widgets/lr_common.dart';
 import '../widgets/navigation_header.dart';
 import '../widgets/ride_controls.dart';
@@ -43,6 +46,13 @@ class _RideComputerScreenState extends State<RideComputerScreen> {
 
   late final AppServices _services = AppServices.of(context);
 
+  /// Decides when the secondary controls retire. The instrument readings are
+  /// never affected by it.
+  late final IdleChromeController _chrome = IdleChromeController(
+    canRetire: () =>
+        _fatalError == null && _services.recorder.state == RideState.recording,
+  );
+
   String? _style;
   String? _fatalError;
   bool _openSettingsOnError = false;
@@ -54,6 +64,21 @@ class _RideComputerScreenState extends State<RideComputerScreen> {
   void initState() {
     super.initState();
     WidgetsBinding.instance.addPostFrameCallback((_) => _boot());
+  }
+
+  bool get _chromeVisible => _chrome.visible;
+
+  void _wakeChrome() => _chrome.wake();
+
+  /// Runs [action] with the controls pinned open, for anything that puts a
+  /// sheet or a dialog on top of the ride computer.
+  Future<T> _holdChrome<T>(Future<T> Function() action) async {
+    _chrome.hold();
+    try {
+      return await action();
+    } finally {
+      _chrome.release();
+    }
   }
 
   Future<void> _boot() async {
@@ -78,6 +103,7 @@ class _RideComputerScreenState extends State<RideComputerScreen> {
         setState(() => _fatalError = e.toString());
       }
     }
+    if (mounted) _chrome.restart();
   }
 
   Future<void> _loadStyle(AppServices services) async {
@@ -93,6 +119,7 @@ class _RideComputerScreenState extends State<RideComputerScreen> {
 
   @override
   void dispose() {
+    _chrome.dispose();
     unawaited(WakelockPlus.disable());
     super.dispose();
   }
@@ -106,6 +133,7 @@ class _RideComputerScreenState extends State<RideComputerScreen> {
         services.profile,
         services.weather,
         services.live,
+        _chrome,
       ]),
       builder: (context, _) {
         final recorder = services.recorder;
@@ -121,50 +149,84 @@ class _RideComputerScreenState extends State<RideComputerScreen> {
             backgroundColor: LR.canvas,
             body: _fatalError != null
                 ? _errorView()
-                : Column(
-                    children: [
-                      if (navigating)
-                        NavigationHeader(
-                          progress: recorder.progress,
-                          metric: profile.metricUnits,
-                          routeName: recorder.route?.name ?? 'Route',
-                          etaSeconds: _etaSeconds(recorder),
-                          live: services.live.isActive,
-                          mapMatched: recorder.plan?.mapMatched ?? true,
-                          onExit: _confirmExit,
-                          onOverview: () => _mapKey.currentState?.fitRoute(
-                            points: recorder.plan?.shape,
+                // Every touch anywhere on the instrument brings the controls
+                // back. The listener only observes: it never swallows the
+                // gesture, so a pan still pans the map on the same touch.
+                : Listener(
+                    onPointerDown: (_) => _wakeChrome(),
+                    child: LayoutBuilder(
+                      builder: (context, constraints) => Column(
+                        children: [
+                          if (navigating)
+                            NavigationHeader(
+                              progress: recorder.progress,
+                              metric: profile.metricUnits,
+                              routeName: recorder.route?.name ?? 'Route',
+                              etaSeconds: _etaSeconds(recorder),
+                              live: services.live.isActive,
+                              mapMatched: recorder.plan?.mapMatched ?? true,
+                              chromeVisible: _chromeVisible,
+                              onExit: _confirmExit,
+                              onOverview: () => _mapKey.currentState?.fitRoute(
+                                points: recorder.plan?.shape,
+                              ),
+                            )
+                          else
+                            _freeRideHeader(recorder),
+                          Expanded(child: _mapArea(recorder)),
+                          SizedBox(
+                            height: _gridHeight(
+                              profile.layout,
+                              constraints.maxHeight,
+                            ),
+                            child: RideDataGrid(
+                              fields: profile.activeFields,
+                              layout: profile.layout,
+                              compact: profile.layout.rows > 2,
+                              // While the controls are retired a tap is a
+                              // request for them back, not a request to
+                              // reconfigure a field.
+                              onFieldTap: _chromeVisible
+                                  ? (_) => _openFieldPicker()
+                                  : null,
+                              data: RideFieldContext(
+                                metrics: recorder.metrics,
+                                metric: profile.metricUnits,
+                                weather: services.weather.current,
+                                remainingMeters:
+                                    recorder.progress?.remainingMeters,
+                                etaSeconds: _etaSeconds(recorder)?.round(),
+                              ),
+                            ),
                           ),
-                        )
-                      else
-                        _freeRideHeader(recorder),
-                      Expanded(child: _mapArea(recorder)),
-                      SizedBox(
-                        height: _gridHeight(profile.layout),
-                        child: RideDataGrid(
-                          fields: profile.activeFields,
-                          layout: profile.layout,
-                          compact: profile.layout.rows > 2,
-                          onFieldTap: (_) => _openFieldPicker(),
-                          data: RideFieldContext(
-                            metrics: recorder.metrics,
-                            metric: profile.metricUnits,
-                            weather: services.weather.current,
-                            remainingMeters: recorder.progress?.remainingMeters,
-                            etaSeconds: _etaSeconds(recorder)?.round(),
+                          ChromeFade(
+                            visible: _chromeVisible,
+                            collapse: true,
+                            child: RideControls(
+                              state: recorder.state,
+                              busy: _busy || recorder.state == RideState.saving,
+                              liveActive: services.live.isActive,
+                              onPause: () {
+                                recorder.pause();
+                                _wakeChrome();
+                              },
+                              onResume: () {
+                                recorder.resume();
+                                _wakeChrome();
+                              },
+                              onStop: _finish,
+                              onLive: _openLiveSheet,
+                            ),
                           ),
-                        ),
+                          // Kept outside the collapse so the bottom row of data
+                          // fields never ends up under the home indicator.
+                          Container(
+                            color: LR.surface,
+                            height: MediaQuery.paddingOf(context).bottom,
+                          ),
+                        ],
                       ),
-                      RideControls(
-                        state: recorder.state,
-                        busy: _busy || recorder.state == RideState.saving,
-                        liveActive: services.live.isActive,
-                        onPause: recorder.pause,
-                        onResume: recorder.resume,
-                        onStop: _finish,
-                        onLive: _openLiveSheet,
-                      ),
-                    ],
+                    ),
                   ),
           ),
         );
@@ -188,12 +250,24 @@ class _RideComputerScreenState extends State<RideComputerScreen> {
     return planned;
   }
 
-  double _gridHeight(RideFieldLayout layout) => switch (layout) {
+  /// The height the data fields would like, before the screen has a say.
+  double _preferredGridHeight(RideFieldLayout layout) => switch (layout) {
     RideFieldLayout.two => 190,
     RideFieldLayout.four => 194,
     RideFieldLayout.six => 252,
     RideFieldLayout.eight => 296,
   };
+
+  /// The height the data fields actually get.
+  ///
+  /// On a short phone eight fields plus a maneuver header would squeeze the
+  /// map down to nothing, so the instrument is capped at a share of the
+  /// screen. Roomy phones are unaffected and get the full preferred height.
+  double _gridHeight(RideFieldLayout layout, double availableHeight) {
+    final preferred = _preferredGridHeight(layout);
+    if (!availableHeight.isFinite || availableHeight <= 0) return preferred;
+    return math.min(preferred, availableHeight * 0.42);
+  }
 
   Widget _freeRideHeader(RideRecorder recorder) {
     final paused = recorder.state == RideState.paused;
@@ -209,12 +283,15 @@ class _RideComputerScreenState extends State<RideComputerScreen> {
           ),
           child: Row(
             children: [
-              IconButton(
-                onPressed: _confirmExit,
-                icon: const Icon(Icons.close, size: 20),
-                tooltip: 'Exit ride',
-                visualDensity: VisualDensity.compact,
-                color: LR.ink,
+              ChromeFade(
+                visible: _chromeVisible,
+                child: IconButton(
+                  onPressed: _confirmExit,
+                  icon: const Icon(Icons.close, size: 20),
+                  tooltip: 'Exit ride',
+                  visualDensity: VisualDensity.compact,
+                  color: LR.ink,
+                ),
               ),
               const SizedBox(width: 2),
               LrStatusChip(
@@ -252,6 +329,7 @@ class _RideComputerScreenState extends State<RideComputerScreen> {
             headingDegrees: recorder.metrics.headingDegrees,
             follow: _follow,
             headingUp: profile.headingUp,
+            onInteraction: _wakeChrome,
             onFollowChanged: (value) {
               if (_follow != value) setState(() => _follow = value);
             },
@@ -270,21 +348,24 @@ class _RideComputerScreenState extends State<RideComputerScreen> {
         Positioned(
           top: 10,
           left: 10,
-          child: Column(
-            children: [
-              LrMapButton(
-                icon: Icons.tune,
-                tooltip: 'Ride settings',
-                onPressed: _openRideSettings,
-              ),
-              const SizedBox(height: 8),
-              LrMapButton(
-                icon: Icons.sensors,
-                tooltip: 'LIVE',
-                active: services.live.isActive,
-                onPressed: _openLiveSheet,
-              ),
-            ],
+          child: ChromeFade(
+            visible: _chromeVisible,
+            child: Column(
+              children: [
+                LrMapButton(
+                  icon: Icons.tune,
+                  tooltip: 'Ride settings',
+                  onPressed: _openRideSettings,
+                ),
+                const SizedBox(height: 8),
+                LrMapButton(
+                  icon: Icons.sensors,
+                  tooltip: 'LIVE',
+                  active: services.live.isActive,
+                  onPressed: _openLiveSheet,
+                ),
+              ],
+            ),
           ),
         ),
         Positioned(
@@ -294,43 +375,86 @@ class _RideComputerScreenState extends State<RideComputerScreen> {
             crossAxisAlignment: CrossAxisAlignment.end,
             children: [
               if (profile.weatherEnabled)
-                WeatherField(
-                  weather: services.weather.current,
-                  metric: profile.metricUnits,
-                  onTap: () {
-                    final position = recorder.position;
-                    if (position != null) {
-                      unawaited(
-                        services.weather.refreshFor(position, force: true),
-                      );
-                    }
-                  },
+                ChromeFade(
+                  visible: _chromeVisible,
+                  collapse: true,
+                  child: Padding(
+                    padding: const EdgeInsets.only(bottom: 8),
+                    child: WeatherField(
+                      weather: services.weather.current,
+                      metric: profile.metricUnits,
+                      onTap: () {
+                        final position = recorder.position;
+                        if (position != null) {
+                          unawaited(
+                            services.weather.refreshFor(position, force: true),
+                          );
+                        }
+                      },
+                    ),
+                  ),
                 ),
-              const SizedBox(height: 8),
-              LrMapButton(
-                icon: Icons.my_location,
-                tooltip: 'Recenter',
-                active: _follow,
-                onPressed: () => _mapKey.currentState?.recenter(),
+              // Recenter survives the quiet only when the map is not
+              // following: it is then the way back, and its absence would
+              // strand a rider who had panned away.
+              ChromeFade(
+                visible: _chromeVisible || !_follow,
+                child: LrMapButton(
+                  icon: Icons.my_location,
+                  tooltip: 'Recenter',
+                  active: _follow,
+                  onPressed: () => _mapKey.currentState?.recenter(),
+                ),
               ),
-              const SizedBox(height: 8),
-              LrMapButton(
-                icon: Icons.add,
-                tooltip: 'Zoom in',
-                onPressed: () => _mapKey.currentState?.zoomBy(1),
-              ),
-              const SizedBox(height: 8),
-              LrMapButton(
-                icon: Icons.remove,
-                tooltip: 'Zoom out',
-                onPressed: () => _mapKey.currentState?.zoomBy(-1),
+              ChromeFade(
+                visible: _chromeVisible,
+                collapse: true,
+                child: Column(
+                  children: [
+                    const SizedBox(height: 8),
+                    LrMapButton(
+                      icon: Icons.add,
+                      tooltip: 'Zoom in',
+                      onPressed: () => _mapKey.currentState?.zoomBy(1),
+                    ),
+                    const SizedBox(height: 8),
+                    LrMapButton(
+                      icon: Icons.remove,
+                      tooltip: 'Zoom out',
+                      onPressed: () => _mapKey.currentState?.zoomBy(-1),
+                    ),
+                  ],
+                ),
               ),
             ],
           ),
         ),
-        Positioned(left: 10, bottom: 10, child: _signalStrip(recorder)),
+        Positioned(
+          left: 10,
+          bottom: 10,
+          // A degraded signal is not chrome. If the fix is poor or LIVE has
+          // dropped, the strip stays up through the quiet.
+          child: ChromeFade(
+            visible: _chromeVisible || _signalDegraded(recorder),
+            child: _signalStrip(recorder),
+          ),
+        ),
+        Positioned(
+          left: 0,
+          right: 0,
+          bottom: 18,
+          child: Center(child: ChromeHint(visible: _chrome.hintVisible)),
+        ),
       ],
     );
+  }
+
+  /// True when the strip is carrying a warning rather than a reassurance.
+  bool _signalDegraded(RideRecorder recorder) {
+    final accuracy = recorder.metrics.gpsAccuracyMeters;
+    return accuracy == null ||
+        accuracy > 25 ||
+        (_services.live.isActive && recorder.liveTelemetryFailed);
   }
 
   Widget _signalStrip(RideRecorder recorder) {
@@ -422,11 +546,13 @@ class _RideComputerScreenState extends State<RideComputerScreen> {
   );
 
   Future<void> _openLiveSheet() async {
-    await showLiveSheet(context, _services);
+    await _holdChrome(() => showLiveSheet(context, _services));
     if (mounted) setState(() {});
   }
 
-  Future<void> _openRideSettings() async {
+  Future<void> _openRideSettings() => _holdChrome(_showRideSettings);
+
+  Future<void> _showRideSettings() async {
     final services = _services;
     await showModalBottomSheet<void>(
       context: context,
@@ -491,11 +617,13 @@ class _RideComputerScreenState extends State<RideComputerScreen> {
   }
 
   Future<void> _openFieldPicker() async {
-    await showDataFieldEditor(context, _services);
+    await _holdChrome(() => showDataFieldEditor(context, _services));
     if (mounted) setState(() {});
   }
 
-  Future<void> _confirmExit() async {
+  Future<void> _confirmExit() => _holdChrome(_showExitOptions);
+
+  Future<void> _showExitOptions() async {
     final recorder = _services.recorder;
     if (!recorder.isActive) {
       if (mounted) Navigator.of(context).pop();
@@ -551,11 +679,13 @@ class _RideComputerScreenState extends State<RideComputerScreen> {
 
   Future<void> _finish() async {
     if (_busy) return;
+    _chrome.hold();
     setState(() => _busy = true);
     RecordedRide? ride;
     try {
       ride = await _services.recorder.stop();
     } finally {
+      _chrome.release();
       if (mounted) setState(() => _busy = false);
     }
     if (!mounted) return;

@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import '../core/formatters.dart';
 import '../core/lr_theme.dart';
 import '../models/navigation_plan.dart';
+import 'chrome_fade.dart';
 
 /// The turn-by-turn block at the top of the navigation screen.
 ///
@@ -19,6 +20,7 @@ class NavigationHeader extends StatelessWidget {
     this.etaSeconds,
     this.live = false,
     this.mapMatched = true,
+    this.chromeVisible = true,
     this.onExit,
     this.onOverview,
   });
@@ -29,6 +31,12 @@ class NavigationHeader extends StatelessWidget {
   final double? etaSeconds;
   final bool live;
   final bool mapMatched;
+
+  /// False once the ride has gone quiet: the exit and overview buttons and the
+  /// route name retire, while the maneuver, the distance left and the ETA — the
+  /// reasons this header exists — stay exactly where they were.
+  final bool chromeVisible;
+
   final VoidCallback? onExit;
   final VoidCallback? onOverview;
 
@@ -173,18 +181,24 @@ class NavigationHeader extends StatelessWidget {
           return Row(
             children: [
               if (onExit != null)
-                _stripButton(Icons.close, 'Exit navigation', onExit!),
+                ChromeFade(
+                  visible: chromeVisible,
+                  child: _stripButton(Icons.close, 'Exit navigation', onExit!),
+                ),
               const SizedBox(width: 6),
               if (showName)
                 Expanded(
-                  child: Text(
-                    routeName,
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                    style: const TextStyle(
-                      fontSize: 12.5,
-                      fontWeight: FontWeight.w800,
-                      color: LR.inkSoft,
+                  child: ChromeFade(
+                    visible: chromeVisible,
+                    child: Text(
+                      routeName,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: const TextStyle(
+                        fontSize: 12.5,
+                        fontWeight: FontWeight.w800,
+                        color: LR.inkSoft,
+                      ),
                     ),
                   ),
                 ),
@@ -226,7 +240,14 @@ class NavigationHeader extends StatelessWidget {
               ),
               const SizedBox(width: 6),
               if (onOverview != null)
-                _stripButton(Icons.map_outlined, 'Route overview', onOverview!),
+                ChromeFade(
+                  visible: chromeVisible,
+                  child: _stripButton(
+                    Icons.map_outlined,
+                    'Route overview',
+                    onOverview!,
+                  ),
+                ),
             ],
           );
         },

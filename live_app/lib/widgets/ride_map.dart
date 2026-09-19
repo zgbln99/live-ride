@@ -30,6 +30,7 @@ class RideMap extends StatefulWidget {
     this.offRoute = false,
     this.initialZoom = 15.5,
     this.fitRouteOnLoad = false,
+    this.onInteraction,
   });
 
   final String styleJson;
@@ -45,6 +46,11 @@ class RideMap extends StatefulWidget {
 
   /// Frames the whole route once the style is ready. Used by route preview.
   final bool fitRouteOnLoad;
+
+  /// Fired whenever the rider touches the map. The ride computer uses it to
+  /// bring retired controls back, since a platform view can swallow a touch
+  /// before an enclosing listener would normally see it.
+  final VoidCallback? onInteraction;
 
   @override
   State<RideMap> createState() => RideMapState();
@@ -129,9 +135,14 @@ class RideMapState extends State<RideMap> {
   );
 
   void _onEvent(ml.MapEvent event) {
-    if (event is ml.MapEventStartMoveCamera &&
-        event.reason == ml.CameraChangeReason.apiGesture &&
-        widget.follow) {
+    final gesture =
+        event is ml.MapEventUserInput ||
+        (event is ml.MapEventStartMoveCamera &&
+            event.reason == ml.CameraChangeReason.apiGesture);
+    if (!gesture) return;
+
+    widget.onInteraction?.call();
+    if (event is ml.MapEventStartMoveCamera && widget.follow) {
       // A rider who reaches for the map wants to look around, so follow mode
       // releases immediately rather than fighting them for the camera.
       widget.onFollowChanged(false);
