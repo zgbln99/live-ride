@@ -284,6 +284,18 @@ class RideRecorder extends ChangeNotifier {
         maxSpeedKmh: finalMetrics.maxSpeedKmh,
         averageHeartRate: finalMetrics.averageHeartRate,
         maxHeartRate: finalMetrics.maxHeartRate,
+        averagePower: finalMetrics.power?.average,
+        maxPower: finalMetrics.power?.maximum,
+        normalizedPower: finalMetrics.power?.normalized,
+        intensityFactor: finalMetrics.power?.intensityFactor,
+        trainingStressScore: finalMetrics.power?.trainingStressScore,
+        averageCadence: finalMetrics.averageCadenceRpm?.round(),
+        // Kalorie liczone z realnej pracy, nie z szacunku po tętnie —
+        // bez miernika mocy pole zostaje puste.
+        calories: finalMetrics.workKj == null
+            ? null
+            : (finalMetrics.workKj! * 0.24).round(),
+        routeId: _route?.id,
         routeName: _route?.name,
         riderName: profile.riderName,
         points: List.unmodifiable(_points),
@@ -377,6 +389,8 @@ class RideRecorder extends ChangeNotifier {
           altitude: sample.altitude,
           speedMps: sample.speedMps ?? 0,
           heartRate: _accumulator.heartRate,
+          cadence: _accumulator.cadenceRpm?.round(),
+          power: sensors.snapshot.powerWatts,
           distanceMeters: _accumulator.distanceMeters,
         ),
       );

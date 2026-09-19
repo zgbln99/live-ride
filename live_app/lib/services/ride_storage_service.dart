@@ -20,6 +20,10 @@ class RideStorageService {
 
   List<RecordedRide>? _cache;
 
+  /// Zapytania statystyczne idą wprost do bazy, bo SQLite policzy je szybciej
+  /// niż jakakolwiek pętla po wczytanych przejazdach.
+  RideDao get dao => _dao;
+
   /// Nagłówki przejazdów, bez punktów.
   Future<List<RecordedRide>> list({bool refresh = false}) async {
     if (!refresh && _cache != null) return List.unmodifiable(_cache!);

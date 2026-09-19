@@ -280,6 +280,18 @@ class Strings {
       'Uzupełnij wagę w profilu, żeby zobaczyć szacowany wydatek energii.';
 
   // ------------------------------------------------------------ historia
+  String get records => 'Rekordy';
+  String get calendar => 'Kalendarz';
+  String get heatmap => 'Mapa cieplna';
+  String get heatmapEmpty => 'Za mało przejazdów';
+  String get heatmapEmptyMessage =>
+      'Mapa cieplna rysuje się z zapisanych śladów. Przejedź kilka tras, '
+      'a zobaczysz tu swoje ulubione drogi.';
+  String heatmapPointCount(int count) => '$count punktów z Twoich przejazdów';
+  String comparedToPrevious(String change) =>
+      '$change względem poprzedniego okresu';
+  String get average => 'Średnia';
+  String get movingTime => 'W ruchu';
   String get history => 'Historia';
   String get rideSummary => 'PODSUMOWANIE PRZEJAZDU';
   String get noRidesYet => 'Brak zapisanych przejazdów';

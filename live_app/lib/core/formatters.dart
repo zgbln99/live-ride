@@ -94,6 +94,26 @@ abstract final class Fmt {
     return '${time.day} ${months[time.month - 1]} ${time.year}';
   }
 
+  /// Nazwa miesiąca z rokiem, po polsku w dopełniaczu — „maj 2026".
+  static String monthYear(DateTime time) {
+    const months = [
+      'styczeń',
+      'luty',
+      'marzec',
+      'kwiecień',
+      'maj',
+      'czerwiec',
+      'lipiec',
+      'sierpień',
+      'wrzesień',
+      'październik',
+      'listopad',
+      'grudzień',
+    ];
+    final index = (time.month - 1).clamp(0, 11);
+    return '${months[index]} ${time.year}';
+  }
+
   static String dateTime(DateTime time) => '${date(time)} · ${clock(time)}';
 
   static String temperature(double celsius, {bool metric = true}) {
