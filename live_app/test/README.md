@@ -1,0 +1,1 @@
+The generated Flutter counter test is intentionally removed; Live Ride uses integration-focused tests instead.
