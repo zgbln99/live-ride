@@ -7,6 +7,7 @@ import '../data/database.dart';
 import '../data/ride_dao.dart';
 import '../data/route_dao.dart';
 import '../data/settings_dao.dart';
+import 'geocoding_service.dart';
 import 'gpx_service.dart';
 import 'heart_rate_service.dart';
 import 'live_activity_service.dart';
@@ -16,6 +17,7 @@ import 'profile_service.dart';
 import 'ride_recorder.dart';
 import 'ride_storage_service.dart';
 import 'route_library_service.dart';
+import 'routing_service.dart';
 import 'spotify_service.dart';
 import 'weather_service.dart';
 
@@ -37,6 +39,8 @@ class AppServices {
     required this.heartRate,
     required this.live,
     required this.location,
+    required this.routing,
+    required this.geocoding,
     required this.spotify,
     required this.liveActivity,
     required this.recorder,
@@ -65,6 +69,8 @@ class AppServices {
       heartRate: heartRate,
       live: live,
       location: location,
+      routing: RoutingService(api),
+      geocoding: GeocodingService(api),
       spotify: SpotifyService(),
       liveActivity: liveActivity,
       recorder: RideRecorder(
@@ -91,6 +97,8 @@ class AppServices {
   final HeartRateService heartRate;
   final LiveSessionController live;
   final LocationService location;
+  final RoutingService routing;
+  final GeocodingService geocoding;
   final SpotifyService spotify;
   final LiveActivityService liveActivity;
   final RideRecorder recorder;

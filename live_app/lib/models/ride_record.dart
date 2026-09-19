@@ -143,7 +143,7 @@ class RecordedRide {
 
   /// `(distanceMeters, altitudeMeters)` pairs for the elevation profile,
   /// smoothed so GPS altitude noise does not turn the chart into a saw.
-  List<({double distance, double altitude})> elevationProfile({
+  List<({double distance, double elevation})> elevationProfile({
     int maxSamples = 240,
   }) {
     final withAltitude = points
@@ -151,7 +151,7 @@ class RecordedRide {
         .toList(growable: false);
     if (withAltitude.length < 3) return const [];
     final step = math.max(1, withAltitude.length ~/ maxSamples);
-    final result = <({double distance, double altitude})>[];
+    final result = <({double distance, double elevation})>[];
     double? smoothed;
     for (var i = 0; i < withAltitude.length; i += step) {
       final point = withAltitude[i];
@@ -159,7 +159,7 @@ class RecordedRide {
       smoothed = smoothed == null
           ? altitude
           : smoothed + (altitude - smoothed) * 0.3;
-      result.add((distance: point.distanceMeters, altitude: smoothed));
+      result.add((distance: point.distanceMeters, elevation: smoothed));
     }
     return result;
   }

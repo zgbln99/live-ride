@@ -72,13 +72,7 @@ class TrainingProfile {
   /// który przy podanym tętnie spoczynkowym przechodzi na metodę rezerwy
   /// tętna (Karvonena), bo lepiej opisuje realny wysiłek.
   List<TrainingZone> get heartRateZones {
-    const names = [
-      'Regeneracja',
-      'Wytrzymałość',
-      'Tempo',
-      'Próg',
-      'VO2 max',
-    ];
+    const names = ['Regeneracja', 'Wytrzymałość', 'Tempo', 'Próg', 'VO2 max'];
     final custom = customHeartRateBounds;
     if (custom != null && custom.length == 5) {
       return _zonesFromBounds(custom, names);
@@ -474,8 +468,7 @@ class PowerAccumulator {
       intensity = normalized / threshold;
       final seconds = elapsed?.inSeconds ?? 0;
       if (seconds > 0) {
-        tss =
-            (seconds * normalized * intensity) / (threshold * 3600) * 100;
+        tss = (seconds * normalized * intensity) / (threshold * 3600) * 100;
       }
     }
     return PowerMetrics(

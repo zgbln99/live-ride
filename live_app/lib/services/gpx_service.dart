@@ -476,20 +476,32 @@ class GpxService {
       ..writeln('  <Activities>')
       ..writeln('    <Activity Sport="Biking">')
       ..writeln('      <Id>${ride.startedAt.toUtc().toIso8601String()}</Id>')
-      ..writeln('      <Lap StartTime="${ride.startedAt.toUtc().toIso8601String()}">')
-      ..writeln('        <TotalTimeSeconds>${ride.elapsedSeconds}</TotalTimeSeconds>')
-      ..writeln('        <DistanceMeters>${ride.distanceMeters.toStringAsFixed(1)}</DistanceMeters>')
-      ..writeln('        <MaximumSpeed>${(ride.maxSpeedKmh / 3.6).toStringAsFixed(3)}</MaximumSpeed>');
+      ..writeln(
+        '      <Lap StartTime="${ride.startedAt.toUtc().toIso8601String()}">',
+      )
+      ..writeln(
+        '        <TotalTimeSeconds>${ride.elapsedSeconds}</TotalTimeSeconds>',
+      )
+      ..writeln(
+        '        <DistanceMeters>${ride.distanceMeters.toStringAsFixed(1)}</DistanceMeters>',
+      )
+      ..writeln(
+        '        <MaximumSpeed>${(ride.maxSpeedKmh / 3.6).toStringAsFixed(3)}</MaximumSpeed>',
+      );
     if (ride.calories != null) {
       buffer.writeln('        <Calories>${ride.calories}</Calories>');
     }
     if (ride.averageHeartRate != null) {
       buffer
-        ..writeln('        <AverageHeartRateBpm><Value>'
-            '${ride.averageHeartRate}</Value></AverageHeartRateBpm>')
-        ..writeln('        <MaximumHeartRateBpm><Value>'
-            '${ride.maxHeartRate ?? ride.averageHeartRate}</Value>'
-            '</MaximumHeartRateBpm>');
+        ..writeln(
+          '        <AverageHeartRateBpm><Value>'
+          '${ride.averageHeartRate}</Value></AverageHeartRateBpm>',
+        )
+        ..writeln(
+          '        <MaximumHeartRateBpm><Value>'
+          '${ride.maxHeartRate ?? ride.averageHeartRate}</Value>'
+          '</MaximumHeartRateBpm>',
+        );
     }
     buffer
       ..writeln('        <Intensity>Active</Intensity>')
@@ -499,10 +511,16 @@ class GpxService {
     for (final point in ride.points) {
       buffer
         ..writeln('          <Trackpoint>')
-        ..writeln('            <Time>${point.recordedAt.toUtc().toIso8601String()}</Time>')
+        ..writeln(
+          '            <Time>${point.recordedAt.toUtc().toIso8601String()}</Time>',
+        )
         ..writeln('            <Position>')
-        ..writeln('              <LatitudeDegrees>${point.lat.toStringAsFixed(7)}</LatitudeDegrees>')
-        ..writeln('              <LongitudeDegrees>${point.lon.toStringAsFixed(7)}</LongitudeDegrees>')
+        ..writeln(
+          '              <LatitudeDegrees>${point.lat.toStringAsFixed(7)}</LatitudeDegrees>',
+        )
+        ..writeln(
+          '              <LongitudeDegrees>${point.lon.toStringAsFixed(7)}</LongitudeDegrees>',
+        )
         ..writeln('            </Position>');
       if (point.altitude != null && point.altitude!.isFinite) {
         buffer.writeln(
@@ -534,8 +552,10 @@ class GpxService {
     buffer
       ..writeln('        </Track>')
       ..writeln('      </Lap>')
-      ..writeln('      <Creator xsi:type="Device_t" '
-          'xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance">')
+      ..writeln(
+        '      <Creator xsi:type="Device_t" '
+        'xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance">',
+      )
       ..writeln('        <Name>Live Ride</Name>')
       ..writeln('      </Creator>')
       ..writeln('    </Activity>')

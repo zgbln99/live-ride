@@ -135,8 +135,11 @@ void main() {
         for (var i = 0; i < 500; i++)
           GeoPoint(lat: 52 + i / 10000, lon: 13, elevation: 100 + i / 5),
       ];
-      final summary = RideRoute(id: 'a', name: 'Climb', points: points)
-          .toSummary();
+      final summary = RideRoute(
+        id: 'a',
+        name: 'Climb',
+        points: points,
+      ).toSummary();
       expect(summary.pointCount, 500);
       expect(summary.preview.length, lessThan(130));
       expect(summary.ascentMeters, greaterThan(50));
@@ -189,7 +192,7 @@ void main() {
       final profile = build().elevationProfile();
       expect(profile.length, greaterThan(5));
       expect(profile.first.distance, 0);
-      expect(profile.last.altitude, greaterThan(profile.first.altitude));
+      expect(profile.last.elevation, greaterThan(profile.first.elevation));
     });
   });
 

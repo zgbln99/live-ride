@@ -136,10 +136,7 @@ class BikeComponent {
 
   /// Ile komponent przejechał, przy aktualnym stanie licznika roweru.
   double usedMeters(double bikeOdometerMeters) =>
-      (bikeOdometerMeters - odometerAtInstallMeters).clamp(
-        0,
-        double.maxFinite,
-      );
+      (bikeOdometerMeters - odometerAtInstallMeters).clamp(0, double.maxFinite);
 
   int usedDays(DateTime now) => now.difference(installedAt).inDays;
 

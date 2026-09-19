@@ -10,6 +10,7 @@ import '../../services/gpx_service.dart';
 import '../../widgets/lr_common.dart';
 import '../../widgets/track_preview.dart';
 import '../ride_computer_screen.dart';
+import '../route_builder_screen.dart';
 import '../route_detail_screen.dart';
 
 /// The route library: imported GPX files, ready to ride.
@@ -68,7 +69,7 @@ class _RoutesTabState extends State<RoutesTab> {
                     decoration: const InputDecoration(
                       isDense: true,
                       prefixIcon: Icon(Icons.search, size: 19),
-                      hintText: 'Search routes',
+                      hintText: 'Szukaj tras',
                       fillColor: LR.panel,
                     ),
                   ),
@@ -78,22 +79,31 @@ class _RoutesTabState extends State<RoutesTab> {
               SizedBox(
                 height: 44,
                 child: FilledButton.icon(
-                  onPressed: _importing ? null : _import,
+                  onPressed: _openBuilder,
                   style: FilledButton.styleFrom(
                     minimumSize: const Size(0, 44),
-                    padding: const EdgeInsets.symmetric(horizontal: 14),
+                    padding: const EdgeInsets.symmetric(horizontal: 12),
                   ),
-                  icon: _importing
+                  icon: const Icon(Icons.add_road, size: 18),
+                  label: const Text('PLANUJ'),
+                ),
+              ),
+              const SizedBox(width: 8),
+              SizedBox(
+                height: 44,
+                child: OutlinedButton(
+                  onPressed: _importing ? null : _import,
+                  style: OutlinedButton.styleFrom(
+                    minimumSize: const Size(0, 44),
+                    padding: const EdgeInsets.symmetric(horizontal: 12),
+                  ),
+                  child: _importing
                       ? const SizedBox(
                           width: 15,
                           height: 15,
-                          child: CircularProgressIndicator(
-                            strokeWidth: 2,
-                            color: Colors.white,
-                          ),
+                          child: CircularProgressIndicator(strokeWidth: 2),
                         )
                       : const Icon(Icons.file_upload_outlined, size: 18),
-                  label: const Text('GPX'),
                 ),
               ),
             ],
@@ -196,7 +206,7 @@ class _RoutesTabState extends State<RoutesTab> {
             children: [
               Expanded(
                 child: LrStat(
-                  label: 'Distance',
+                  label: 'Dystans',
                   value: Fmt.distance(route.distanceMeters, metric: metric),
                   unit: Fmt.distanceUnit(metric: metric),
                   valueSize: 18,
@@ -204,11 +214,8 @@ class _RoutesTabState extends State<RoutesTab> {
               ),
               Expanded(
                 child: LrStat(
-                  label: 'Ascent',
-                  value: Fmt.elevation(
-                    route.ascentMeters,
-                    metric: metric,
-                  ),
+                  label: 'Podjazd',
+                  value: Fmt.elevation(route.ascentMeters, metric: metric),
                   unit: Fmt.elevationUnit(metric: metric),
                   valueSize: 18,
                 ),
@@ -216,16 +223,20 @@ class _RoutesTabState extends State<RoutesTab> {
               TextButton.icon(
                 onPressed: () => _navigate(route),
                 icon: const Icon(Icons.navigation, size: 17),
-                label: const Text('RIDE'),
+                label: const Text('JEDŹ'),
               ),
               PopupMenuButton<String>(
-                tooltip: 'Route actions',
+                tooltip: 'Działania',
                 icon: const Icon(Icons.more_vert, size: 20, color: LR.inkSoft),
                 onSelected: (value) => _action(value, route),
                 itemBuilder: (context) => const [
-                  PopupMenuItem(value: 'preview', child: Text('Preview')),
-                  PopupMenuItem(value: 'rename', child: Text('Rename')),
-                  PopupMenuItem(value: 'delete', child: Text('Delete')),
+                  PopupMenuItem(value: 'preview', child: Text('Podgląd')),
+                  PopupMenuItem(
+                    value: 'edit',
+                    child: Text('Edytuj w kreatorze'),
+                  ),
+                  PopupMenuItem(value: 'rename', child: Text('Zmień nazwę')),
+                  PopupMenuItem(value: 'delete', child: Text('Usuń')),
                 ],
               ),
             ],
@@ -257,10 +268,24 @@ class _RoutesTabState extends State<RoutesTab> {
     switch (action) {
       case 'preview':
         await _open(route);
+      case 'edit':
+        await _openBuilder(existing: route);
       case 'rename':
         await _rename(route);
       case 'delete':
         await _delete(route);
+    }
+  }
+
+  Future<void> _openBuilder({RouteSummary? existing}) async {
+    final created = await Navigator.of(context).push<RouteSummary>(
+      MaterialPageRoute<RouteSummary>(
+        builder: (_) => RouteBuilderScreen(existing: existing),
+      ),
+    );
+    await _load();
+    if (created != null && mounted) {
+      showLrMessage(context, 'Zapisano trasę \${created.name}');
     }
   }
 
@@ -297,20 +322,20 @@ class _RoutesTabState extends State<RoutesTab> {
     final name = await showDialog<String>(
       context: context,
       builder: (dialogContext) => AlertDialog(
-        title: const Text('Rename route'),
+        title: const Text('Zmień nazwę trasy'),
         content: TextField(
           controller: controller,
           autofocus: true,
-          decoration: const InputDecoration(labelText: 'Route name'),
+          decoration: const InputDecoration(labelText: 'Nazwa trasy'),
         ),
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(dialogContext),
-            child: const Text('Cancel'),
+            child: const Text('Anuluj'),
           ),
           FilledButton(
             onPressed: () => Navigator.pop(dialogContext, controller.text),
-            child: const Text('Save'),
+            child: const Text('Zapisz'),
           ),
         ],
       ),

@@ -125,9 +125,7 @@ class RouteLibraryService {
         .trim()
         .replaceAll(RegExp(r'\s+'), '-')
         .toLowerCase();
-    final file = File(
-      '${directory.path}/${safe.isEmpty ? 'trasa' : safe}.gpx',
-    );
+    final file = File('${directory.path}/${safe.isEmpty ? 'trasa' : safe}.gpx');
     await file.writeAsString(encodeRoute(route), flush: true);
     return file;
   }
@@ -212,7 +210,9 @@ class RouteLibraryService {
     List<dynamic> entries;
     try {
       final decoded = jsonDecode(await index.readAsString());
-      entries = decoded is Map ? (decoded['routes'] as List? ?? const []) : const [];
+      entries = decoded is Map
+          ? (decoded['routes'] as List? ?? const [])
+          : const [];
     } catch (_) {
       return 0;
     }

@@ -214,7 +214,8 @@ class RouteAnalysis {
         ? mass * gravity * ascentMeters
         : 0.0;
     final rollingJoules = rollingResistance * mass * gravity * distanceMeters;
-    final airJoules = 0.5 * airDensity * dragArea * speed * speed * distanceMeters;
+    final airJoules =
+        0.5 * airDensity * dragArea * speed * speed * distanceMeters;
 
     return (climbingJoules + rollingJoules + airJoules) /
         drivetrainEfficiency /

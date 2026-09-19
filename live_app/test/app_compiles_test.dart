@@ -9,6 +9,7 @@ import 'package:live_ride/screens/music_sheet.dart';
 import 'package:live_ride/screens/login_screen.dart';
 import 'package:live_ride/screens/ride_computer_screen.dart';
 import 'package:live_ride/screens/ride_summary_screen.dart';
+import 'package:live_ride/screens/route_builder_screen.dart';
 import 'package:live_ride/screens/route_detail_screen.dart';
 import 'package:live_ride/screens/whoop_screen.dart';
 import 'package:live_ride/screens/tabs/history_tab.dart';
@@ -36,6 +37,7 @@ void main() {
     expect(showDataFieldEditor, isNotNull);
     expect(RideSummaryScreen, isNotNull);
     expect(RouteDetailScreen, isNotNull);
+    expect(const RouteBuilderScreen(), isA<RouteBuilderScreen>());
   });
 }
 

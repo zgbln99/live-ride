@@ -2,6 +2,8 @@ import 'dart:io';
 
 import 'package:geolocator/geolocator.dart';
 
+import '../core/geo.dart';
+
 /// Thrown when Live Ride cannot get a position fix. The message is shown to
 /// the rider as-is.
 class LocationUnavailable implements Exception {
@@ -43,6 +45,26 @@ class LocationService {
         'record rides and navigate.',
         openSettings: true,
       );
+    }
+  }
+
+  /// Ostatnia znana pozycja jako punkt geograficzny.
+  ///
+  /// Kreator tras nie może czekać na świeży fix, żeby wycentrować mapę.
+  Future<GeoPoint?> lastKnown() async {
+    try {
+      final known = await Geolocator.getLastKnownPosition();
+      if (known != null) {
+        return GeoPoint(lat: known.latitude, lon: known.longitude);
+      }
+    } catch (_) {}
+    try {
+      await ensurePermission();
+      final position = await currentPosition();
+      if (position == null) return null;
+      return GeoPoint(lat: position.latitude, lon: position.longitude);
+    } catch (_) {
+      return null;
     }
   }
 

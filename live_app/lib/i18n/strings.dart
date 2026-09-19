@@ -276,13 +276,13 @@ class Strings {
   String get liveDescription =>
       'Udostępnij jeden link. Każdy, kto go ma, zobaczy Twoją pozycję, '
       'prędkość, dystans i tętno na pełnoekranowej mapie — bez zakładania konta.';
-  String get waitingForFirstUpload =>
-      'Czekam na pierwszą wysyłkę telemetrii…';
+  String get waitingForFirstUpload => 'Czekam na pierwszą wysyłkę telemetrii…';
   String lastUpdate(String time) => 'Ostatnia aktualizacja $time';
   String get followMyRide => 'Śledź moją jazdę w Live Ride';
   String get liveSignInAgain =>
       'Zaloguj się ponownie, żeby rozpocząć transmisję LIVE.';
-  String get liveCodeNotFound => 'Żadna aktywna transmisja nie używa tego kodu.';
+  String get liveCodeNotFound =>
+      'Żadna aktywna transmisja nie używa tego kodu.';
   String get liveCodeInvalid => 'Ten kod LIVE nie wygląda poprawnie.';
 
   // ------------------------------------------------------------- sensory
@@ -315,7 +315,8 @@ class Strings {
       'żeby używać pasa tętna.';
   String get bluetoothUnauthorized =>
       'Live Ride nie ma zgody na Bluetooth. Włącz ją w Ustawieniach.';
-  String get sensorGone => 'Ten sensor nie jest już w zasięgu. Skanuj ponownie.';
+  String get sensorGone =>
+      'Ten sensor nie jest już w zasięgu. Skanuj ponownie.';
   String get noHeartRateService =>
       'To urządzenie nie udostępnia usługi tętna. W WHOOP włącz najpierw '
       'Broadcast Heart Rate.';
@@ -383,7 +384,8 @@ class Strings {
   String get spotifyBrowserNote =>
       'Logowanie odbywa się w systemowym oknie przeglądarki, więc Live Ride '
       'nigdy nie widzi Twojego hasła.';
-  String get spotifySignInCancelled => 'Logowanie do Spotify zostało anulowane.';
+  String get spotifySignInCancelled =>
+      'Logowanie do Spotify zostało anulowane.';
   String get spotifyPremiumRequired =>
       'Sterowanie odtwarzaniem z innej aplikacji wymaga Spotify Premium.';
   String get spotifyNotPremium =>
@@ -440,8 +442,7 @@ class Strings {
   String get liveRideServer => 'Serwer Live Ride';
   String get weatherProvider => 'Dostawca pogody';
   String get weatherProviderSubtitle => 'Open-Meteo · bez konta';
-  String get finishRideBeforeSignOut =>
-      'Zakończ przejazd przed wylogowaniem.';
+  String get finishRideBeforeSignOut => 'Zakończ przejazd przed wylogowaniem.';
 
   // ----------------------------------------------------------------- GPX
   String get gpxNotAFile => 'To nie jest plik GPX.';
@@ -473,7 +474,8 @@ class Strings {
   String get serverRejected => 'Serwer odrzucił zapytanie.';
   String get serverNotFound => 'Nie znaleziono na serwerze.';
   String get requestCancelled => 'Zapytanie anulowane.';
-  String get badCertificate => 'Nie udało się zweryfikować certyfikatu serwera.';
+  String get badCertificate =>
+      'Nie udało się zweryfikować certyfikatu serwera.';
   String get mapStyleFailed => 'Nie udało się wczytać stylu mapy.';
 
   // -------------------------------------------------------- liczebniki
@@ -530,10 +532,7 @@ class StringsScope extends InheritedWidget {
   final Strings strings;
 
   static Strings of(BuildContext context) =>
-      context
-          .dependOnInheritedWidgetOfExactType<StringsScope>()
-          ?.strings ??
-      S;
+      context.dependOnInheritedWidgetOfExactType<StringsScope>()?.strings ?? S;
 
   @override
   bool updateShouldNotify(StringsScope oldWidget) =>

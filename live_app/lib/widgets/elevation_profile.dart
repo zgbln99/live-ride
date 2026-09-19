@@ -15,7 +15,7 @@ class ElevationProfile extends StatelessWidget {
     this.height = 132,
   });
 
-  final List<({double distance, double altitude})> samples;
+  final List<({double distance, double elevation})> samples;
   final bool metric;
   final double height;
 
@@ -30,11 +30,11 @@ class ElevationProfile extends StatelessWidget {
       );
     }
 
-    var minAltitude = samples.first.altitude;
-    var maxAltitude = samples.first.altitude;
+    var minElevation = samples.first.elevation;
+    var maxElevation = samples.first.elevation;
     for (final sample in samples) {
-      minAltitude = math.min(minAltitude, sample.altitude);
-      maxAltitude = math.max(maxAltitude, sample.altitude);
+      minElevation = math.min(minElevation, sample.elevation);
+      maxElevation = math.max(maxElevation, sample.elevation);
     }
 
     return Column(
@@ -45,8 +45,8 @@ class ElevationProfile extends StatelessWidget {
           child: CustomPaint(
             painter: _ElevationPainter(
               samples: samples,
-              minAltitude: minAltitude,
-              maxAltitude: maxAltitude,
+              minElevation: minElevation,
+              maxElevation: maxElevation,
             ),
           ),
         ),
@@ -54,13 +54,13 @@ class ElevationProfile extends StatelessWidget {
         Row(
           children: [
             Text(
-              '${Fmt.elevation(minAltitude, metric: metric)} '
+              '${Fmt.elevation(minElevation, metric: metric)} '
               '${Fmt.elevationUnit(metric: metric)}',
               style: LR.fieldLabel,
             ),
             const Spacer(),
             Text(
-              '${Fmt.elevation(maxAltitude, metric: metric)} '
+              '${Fmt.elevation(maxElevation, metric: metric)} '
               '${Fmt.elevationUnit(metric: metric)}',
               style: LR.fieldLabel,
             ),
@@ -74,28 +74,28 @@ class ElevationProfile extends StatelessWidget {
 class _ElevationPainter extends CustomPainter {
   _ElevationPainter({
     required this.samples,
-    required this.minAltitude,
-    required this.maxAltitude,
+    required this.minElevation,
+    required this.maxElevation,
   });
 
-  final List<({double distance, double altitude})> samples;
-  final double minAltitude;
-  final double maxAltitude;
+  final List<({double distance, double elevation})> samples;
+  final double minElevation;
+  final double maxElevation;
 
   @override
   void paint(Canvas canvas, Size size) {
     final totalDistance = samples.last.distance - samples.first.distance;
     if (totalDistance <= 0) return;
-    final range = math.max(maxAltitude - minAltitude, 10.0);
+    final range = math.max(maxElevation - minElevation, 10.0);
 
-    Offset pointAt(({double distance, double altitude}) sample) {
+    Offset pointAt(({double distance, double elevation}) sample) {
       final x =
           (sample.distance - samples.first.distance) /
           totalDistance *
           size.width;
       final y =
           size.height -
-          ((sample.altitude - minAltitude) / range) * (size.height - 10) -
+          ((sample.elevation - minElevation) / range) * (size.height - 10) -
           4;
       return Offset(x, y);
     }
