@@ -217,7 +217,8 @@ class _NavigationScreenState extends State<NavigationScreen> {
           onMapCreated: (controller) => _map = controller,
           onStyleLoaded: _drawRoute,
           onEvent: (event) {
-            if (event is ml.MapEventMove) {
+            if (event is ml.MapEventStartMoveCamera &&
+                event.reason == ml.CameraChangeReason.apiGesture) {
               if (_follow && mounted) setState(() => _follow = false);
             }
           },
