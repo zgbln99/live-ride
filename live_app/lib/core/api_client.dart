@@ -51,8 +51,10 @@ class ApiClient {
   }
 
   Future<bool> hasSession() async {
+    // PersistCookieJar already drops expired cookies when ignoreExpires=false,
+    // so the presence of pb_auth is enough to restore the local session.
     final cookies = await cookieJar.loadForRequest(Uri.parse(serverOrigin));
-    return cookies.any((c) => c.name == 'pb_auth' && !c.hasExpired());
+    return cookies.any((c) => c.name == 'pb_auth');
   }
 
   Future<void> login(String username, String password) async {
