@@ -22,6 +22,8 @@ type liveRideTelemetryPoint struct {
 	HeadingDeg    float64   `json:"heading_deg"`
 	AccuracyM     float64   `json:"accuracy_m"`
 	HeartRateBpm  int       `json:"heart_rate_bpm"`
+	CadenceRpm    int       `json:"cadence_rpm"`
+	PowerWatts    int       `json:"power_watts"`
 	DistanceM     float64   `json:"distance_m"`
 	ElevationGain float64   `json:"elevation_gain_m"`
 }
@@ -210,6 +212,8 @@ func LiveRideTelemetry(e *core.RequestEvent) error {
 		participant.Set("heading_deg", newest.HeadingDeg)
 		participant.Set("accuracy_m", newest.AccuracyM)
 		participant.Set("heart_rate_bpm", newest.HeartRateBpm)
+		participant.Set("cadence_rpm", newest.CadenceRpm)
+		participant.Set("power_watts", newest.PowerWatts)
 		participant.Set("distance_m", newest.DistanceM)
 		participant.Set("elevation_gain_m", newest.ElevationGain)
 		participant.Set("last_seen_at", newest.RecordedAt.UTC())
@@ -271,30 +275,26 @@ func LiveRidePublicSnapshot(e *core.RequestEvent) error {
 
 	riders := make([]map[string]any, 0, len(participants))
 	for _, participant := range participants {
-		riders = append(riders, map[string]any{
-			"id":               participant.Id,
-			"display_name":     participant.GetString("display_name"),
-			"latitude":         participant.GetFloat("latitude"),
-			"longitude":        participant.GetFloat("longitude"),
-			"speed_kmh":        participant.GetFloat("speed_kmh"),
-			"altitude_m":       participant.GetFloat("altitude_m"),
-			"heading_deg":      participant.GetFloat("heading_deg"),
-			"accuracy_m":       participant.GetFloat("accuracy_m"),
-			"heart_rate_bpm":   participant.GetInt("heart_rate_bpm"),
-			"distance_m":       participant.GetFloat("distance_m"),
-			"elevation_gain_m": participant.GetFloat("elevation_gain_m"),
-			"last_seen_at":     participant.GetDateTime("last_seen_at"),
-		})
+		riders = append(riders, liveRideRiderJSON(participant))
 	}
 
-	return e.JSON(http.StatusOK, map[string]any{
+	snapshot := map[string]any{
 		"title":      session.GetString("title"),
 		"trail_id":   session.GetString("trail"),
 		"status":     session.GetString("status"),
+		"kind":       session.GetString("kind"),
 		"started_at": session.GetDateTime("started_at"),
 		"ended_at":   session.GetDateTime("ended_at"),
 		"riders":     riders,
-	})
+	}
+	if session.GetFloat("meetup_lat") != 0 || session.GetFloat("meetup_lon") != 0 {
+		snapshot["meetup"] = map[string]any{
+			"latitude":  session.GetFloat("meetup_lat"),
+			"longitude": session.GetFloat("meetup_lon"),
+			"label":     session.GetString("meetup_label"),
+		}
+	}
+	return e.JSON(http.StatusOK, snapshot)
 }
 
 // LiveRidePublicRoute returns the simplified encoded route geometry only to
@@ -419,6 +419,12 @@ func validateLiveRidePoint(point liveRideTelemetryPoint) error {
 	if point.HeartRateBpm < 0 || point.HeartRateBpm > 260 {
 		return &liveRideValidationError{"heart_rate_bpm is outside the supported range"}
 	}
+	if point.CadenceRpm < 0 || point.CadenceRpm > 250 {
+		return &liveRideValidationError{"cadence_rpm is outside the supported range"}
+	}
+	if point.PowerWatts < 0 || point.PowerWatts > 2500 {
+		return &liveRideValidationError{"power_watts is outside the supported range"}
+	}
 	return nil
 }
 
@@ -433,6 +439,60 @@ func setLiveRidePointFields(record *core.Record, point liveRideTelemetryPoint) {
 	record.Set("heart_rate_bpm", point.HeartRateBpm)
 	record.Set("distance_m", point.DistanceM)
 	record.Set("elevation_gain_m", point.ElevationGain)
+}
+
+// liveRideRiderJSON builds the spectator view of one participant.
+//
+// Privacy is applied here, on the way out, rather than at write time: the
+// rider can flip a switch mid-ride and the very next snapshot must already
+// respect it, without rewriting rows that were stored before.
+func liveRideRiderJSON(participant *core.Record) map[string]any {
+	share := func(field string) bool {
+		// A participant row created before these fields existed has them all
+		// false, which would silently hide everyone. Treat "never set" as the
+		// documented default instead: position and speed shared, heart rate
+		// and power not.
+		if !liveRideHasPrivacyFields(participant) {
+			return field == "share_position" || field == "share_speed"
+		}
+		return participant.GetBool(field)
+	}
+
+	rider := map[string]any{
+		"id":           participant.Id,
+		"display_name": participant.GetString("display_name"),
+		"last_seen_at": participant.GetDateTime("last_seen_at"),
+		"role":         participant.GetString("role"),
+	}
+
+	if share("share_position") {
+		rider["latitude"] = participant.GetFloat("latitude")
+		rider["longitude"] = participant.GetFloat("longitude")
+		rider["altitude_m"] = participant.GetFloat("altitude_m")
+		rider["heading_deg"] = participant.GetFloat("heading_deg")
+		rider["accuracy_m"] = participant.GetFloat("accuracy_m")
+		rider["distance_m"] = participant.GetFloat("distance_m")
+		rider["elevation_gain_m"] = participant.GetFloat("elevation_gain_m")
+	}
+	if share("share_speed") {
+		rider["speed_kmh"] = participant.GetFloat("speed_kmh")
+	}
+	if share("share_heart_rate") {
+		rider["heart_rate_bpm"] = participant.GetInt("heart_rate_bpm")
+	}
+	if share("share_power") {
+		rider["power_watts"] = participant.GetInt("power_watts")
+		rider["cadence_rpm"] = participant.GetInt("cadence_rpm")
+	}
+	return rider
+}
+
+// liveRideHasPrivacyFields reports whether the rider ever stated a choice.
+func liveRideHasPrivacyFields(participant *core.Record) bool {
+	return participant.GetBool("share_position") ||
+		participant.GetBool("share_speed") ||
+		participant.GetBool("share_heart_rate") ||
+		participant.GetBool("share_power")
 }
 
 type liveRideValidationError struct{ message string }

@@ -7,6 +7,7 @@ import '../core/lr_theme.dart';
 import '../i18n/strings.dart';
 import '../services/app_services.dart';
 import '../widgets/lr_common.dart';
+import 'group_ride_sheet.dart';
 
 /// Start, join, share or end a LIVE session.
 ///
@@ -78,6 +79,12 @@ class _LiveSheetState extends State<_LiveSheet> {
               _copyRow(S.joinCode, session.joinToken),
               const SizedBox(height: 12),
               _copyRow(S.spectatorLink, live.viewerUrl ?? ''),
+              const SizedBox(height: 12),
+              OutlinedButton.icon(
+                icon: const Icon(Icons.groups_outlined, size: 18),
+                label: Text(S.groupRide),
+                onPressed: () => showGroupRideSheet(context, widget.services),
+              ),
               const SizedBox(height: 18),
               FilledButton.icon(
                 onPressed: () => SharePlus.instance.share(

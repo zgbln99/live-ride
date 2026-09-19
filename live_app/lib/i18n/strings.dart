@@ -304,6 +304,27 @@ class Strings {
   String get autoPauseHint =>
       'Licznik zatrzymuje się na postoju i rusza, gdy ruszysz.';
 
+  // ---------------------------------------------------------- jazda grupowa
+  String get groupRide => 'Jazda grupowa';
+  String get whatOthersSee => 'Co widzą obserwujący';
+  String get privacyExplainer =>
+      'Pola, których nie udostępniasz, w ogóle nie opuszczają telefonu. '
+      'Możesz je przełączyć w trakcie jazdy — kolejna migawka już to '
+      'uwzględni.';
+  String get sharePosition => 'Pozycja i dystans';
+  String get shareSpeed => 'Prędkość';
+  String get shareHeartRate => 'Tętno';
+  String get sharePower => 'Moc i kadencja';
+  String get sharesNothing =>
+      'Obserwujący zobaczą tylko Twoją nazwę i to, że jesteś w sesji.';
+  String get meetupPoint => 'Punkt zbiórki';
+  String get meetupHint =>
+      'Ustaw miejsce, w którym grupa ma się spotkać — pojawi się na mapie '
+      'każdego uczestnika.';
+  String get meetupHere => 'Tutaj';
+  String get quickMessages => 'Szybkie wiadomości';
+  String get noMessagesYet => 'Nikt jeszcze nic nie napisał.';
+
   // -------------------------------------------------------------- offline
   String get offline => 'Offline i synchronizacja';
   String get synchronisation => 'Synchronizacja';

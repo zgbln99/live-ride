@@ -93,7 +93,13 @@ class AppServices {
     );
     final offlineMaps = OfflineMapService();
     final pace = PacePartnerService();
-    final live = LiveSessionController(api, heartRate, profile);
+    final live = LiveSessionController(
+      api,
+      heartRate,
+      profile,
+      sensors: sensors,
+      settings: settings,
+    );
     final rides = RideStorageService(gpx, RideDao(db));
     final weather = WeatherService();
     final location = LocationService();
@@ -218,6 +224,7 @@ class AppServices {
     unawaited(sensors.restore());
     unawaited(alerts.restore());
     unawaited(race.restore());
+    unawaited(live.restore());
     unawaited(safety.restore());
     unawaited(strava.restore());
     unawaited(health.restore());

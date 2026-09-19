@@ -12,6 +12,7 @@ import '../../services/heart_rate_service.dart';
 import '../../services/live_service.dart';
 import '../../widgets/lr_common.dart';
 import '../live_sheet.dart';
+import '../group_ride_sheet.dart';
 import '../whoop_screen.dart';
 
 /// LIVE session status, the spectator link, and heart-rate sensors.
@@ -155,6 +156,16 @@ class _LiveTabState extends State<LiveTab> {
               ),
             ),
             const SizedBox(height: 24),
+            if (services.live.isActive) ...[
+              Padding(
+                padding: const EdgeInsets.fromLTRB(16, 0, 16, 8),
+                child: OutlinedButton.icon(
+                  icon: const Icon(Icons.groups_outlined, size: 18),
+                  label: Text(S.groupRide),
+                  onPressed: () => showGroupRideSheet(context, services),
+                ),
+              ),
+            ],
             LrSectionHeader(title: S.heartRate),
             _heartRatePanel(services),
           ],

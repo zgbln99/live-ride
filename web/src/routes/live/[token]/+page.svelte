@@ -4,28 +4,38 @@
     import * as M from "maplibre-gl";
     import "maplibre-gl/dist/maplibre-gl.css";
 
+    // Pola opcjonalne, bo zawodnik decyduje, co udostępnia. Brak pola
+    // znaczy „nie chcę tego pokazywać" i widok ma je wtedy pominąć, a nie
+    // wyświetlić zero, które wyglądałoby jak prawdziwy pomiar.
     type Rider = {
         id: string;
         display_name: string;
-        latitude: number;
-        longitude: number;
-        speed_kmh: number;
-        altitude_m: number;
-        heading_deg: number;
-        accuracy_m: number;
-        heart_rate_bpm: number;
-        distance_m: number;
-        elevation_gain_m: number;
+        latitude?: number;
+        longitude?: number;
+        speed_kmh?: number;
+        altitude_m?: number;
+        heading_deg?: number;
+        accuracy_m?: number;
+        heart_rate_bpm?: number;
+        cadence_rpm?: number;
+        power_watts?: number;
+        distance_m?: number;
+        elevation_gain_m?: number;
         last_seen_at: string;
+        role?: string;
     };
+
+    type Meetup = { latitude: number; longitude: number; label: string };
 
     type Snapshot = {
         title: string;
         trail_id: string;
         status: "active" | "ended";
+        kind?: string;
         started_at: string;
         ended_at: string;
         riders: Rider[];
+        meetup?: Meetup;
     };
 
     type RouteSnapshot = {
@@ -86,7 +96,7 @@
         (snapshot?.riders ?? [])
             .map((rider, index) => {
                 const seconds = secondsSince(rider.last_seen_at);
-                const projection = projectOnRoute(rider.longitude, rider.latitude);
+                const projection = projectOnRoute(rider.longitude!, rider.latitude!);
                 return {
                     ...rider,
                     fresh: seconds !== null && seconds < FRESH_AFTER_SECONDS,
@@ -107,7 +117,9 @@
                 if (a.progress !== null && b.progress !== null) return b.progress - a.progress;
                 if (a.progress !== null) return -1;
                 if (b.progress !== null) return 1;
-                return b.distance_m - a.distance_m;
+                // Zawodnik, który nie udostępnia dystansu, trafia na koniec
+                // rankingu zamiast na jego czoło z zerem.
+                return (b.distance_m ?? -1) - (a.distance_m ?? -1);
             }),
     );
 
@@ -267,6 +279,13 @@
         );
     }
 
+    /** Liczba albo kreska — nigdy zero udające pomiar. */
+    function num(value: number | undefined, digits = 0) {
+        return value === undefined || !Number.isFinite(value)
+            ? "—"
+            : value.toFixed(digits);
+    }
+
     function syncRoute() {
         if (!map || !map.isStyleLoaded() || routeCoordinates.length < 2) return;
         const data: GeoJSON.Feature<GeoJSON.LineString> = {
@@ -301,7 +320,7 @@
         const bounds = new M.LngLatBounds();
         for (const point of routeCoordinates) bounds.extend(point);
         for (const rider of snapshot?.riders ?? []) {
-            if (hasPosition(rider)) bounds.extend([rider.longitude, rider.latitude]);
+            if (hasPosition(rider)) bounds.extend([rider.longitude!, rider.latitude!]);
         }
         if (bounds.isEmpty()) return;
         map.fitBounds(bounds, {
@@ -317,7 +336,7 @@
         followSelected = true;
         if (map && hasPosition(rider)) {
             map.easeTo({
-                center: [rider.longitude, rider.latitude],
+                center: [rider.longitude!, rider.latitude!],
                 zoom: Math.max(map.getZoom(), zoom),
                 duration: 450,
             });
@@ -334,6 +353,33 @@
         return root;
     }
 
+    let meetupMarker: M.Marker | null = null;
+
+    /** Punkt zbiórki grupy — jeden znacznik, nie związany z zawodnikami. */
+    function syncMeetup() {
+        if (!map) return;
+        const meetup = snapshot?.meetup;
+        if (!meetup) {
+            meetupMarker?.remove();
+            meetupMarker = null;
+            return;
+        }
+        if (!meetupMarker) {
+            const element = document.createElement("div");
+            element.className = "lr-meetup";
+            element.innerHTML =
+                '<svg viewBox="0 0 24 24" aria-hidden="true">' +
+                '<path fill="currentColor" d="M12 2a7 7 0 0 0-7 7c0 5.25 7 13 7 13s7-7.75 7-13a7 7 0 0 0-7-7m0 9.5A2.5 2.5 0 1 1 12 6.5a2.5 2.5 0 0 1 0 5"/>' +
+                "</svg>";
+            element.title = meetup.label || "Punkt zbiórki";
+            meetupMarker = new M.Marker({ element, anchor: "bottom" })
+                .setLngLat([meetup.longitude, meetup.latitude])
+                .addTo(map);
+        } else {
+            meetupMarker.setLngLat([meetup.longitude, meetup.latitude]);
+        }
+    }
+
     function syncMarkers() {
         if (!map || !snapshot) return;
         const alive = new Set<string>();
@@ -343,11 +389,11 @@
             let marker = markers.get(rider.id);
             if (!marker) {
                 marker = new M.Marker({ element: markerElement(rider), anchor: "center" })
-                    .setLngLat([rider.longitude, rider.latitude])
+                    .setLngLat([rider.longitude!, rider.latitude!])
                     .addTo(map);
                 markers.set(rider.id, marker);
             } else {
-                marker.setLngLat([rider.longitude, rider.latitude]);
+                marker.setLngLat([rider.longitude!, rider.latitude!]);
             }
             const element = marker.getElement();
             element.style.setProperty("--rider-colour", rider.colour);
@@ -363,9 +409,11 @@
             }
         }
 
+        syncMeetup();
+
         if (followSelected && selected && hasPosition(selected)) {
             map.easeTo({
-                center: [selected.longitude, selected.latitude],
+                center: [selected.longitude!, selected.latitude!],
                 duration: 800,
             });
         }
@@ -544,7 +592,7 @@
                                 </span>
                             </div>
                             <div class="speed">
-                                <b>{rider.speed_kmh.toFixed(1)}</b><span>km/h</span>
+                                <b>{num(rider.speed_kmh, 1)}</b><span>km/h</span>
                             </div>
                         </div>
 
@@ -561,17 +609,17 @@
                         {/if}
 
                         <div class="metrics">
-                            <div><span>DYSTANS</span><b>{km(rider.distance_m)}</b></div>
+                            <div><span>DYSTANS</span><b>{rider.distance_m === undefined ? "—" : km(rider.distance_m)}</b></div>
                             <div>
-                                <span>TĘTNO</span><b>{rider.heart_rate_bpm || "—"}{rider.heart_rate_bpm ? " bpm" : ""}</b>
+                                <span>TĘTNO</span><b>{rider.heart_rate_bpm ? `${rider.heart_rate_bpm} bpm` : "—"}</b>
                             </div>
-                            <div><span>PRZEWYŻSZENIE</span><b>{Math.round(rider.elevation_gain_m)} m</b></div>
-                            <div><span>WYSOKOŚĆ</span><b>{Math.round(rider.altitude_m)} m</b></div>
+                            <div><span>PRZEWYŻSZENIE</span><b>{rider.elevation_gain_m === undefined ? "—" : `${Math.round(rider.elevation_gain_m)} m`}</b></div>
+                            <div><span>MOC</span><b>{rider.power_watts ? `${rider.power_watts} W` : "—"}</b></div>
                         </div>
 
                         <footer>
-                            {ago(rider.secondsSinceUpdate)} · GPS ±{Math.round(rider.accuracy_m)} m
-                            {#if rider.heading_deg > 0}· kierunek {compass(rider.heading_deg)}{/if}
+                            {ago(rider.secondsSinceUpdate)}{#if rider.accuracy_m !== undefined} · GPS ±{Math.round(rider.accuracy_m)} m{/if}
+                            {#if (rider.heading_deg ?? 0) > 0}· kierunek {compass(rider.heading_deg!)}{/if}
                         </footer>
                     </button>
                 {/each}
@@ -618,7 +666,7 @@
                     <div class="who">
                         <strong>{rider.display_name}</strong>
                         <span>
-                            {rider.speed_kmh.toFixed(1)} km/h · {km(rider.distance_m)}
+                            {num(rider.speed_kmh, 1)} km/h · {rider.distance_m === undefined ? "—" : km(rider.distance_m)}
                             {#if rider.progress !== null}· {Math.round(rider.progress * 100)}%{/if}
                         </span>
                     </div>
@@ -634,6 +682,13 @@
 </main>
 
 <style>
+    :global(.lr-meetup) {
+        width: 30px;
+        height: 30px;
+        color: #00bfd8;
+        filter: drop-shadow(0 2px 4px rgba(0, 0, 0, 0.5));
+    }
+
     :global(html),
     :global(body) {
         margin: 0;

@@ -222,6 +222,12 @@ func registerRoutes(se *core.ServeEvent, client meilisearch.ServiceManager) {
 	se.Router.GET("/live-routes/{token}", routes.LiveRidePublicRouteByToken)
 	se.Router.GET("/live-segments/{token}/leaderboard", routes.LiveRideSegmentLeaderboard)
 
+	// Jazda grupowa: prywatność per zawodnik, punkt zbiórki i wiadomości.
+	se.Router.POST("/live-rides/{id}/privacy", routes.LiveRideSetPrivacy).Bind(apis.RequireAuth())
+	se.Router.POST("/live-rides/{id}/meetup", routes.LiveRideSetMeetup).Bind(apis.RequireAuth())
+	se.Router.POST("/live-rides/{id}/messages", routes.LiveRidePostMessage).Bind(apis.RequireAuth())
+	se.Router.GET("/live/{token}/messages", routes.LiveRideMessages)
+
 	se.Router.POST("/auth/token", routes.AuthToken)
 	se.Router.POST("/user/email", routes.UserEmailChange)
 	se.Router.POST("/waypoint/cluster", routes.WaypointCluster)

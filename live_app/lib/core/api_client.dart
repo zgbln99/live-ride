@@ -284,6 +284,48 @@ class ApiClient {
     );
   }
 
+  /// Zapisuje, co zawodnik udostępnia obserwującym.
+  Future<void> setLivePrivacy(
+    String sessionId,
+    Map<String, dynamic> privacy,
+  ) async {
+    await dio.post('/live-rides/$sessionId/privacy', data: privacy);
+  }
+
+  Future<void> setLiveMeetup(
+    String sessionId, {
+    double? lat,
+    double? lon,
+    String label = '',
+    bool clear = false,
+  }) async {
+    await dio.post(
+      '/live-rides/$sessionId/meetup',
+      data: clear
+          ? {'clear': true}
+          : {'latitude': lat, 'longitude': lon, 'label': label},
+    );
+  }
+
+  Future<void> postLiveMessage(String sessionId, String body) async {
+    await dio.post('/live-rides/$sessionId/messages', data: {'body': body});
+  }
+
+  /// Wiadomości grupy. Czyta je token udostępnienia, tak jak migawkę.
+  Future<List<Map<String, dynamic>>> fetchLiveMessages(
+    String shareToken,
+  ) async {
+    final response = await dio.get<Map<String, dynamic>>(
+      '/live/$shareToken/messages',
+    );
+    final messages = response.data?['messages'];
+    if (messages is! List) return const [];
+    return [
+      for (final entry in messages)
+        if (entry is Map) Map<String, dynamic>.from(entry),
+    ];
+  }
+
   Future<void> stopLive(String sessionId) async {
     await dio.post('/live-rides/$sessionId/stop');
   }
