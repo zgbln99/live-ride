@@ -1,5 +1,6 @@
 export 'local_trail_store_legacy.dart' hide saveNewLocalTrail;
 
+import 'package:objectbox/objectbox.dart';
 import 'package:wanderer/entities/trail_entity.dart';
 import 'package:wanderer/models/trail.dart';
 import 'package:wanderer/objectbox.g.dart';
