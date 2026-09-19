@@ -3,7 +3,7 @@ set -euo pipefail
 
 cd "$(dirname "$0")"
 TMP="$(mktemp -d)"
-trap 'rm -rf "$TMP"' EXIT
+trap 'rm -rf "$TMP" lib.restored' EXIT
 
 # The Lock Screen Live Activity needs an extra Xcode target. Skip it with
 # --no-live-activity if you want the plainest possible project.
@@ -21,8 +21,17 @@ cp -R lib "$TMP/lib"
 flutter create . --platforms=ios,android --org pl.marekpiatak --project-name live_ride
 
 cp "$TMP/pubspec.yaml" pubspec.yaml
+
+# Restore our sources over whatever `flutter create` left behind.
+#
+# The new tree is built alongside the old one and only swapped in once the
+# copy is complete, so a failure mid-copy can never leave lib/ missing —
+# which would take the whole application down with it, including
+# lib/data/.
+rm -rf lib.restored
+cp -R "$TMP/lib" lib.restored
 rm -rf lib
-cp -R "$TMP/lib" lib
+mv lib.restored lib
 
 python3 <<'PY'
 from pathlib import Path

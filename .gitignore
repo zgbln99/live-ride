@@ -10,7 +10,16 @@ search/dumps
 run.sh
 build*.sh
 start*.*
+
+# Runtime data directories (PocketBase, Meilisearch, uploads). The pattern is
+# unanchored, so it matches at ANY depth — including application source that
+# happens to live in a folder called `data`. That silently hid the whole Live
+# Ride persistence layer from Git once, so the exceptions below are load
+# bearing: the directory itself has to be re-included before Git will even
+# look inside it.
 data*/
+!live_app/lib/data/
+!live_app/lib/data/**
 
 plugins/*/dist/
 plugin_dist/
