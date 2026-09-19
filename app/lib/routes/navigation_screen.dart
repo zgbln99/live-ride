@@ -13,11 +13,6 @@ import 'package:wanderer/util/format.dart';
 import 'package:wanderer/util/geo/polyline.dart';
 import 'package:wanderer/routes/navigation_screen_legacy.dart' as legacy;
 
-/// Live Ride's cycling navigation presentation.
-///
-/// The mature navigation engine remains underneath unchanged. Live Ride only
-/// adds a compact, glanceable maneuver card so the map stays the dominant
-/// surface instead of stacking a second dashboard over the existing controls.
 class NavigationScreen extends ConsumerStatefulWidget {
   final String id;
   final NavigateResponse response;
@@ -100,7 +95,7 @@ class _NavigationScreenState extends ConsumerState<NavigationScreen> {
           recordingCosting: widget.recordingCosting,
         ),
         if (!widget.isRecording)
-          _LiveRideTurnCard(
+          _LiveRideTurnBar(
             maneuvers: widget.response.maneuvers,
             currentIndex: currentIndex,
             unit: unit,
@@ -110,8 +105,8 @@ class _NavigationScreenState extends ConsumerState<NavigationScreen> {
   }
 }
 
-class _LiveRideTurnCard extends StatelessWidget {
-  const _LiveRideTurnCard({
+class _LiveRideTurnBar extends StatelessWidget {
+  const _LiveRideTurnBar({
     required this.maneuvers,
     required this.currentIndex,
     required this.unit,
@@ -137,87 +132,79 @@ class _LiveRideTurnCard extends StatelessWidget {
       right: 0,
       child: SafeArea(
         bottom: false,
-        child: Padding(
-          padding: const EdgeInsets.fromLTRB(12, 8, 12, 0),
-          child: Material(
-            color: Colors.transparent,
-            child: Container(
-              padding: const EdgeInsets.fromLTRB(14, 12, 14, 12),
-              decoration: BoxDecoration(
-                color: const Color(0xF2FFFFFF),
-                borderRadius: BorderRadius.circular(18),
-                border: Border.all(color: const Color(0x16000000)),
-                boxShadow: const [
-                  BoxShadow(
-                    color: Color(0x26000000),
-                    blurRadius: 18,
-                    offset: Offset(0, 5),
-                  ),
-                ],
-              ),
+        child: Material(
+          color: const Color(0xF5111111),
+          elevation: 6,
+          child: SizedBox(
+            height: 104,
+            child: Padding(
+              padding: const EdgeInsets.fromLTRB(14, 10, 14, 10),
               child: Row(
-                crossAxisAlignment: CrossAxisAlignment.center,
                 children: [
-                  Container(
-                    width: 56,
-                    height: 56,
-                    decoration: BoxDecoration(
-                      color: Colors.black,
-                      borderRadius: BorderRadius.circular(16),
-                    ),
-                    child: Icon(
-                      _maneuverIcon(maneuver.type),
-                      color: Colors.white,
-                      size: 34,
+                  SizedBox(
+                    width: 62,
+                    child: Center(
+                      child: Icon(
+                        _maneuverIcon(maneuver.type),
+                        color: Colors.white,
+                        size: 50,
+                      ),
                     ),
                   ),
-                  const SizedBox(width: 12),
+                  const SizedBox(width: 10),
                   Expanded(
                     child: Column(
+                      mainAxisAlignment: MainAxisAlignment.center,
                       crossAxisAlignment: CrossAxisAlignment.start,
-                      mainAxisSize: MainAxisSize.min,
                       children: [
                         Row(
                           crossAxisAlignment: CrossAxisAlignment.end,
                           children: [
-                            Flexible(
+                            Expanded(
                               child: Text(
                                 formatDistance(nextMeters, unit: unit),
                                 maxLines: 1,
                                 overflow: TextOverflow.fade,
                                 softWrap: false,
                                 style: const TextStyle(
-                                  color: Colors.black,
-                                  fontSize: 32,
+                                  color: Colors.white,
+                                  fontSize: 36,
                                   height: 0.95,
                                   fontWeight: FontWeight.w900,
-                                  letterSpacing: -1.0,
+                                  letterSpacing: -1.4,
                                 ),
                               ),
                             ),
-                            const SizedBox(width: 10),
-                            Padding(
-                              padding: const EdgeInsets.only(bottom: 2),
+                            Container(
+                              margin: const EdgeInsets.only(bottom: 3),
+                              padding: const EdgeInsets.symmetric(
+                                horizontal: 9,
+                                vertical: 5,
+                              ),
+                              decoration: BoxDecoration(
+                                color: Colors.white.withValues(alpha: 0.12),
+                                borderRadius: BorderRadius.circular(999),
+                              ),
                               child: Text(
-                                'pozostało ${formatDistance(remainingMeters, unit: unit)}',
+                                formatDistance(remainingMeters, unit: unit),
                                 style: const TextStyle(
-                                  color: Colors.black54,
+                                  color: Colors.white70,
                                   fontSize: 11,
-                                  fontWeight: FontWeight.w700,
+                                  fontWeight: FontWeight.w800,
                                 ),
                               ),
                             ),
                           ],
                         ),
-                        const SizedBox(height: 5),
+                        const SizedBox(height: 7),
                         Text(
                           maneuver.instruction,
                           maxLines: 1,
                           overflow: TextOverflow.ellipsis,
                           style: const TextStyle(
-                            color: Colors.black87,
+                            color: Colors.white,
                             fontSize: 14,
-                            height: 1.1,
+                            height: 1,
                             fontWeight: FontWeight.w700,
                           ),
                         ),
