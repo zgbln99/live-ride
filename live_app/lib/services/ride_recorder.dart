@@ -24,11 +24,14 @@ import 'garage_service.dart';
 import 'health_service.dart';
 import 'race_mode_controller.dart';
 import '../models/pace_partner.dart';
+import '../models/ride_alert.dart';
+import '../models/training.dart';
 import 'pace_partner.dart';
 import 'segment_matcher.dart';
 import 'safety_service.dart';
 import 'segment_service.dart';
 import 'sync_service.dart';
+import 'workout_controller.dart';
 import 'sensor_hub.dart';
 import 'weather_service.dart';
 
@@ -51,6 +54,7 @@ class RideRecorder extends ChangeNotifier {
     required this.race,
     required this.safety,
     required this.segments,
+    required this.workoutRunner,
     required this.pace,
     required this.sync,
     required this.live,
@@ -69,6 +73,7 @@ class RideRecorder extends ChangeNotifier {
   final RaceModeController race;
   final SafetyService safety;
   final SegmentService segments;
+  final WorkoutController workoutRunner;
   final PacePartnerService pace;
   final SyncService sync;
 
@@ -198,6 +203,8 @@ class RideRecorder extends ChangeNotifier {
 
     _ticker = Timer.periodic(const Duration(seconds: 1), (_) {
       _evaluateAutoPause();
+      _feedWorkout();
+      _publishWorkoutAlert();
       _feedAlerts();
       if (_state != RideState.recording) return;
       _publish();
@@ -345,6 +352,7 @@ class RideRecorder extends ChangeNotifier {
     unawaited(race.reset());
     safety.stopWatching();
     pace.stop();
+    workoutRunner.stop();
 
     _state = RideState.idle;
     _metrics = finalMetrics;
@@ -458,6 +466,9 @@ class RideRecorder extends ChangeNotifier {
   /// Stan aktualnego segmentu albo null.
   SegmentProgress? get segmentProgress => segments.matcher.progress;
 
+  /// Stan bieżącego kroku treningu albo null.
+  WorkoutProgress? get workoutProgress => workoutRunner.progress;
+
   /// Porównanie z wirtualnym rywalem albo null, gdy żadnego nie ma.
   PaceComparison? get paceComparison =>
       pace.compare(riderMeters: _accumulator.distanceMeters, elapsed: elapsed);
@@ -543,6 +554,45 @@ class RideRecorder extends ChangeNotifier {
         resume();
       }
     }
+  }
+
+  /// Karmi trening stanem jazdy raz na sekundę.
+  void _feedWorkout() {
+    if (_state != RideState.recording) return;
+    if (!workoutRunner.isRunning) return;
+    final snapshot = sensors.snapshot;
+    workoutRunner.update(
+      elapsed: elapsed,
+      distanceMeters: _accumulator.distanceMeters,
+      powerWatts: snapshot.powerWatts,
+      heartRate: _metrics.heartRate,
+      cadenceRpm: snapshot.cadenceRpm,
+      speedKmh: _accumulator.speedKmh,
+    );
+  }
+
+  /// Zamienia odchylenie od celu treningu w powiadomienie.
+  void _publishWorkoutAlert() {
+    final deviation = workoutRunner.takeDeviationAlert();
+    final progress = workoutRunner.progress;
+    if (deviation == null || progress == null) return;
+    alerts.show(
+      RideAlert(
+        kind: switch (progress.step.target) {
+          WorkoutTarget.power => AlertKind.powerHigh,
+          WorkoutTarget.heartRate => AlertKind.heartRateHigh,
+          WorkoutTarget.cadence => AlertKind.cadenceLow,
+          _ => AlertKind.timeInterval,
+        },
+        message: deviation < 0
+            ? '${progress.step.name}: ${S.pushHarder.toLowerCase()} '
+                  '(${progress.step.targetLabel})'
+            : '${progress.step.name}: ${S.easeOff.toLowerCase()} '
+                  '(${progress.step.targetLabel})',
+        at: DateTime.now(),
+        severity: AlertSeverity.warning,
+      ),
+    );
   }
 
   /// Podaje silnikowi powiadomień stan jazdy raz na sekundę.

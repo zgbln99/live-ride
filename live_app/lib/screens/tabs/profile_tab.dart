@@ -24,6 +24,7 @@ import '../segments_screen.dart';
 import '../sensors_screen.dart';
 import '../training_zones_screen.dart';
 import '../whoop_screen.dart';
+import '../workouts_screen.dart';
 
 /// Rider identity and app preferences.
 class ProfileTab extends StatefulWidget {
@@ -300,6 +301,29 @@ class _ProfileTabState extends State<ProfileTab> {
                       onTap: () => Navigator.of(context).push(
                         MaterialPageRoute<void>(
                           builder: (_) => const IntegrationsScreen(),
+                        ),
+                      ),
+                    ),
+                  ),
+                  const Divider(height: 1),
+                  AnimatedBuilder(
+                    animation: services.workouts,
+                    builder: (context, _) => ListTile(
+                      leading: const Icon(Icons.fitness_center),
+                      title: Text(S.workouts),
+                      subtitle: Text(
+                        services.workouts.workouts.isEmpty
+                            ? S.noWorkouts
+                            : services.workouts.workouts
+                                  .map((workout) => workout.name)
+                                  .join(' · '),
+                        maxLines: 2,
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                      trailing: const Icon(Icons.chevron_right),
+                      onTap: () => Navigator.of(context).push(
+                        MaterialPageRoute<void>(
+                          builder: (_) => const WorkoutsScreen(),
                         ),
                       ),
                     ),

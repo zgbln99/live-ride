@@ -8,6 +8,7 @@ import '../data/ride_dao.dart';
 import '../data/bike_dao.dart';
 import '../data/route_dao.dart';
 import '../data/segment_dao.dart';
+import '../data/workout_dao.dart';
 import '../data/settings_dao.dart';
 import 'alert_controller.dart';
 import 'garage_service.dart';
@@ -27,6 +28,8 @@ import 'safety_service.dart';
 import 'offline_map_service.dart';
 import 'segment_service.dart';
 import 'sync_service.dart';
+import 'workout_controller.dart';
+import 'workout_service.dart';
 import 'route_library_service.dart';
 import 'route_weather_service.dart';
 import 'sensor_hub.dart';
@@ -50,6 +53,8 @@ class AppServices {
     required this.rides,
     required this.garage,
     required this.segments,
+    required this.workouts,
+    required this.workoutRunner,
     required this.strava,
     required this.health,
     required this.sync,
@@ -84,6 +89,8 @@ class AppServices {
     final race = RaceModeController(settings: settings);
     final safety = SafetyService(settings: settings);
     final segments = SegmentService(SegmentDao(db));
+    final workouts = WorkoutService(WorkoutDao(db));
+    final workoutRunner = WorkoutController();
     final strava = StravaService(settings: settings);
     final health = HealthService(settings: settings, rides: RideDao(db));
     final sync = SyncService(
@@ -114,6 +121,8 @@ class AppServices {
       rides: rides,
       garage: garage,
       segments: segments,
+      workouts: workouts,
+      workoutRunner: workoutRunner,
       strava: strava,
       health: health,
       sync: sync,
@@ -142,6 +151,7 @@ class AppServices {
         garage: garage,
         health: health,
         segments: segments,
+        workoutRunner: workoutRunner,
         pace: pace,
         sync: sync,
         race: race,
@@ -167,6 +177,12 @@ class AppServices {
 
   /// Segmenty i rekordy na nich.
   final SegmentService segments;
+
+  /// Biblioteka treningów.
+  final WorkoutService workouts;
+
+  /// Trening w trakcie jazdy.
+  final WorkoutController workoutRunner;
 
   /// Wysyłka przejazdów do Stravy.
   final StravaService strava;
@@ -217,6 +233,7 @@ class AppServices {
     await profile.load();
     await garage.load();
     await segments.load();
+    await workouts.load();
     // These reach the filesystem and the Bluetooth radio, so they run in the
     // background rather than holding up the first frame.
     unawaited(spotify.restore());
@@ -243,6 +260,8 @@ class AppServices {
     safety.dispose();
     garage.dispose();
     segments.dispose();
+    workouts.dispose();
+    workoutRunner.dispose();
     strava.dispose();
     health.dispose();
     sync.dispose();

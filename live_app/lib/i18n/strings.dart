@@ -304,6 +304,27 @@ class Strings {
   String get autoPauseHint =>
       'Licznik zatrzymuje się na postoju i rusza, gdy ruszysz.';
 
+  // -------------------------------------------------------------- treningi
+  String get workouts => 'Treningi';
+  String get workout => 'Trening';
+  String get noWorkouts => 'Nie masz jeszcze treningów';
+  String get noWorkoutsMessage =>
+      'Dodaj gotowe treningi albo ułóż własny z kroków: rozgrzewka, praca, '
+      'odpoczynek, schłodzenie.';
+  String get addDefaultWorkouts => 'Dodaj gotowe treningi';
+  String get startWorkout => 'Rozpocznij trening';
+  String get stopWorkout => 'Zakończ trening';
+  String get skipStep => 'Następny krok';
+  String get nextStep => 'Dalej';
+  String get target => 'Cel';
+  String get onTarget => 'W CELU';
+  String get pushHarder => 'ZA NISKO';
+  String get easeOff => 'ZA WYSOKO';
+  String get noSensorForTarget => 'brak sensora';
+  String get steps => 'Kroki';
+  String get workoutNeedsFtp =>
+      'Podaj FTP w profilu, żeby cele mocy miały wartości w watach.';
+
   // ---------------------------------------------------------- jazda grupowa
   String get groupRide => 'Jazda grupowa';
   String get whatOthersSee => 'Co widzą obserwujący';

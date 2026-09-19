@@ -26,10 +26,12 @@ import '../widgets/ride_page_view.dart';
 import '../widgets/screen_lock_overlay.dart';
 import '../widgets/segment_banner.dart';
 import '../widgets/sos_overlay.dart';
+import '../widgets/workout_banner.dart';
 import '../widgets/ride_map.dart';
 import '../widgets/weather_field.dart';
 import 'data_field_editor.dart';
 import 'pace_partner_sheet.dart';
+import 'workouts_screen.dart';
 import 'live_sheet.dart';
 import 'music_sheet.dart';
 import 'ride_summary_screen.dart';
@@ -157,6 +159,7 @@ class _RideComputerScreenState extends State<RideComputerScreen> {
         services.alerts,
         services.race,
         services.safety,
+        services.workoutRunner,
         _chrome,
       ]),
       builder: (context, _) {
@@ -210,7 +213,20 @@ class _RideComputerScreenState extends State<RideComputerScreen> {
                                 // Segment i rywal mają pierwszeństwo nad ClimbPro:
                                 // gdy trwa próba na segmencie, to ona jest tym, o
                                 // czym zawodnik myśli.
-                                if (recorder.segmentProgress != null)
+                                // Trening jest ponad wszystkim: jeśli zawodnik
+                                // go prowadzi, to on rządzi jego tempem.
+                                if (recorder.workoutProgress != null)
+                                  WorkoutBanner(
+                                    progress: recorder.workoutProgress!,
+                                    metric: profile.metricUnits,
+                                    onSkip: () =>
+                                        services.workoutRunner.skipStep(
+                                          elapsed: recorder.elapsed,
+                                          distanceMeters:
+                                              recorder.metrics.distanceMeters,
+                                        ),
+                                  )
+                                else if (recorder.segmentProgress != null)
                                   SegmentBanner(
                                     progress: recorder.segmentProgress!,
                                     metric: profile.metricUnits,
@@ -660,6 +676,7 @@ class _RideComputerScreenState extends State<RideComputerScreen> {
           services.profile,
           services.race,
           services.safety,
+          services.workoutRunner,
         ]),
         builder: (context, _) {
           final profile = services.profile.profile;
@@ -732,6 +749,39 @@ class _RideComputerScreenState extends State<RideComputerScreen> {
                     },
                     title: Text(S.boostBrightness),
                   ),
+                ListTile(
+                  leading: const Icon(Icons.fitness_center),
+                  title: Text(S.workout),
+                  subtitle: Text(
+                    services.workoutRunner.workout?.name ?? S.noWorkoutsMessage,
+                    maxLines: 2,
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                  trailing: services.workoutRunner.isRunning
+                      ? TextButton(
+                          onPressed: () {
+                            services.workoutRunner.stop();
+                            Navigator.pop(sheetContext);
+                          },
+                          child: Text(S.stopWorkout),
+                        )
+                      : null,
+                  onTap: () {
+                    Navigator.pop(sheetContext);
+                    Navigator.of(context).push(
+                      MaterialPageRoute<void>(
+                        builder: (_) => WorkoutsScreen(
+                          onStart: (workout) => services.workoutRunner.start(
+                            workout,
+                            elapsed: services.recorder.elapsed,
+                            distanceMeters:
+                                services.recorder.metrics.distanceMeters,
+                          ),
+                        ),
+                      ),
+                    );
+                  },
+                ),
                 ListTile(
                   leading: const Icon(Icons.speed),
                   title: Text(S.pacePartner),
