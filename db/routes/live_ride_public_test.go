@@ -822,7 +822,11 @@ func TestLiveRideFileNameIsHeaderSafe(t *testing.T) {
 	if name == "" {
 		t.Fatal("pusta nazwa pliku")
 	}
-	fmt.Sprintf("attachment; filename=%q.gpx", name)
+	// Nagłówek musi dać się złożyć bez cytowania spoza ASCII.
+	header := fmt.Sprintf("attachment; filename=%q.gpx", name)
+	if !strings.Contains(header, name) {
+		t.Fatalf("nagłówek nie zawiera nazwy: %s", header)
+	}
 }
 
 // ------------------------------------------------------------------- GPX
