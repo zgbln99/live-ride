@@ -52,7 +52,6 @@
         return Date.now() - new Date(date).getTime() < 20_000;
     };
 
-
     function decodePolyline(encoded: string, precision = 6): [number, number][] {
         const coordinates: [number, number][] = [];
         const factor = Math.pow(10, precision);
@@ -103,7 +102,7 @@
             id: "live-route-line",
             type: "line",
             source: "live-route",
-            paint: { "line-color": "#2563eb", "line-width": 5, "line-opacity": 0.95 },
+            paint: { "line-color": "#06b6d4", "line-width": 5, "line-opacity": 0.98 },
         });
     }
 
@@ -136,7 +135,7 @@
             syncRoute();
             fitInitialBounds();
         } catch {
-            // The ride remains watchable even if a route has not been attached.
+            // A Live Ride remains watchable even when no route is attached.
         }
     }
 
@@ -196,8 +195,6 @@
     onMount(() => {
         map = new M.Map({
             container: "live-map",
-            // Development default only. Before production this should use the
-            // Wanderer operator's configured map style / self-hosted tiles.
             style: "https://tiles.openfreemap.org/styles/liberty",
             center: [14.5, 52.0],
             zoom: 6,
@@ -222,18 +219,19 @@
 </script>
 
 <svelte:head>
-    <title>{snapshot?.title ?? "Live Ride"} · Wanderer</title>
+    <title>{snapshot?.title ?? "Live Ride"} · Live Ride</title>
+    <meta name="theme-color" content="#f5f6f8" />
 </svelte:head>
 
 <div class="live-shell">
     <header>
         <div>
-            <div class="eyebrow"><span class="dot"></span> LIVE RIDE</div>
-            <h1>{snapshot?.title ?? "Ładowanie rajdu…"}</h1>
+            <div class="brand">LIVE RIDE</div>
+            <h1>{snapshot?.title ?? "Ładowanie przejazdu…"}</h1>
         </div>
         {#if snapshot}
             <div class:ended={snapshot.status === "ended"} class="status">
-                {snapshot.status === "active" ? "NA ŻYWO" : "ZAKOŃCZONY"}
+                {snapshot.status === "active" ? "● NA ŻYWO" : "ZAKOŃCZONY"}
             </div>
         {/if}
     </header>
@@ -292,9 +290,8 @@
     :global(.live-rider-marker.stale) { opacity: 0.45; }
     .live-shell { min-height: 100vh; background: #f5f6f8; color: #111827; padding: 24px; }
     header { display: flex; align-items: center; justify-content: space-between; gap: 24px; max-width: 1500px; margin: 0 auto 18px; }
-    h1 { margin: 4px 0 0; font-size: clamp(1.6rem, 3vw, 2.5rem); }
-    .eyebrow { font-size: .75rem; font-weight: 800; letter-spacing: .16em; color: #64748b; }
-    .dot { display: inline-block; width: 8px; height: 8px; border-radius: 50%; background: #ef4444; margin-right: 7px; }
+    h1 { margin: 4px 0 0; font-size: clamp(1.6rem, 3vw, 2.5rem); letter-spacing: -.03em; }
+    .brand { font-size: .75rem; font-weight: 900; letter-spacing: .18em; color: #0f172a; }
     .status { padding: 9px 13px; border-radius: 999px; background: #dcfce7; color: #166534; font-size: .78rem; font-weight: 800; }
     .status.ended { background: #e5e7eb; color: #374151; }
     .error { max-width: 1500px; margin: 0 auto 14px; padding: 10px 14px; border-radius: 12px; background: #fee2e2; color: #991b1b; }
@@ -318,8 +315,9 @@
     .empty { color: #64748b; }
     @media (max-width: 900px) {
         .live-shell { padding: 12px; }
+        header { align-items: flex-start; }
         main { grid-template-columns: 1fr; }
-        #live-map { min-height: 55vh; }
+        #live-map { min-height: 55vh; border-radius: 18px; }
         aside { padding-bottom: 30px; }
     }
 </style>
