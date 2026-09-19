@@ -21,6 +21,7 @@ import 'alert_controller.dart';
 import 'alert_engine.dart';
 import 'climb_tracker.dart';
 import 'garage_service.dart';
+import 'health_service.dart';
 import 'race_mode_controller.dart';
 import '../models/pace_partner.dart';
 import 'pace_partner.dart';
@@ -45,6 +46,7 @@ class RideRecorder extends ChangeNotifier {
     required this.sensors,
     required this.alerts,
     required this.garage,
+    required this.health,
     required this.race,
     required this.safety,
     required this.segments,
@@ -61,6 +63,7 @@ class RideRecorder extends ChangeNotifier {
   final SensorHub sensors;
   final AlertController alerts;
   final GarageService garage;
+  final HealthService health;
   final RaceModeController race;
   final SafetyService safety;
   final SegmentService segments;

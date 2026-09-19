@@ -304,6 +304,61 @@ class Strings {
   String get autoPauseHint =>
       'Licznik zatrzymuje się na postoju i rusza, gdy ruszysz.';
 
+  // ------------------------------------------------------------ integracje
+  String get integrations => 'Integracje';
+  String get exportAndSync => 'Eksport i synchronizacja';
+  String get stravaNeedsCredentials =>
+      'Podaj client ID i sekret aplikacji Strava, żeby się połączyć.';
+  String get stravaStateMismatch =>
+      'Odpowiedź Stravy nie pasuje do zapytania. Spróbuj ponownie.';
+  String get stravaAccessDenied => 'Nie zgodziłeś się na dostęp.';
+  String get stravaAuthFailed => 'Strava odrzuciła logowanie.';
+  String get stravaNoCode => 'Strava nie odesłała kodu autoryzacji.';
+  String get stravaSignInAgain => 'Zaloguj się do Stravy ponownie.';
+  String get stravaRateLimited =>
+      'Strava chwilowo ogranicza zapytania. Spróbuj za kilka minut.';
+  String get stravaRejected => 'Strava odrzuciła ten plik.';
+  String get stravaTimeout => 'Strava nie odpowiedziała na czas.';
+  String get stravaUnreachable => 'Brak połączenia ze Stravą.';
+  String get stravaNoUploadId => 'Strava nie podała identyfikatora wysyłki.';
+  String get stravaSetupTitle => 'Własna aplikacja Strava';
+  String get stravaSetupIntro =>
+      'Strava wymaga, żeby każda aplikacja miała własne client ID i sekret. '
+      'Live Ride celowo nie ma wspólnych — sekret w aplikacji rozdawanej '
+      'wszystkim należałby do wszystkich naraz. Twój zostaje na tym '
+      'telefonie.';
+  String get stravaStep1 =>
+      'Wejdź na strava.com/settings/api i utwórz aplikację.';
+  String get stravaStep2 => 'W polu Authorization Callback Domain wpisz:';
+  String get stravaStep3 => 'Skopiuj Client ID i Client Secret poniżej.';
+  String get clientSecret => 'Client secret';
+  String get connectStrava => 'POŁĄCZ ZE STRAVĄ';
+  String get uploadToStrava => 'Wyślij do Stravy';
+  String get uploadDone => 'Wysłano';
+  String get uploadProcessing => 'Strava przetwarza plik…';
+  String get uploadFailed => 'Wysyłka nie powiodła się';
+  String get noPublicApi => 'Brak publicznego API';
+  String noPublicApiMessage(String name) =>
+      '$name nie udostępnia API aplikacjom spoza swojego programu '
+      'partnerskiego i nie da się o nie poprosić jako osoba prywatna. '
+      'Przycisk „Połącz", który nic nie robi, byłby kłamstwem — zamiast '
+      'niego Live Ride daje to, co naprawdę działa: eksport pliku, który '
+      '$name zaimportuje.';
+  String get exportFile => 'Eksportuj plik';
+  String get healthTitle => 'Apple Health / Health Connect';
+  String get healthIntro =>
+      'Zapis jest jednostronny i tylko na żądanie. Live Ride nic z Health nie '
+      'czyta i nic nie wysyła sam z siebie.';
+  String get healthAutoExport => 'Zapisuj przejazdy automatycznie';
+  String get healthGrant => 'Udziel zgody';
+  String get healthReady => 'Gotowe do zapisu';
+  String get healthDenied => 'Brak zgody na zapis';
+  String get healthNotInstalled =>
+      'Zainstaluj Health Connect, żeby zapisywać przejazdy.';
+  String get healthUnsupported =>
+      'Ta platforma nie udostępnia Apple Health ani Health Connect.';
+  String get exportedToHealth => 'Zapisano w Health';
+
   // ---------------------------------------------------------- bezpieczeństwo
   String get safety => 'Bezpieczeństwo';
   String get crashDetection => 'Wykrywanie upadku';

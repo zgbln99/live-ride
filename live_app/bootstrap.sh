@@ -36,6 +36,14 @@ p['CFBundleName'] = 'Live Ride'
 p['NSLocationWhenInUseUsageDescription'] = 'Live Ride uses your location for cycling navigation and ride recording.'
 p['NSLocationAlwaysAndWhenInUseUsageDescription'] = 'Live Ride uses your location in the background so navigation and LIVE tracking continue with the screen locked.'
 p['NSBluetoothAlwaysUsageDescription'] = 'Live Ride uses Bluetooth to receive live heart rate from WHOOP and other heart-rate sensors.'
+p['NSHealthUpdateUsageDescription'] = (
+    'Live Ride saves finished rides to Apple Health as cycling workouts, '
+    'only when you ask it to.'
+)
+p['NSHealthShareUsageDescription'] = (
+    'Live Ride does not read health data; this entry is required by iOS '
+    'whenever an app links HealthKit.'
+)
 p['NSMotionUsageDescription'] = (
     'Live Ride uses motion data to keep speed and distance accurate and to '
     'detect a crash while riding.'
@@ -105,7 +113,7 @@ for path in Path('android').rglob('*'):
 
 manifest = Path('android/app/src/main/AndroidManifest.xml')
 text = manifest.read_text()
-perms = '''    <uses-permission android:name="android.permission.ACCESS_FINE_LOCATION" />\n    <uses-permission android:name="android.permission.ACCESS_COARSE_LOCATION" />\n    <uses-permission android:name="android.permission.ACCESS_BACKGROUND_LOCATION" />\n    <uses-permission android:name="android.permission.BLUETOOTH_SCAN" android:usesPermissionFlags="neverForLocation" />\n    <uses-permission android:name="android.permission.BLUETOOTH_CONNECT" />\n    <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />\n    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_LOCATION" />\n    <uses-permission android:name="android.permission.WAKE_LOCK" />\n    <uses-permission android:name="android.permission.INTERNET" />\n    <uses-permission android:name="android.permission.HIGH_SAMPLING_RATE_SENSORS" />\n'''
+perms = '''    <uses-permission android:name="android.permission.ACCESS_FINE_LOCATION" />\n    <uses-permission android:name="android.permission.ACCESS_COARSE_LOCATION" />\n    <uses-permission android:name="android.permission.ACCESS_BACKGROUND_LOCATION" />\n    <uses-permission android:name="android.permission.BLUETOOTH_SCAN" android:usesPermissionFlags="neverForLocation" />\n    <uses-permission android:name="android.permission.BLUETOOTH_CONNECT" />\n    <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />\n    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_LOCATION" />\n    <uses-permission android:name="android.permission.WAKE_LOCK" />\n    <uses-permission android:name="android.permission.INTERNET" />\n    <uses-permission android:name="android.permission.HIGH_SAMPLING_RATE_SENSORS" />\n    <uses-permission android:name="android.permission.health.WRITE_EXERCISE" />\n    <uses-permission android:name="android.permission.health.WRITE_DISTANCE" />\n    <uses-permission android:name="android.permission.health.WRITE_ACTIVE_CALORIES_BURNED" />\n'''
 # Android 11+ wymaga deklaracji, do jakich aplikacji chcemy strzelać
 # intentem — bez tego alarm SOS nie znalazłby aplikacji SMS ani telefonu.
 queries = (
@@ -114,6 +122,7 @@ queries = (
     '<data android:scheme="smsto" /></intent>\n'
     '    <intent><action android:name="android.intent.action.DIAL" />'
     '<data android:scheme="tel" /></intent>\n'
+    '    <package android:name="com.google.android.apps.healthdata" />\n'
     '  </queries>\n'
 )
 if '<queries>' not in text:

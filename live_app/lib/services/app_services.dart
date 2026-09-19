@@ -11,6 +11,7 @@ import '../data/segment_dao.dart';
 import '../data/settings_dao.dart';
 import 'alert_controller.dart';
 import 'garage_service.dart';
+import 'health_service.dart';
 import 'geocoding_service.dart';
 import 'gpx_service.dart';
 import 'heart_rate_service.dart';
@@ -29,6 +30,7 @@ import 'route_weather_service.dart';
 import 'sensor_hub.dart';
 import 'routing_service.dart';
 import 'spotify_service.dart';
+import 'strava_service.dart';
 import 'weather_service.dart';
 
 /// The single place every long-lived service is created.
@@ -46,6 +48,8 @@ class AppServices {
     required this.rides,
     required this.garage,
     required this.segments,
+    required this.strava,
+    required this.health,
     required this.pace,
     required this.profile,
     required this.weather,
@@ -76,6 +80,8 @@ class AppServices {
     final race = RaceModeController(settings: settings);
     final safety = SafetyService(settings: settings);
     final segments = SegmentService(SegmentDao(db));
+    final strava = StravaService(settings: settings);
+    final health = HealthService(settings: settings, rides: RideDao(db));
     final pace = PacePartnerService();
     final live = LiveSessionController(api, heartRate, profile);
     final rides = RideStorageService(gpx, RideDao(db));
@@ -92,6 +98,8 @@ class AppServices {
       rides: rides,
       garage: garage,
       segments: segments,
+      strava: strava,
+      health: health,
       pace: pace,
       profile: profile,
       weather: weather,
@@ -114,6 +122,7 @@ class AppServices {
         sensors: sensors,
         alerts: alerts,
         garage: garage,
+        health: health,
         segments: segments,
         pace: pace,
         race: race,
@@ -139,6 +148,12 @@ class AppServices {
 
   /// Segmenty i rekordy na nich.
   final SegmentService segments;
+
+  /// Wysyłka przejazdów do Stravy.
+  final StravaService strava;
+
+  /// Apple Health / Health Connect.
+  final HealthService health;
 
   /// Wirtualny rywal.
   final PacePartnerService pace;
@@ -185,6 +200,8 @@ class AppServices {
     unawaited(alerts.restore());
     unawaited(race.restore());
     unawaited(safety.restore());
+    unawaited(strava.restore());
+    unawaited(health.restore());
   }
 
   Future<void> dispose() async {
@@ -198,6 +215,8 @@ class AppServices {
     safety.dispose();
     garage.dispose();
     segments.dispose();
+    strava.dispose();
+    health.dispose();
     await sensors.dispose();
     await heartRate.dispose();
     await database.close();

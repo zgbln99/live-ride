@@ -8,6 +8,7 @@ import '../models/ride_record.dart';
 import '../services/app_services.dart';
 import '../widgets/elevation_profile.dart';
 import '../widgets/lr_common.dart';
+import 'integrations_screen.dart';
 import '../widgets/track_preview.dart';
 
 /// The ride report: what happened, where, and how it felt.
@@ -46,6 +47,15 @@ class _RideSummaryScreenState extends State<RideSummaryScreen> {
             tooltip: S.rename,
             icon: const Icon(Icons.edit_outlined),
             onPressed: _busy ? null : _rename,
+          ),
+          IconButton(
+            tooltip: S.exportAndSync,
+            icon: const Icon(Icons.cloud_upload_outlined),
+            onPressed: () => Navigator.of(context).push(
+              MaterialPageRoute<void>(
+                builder: (_) => IntegrationsScreen(ride: _ride),
+              ),
+            ),
           ),
           IconButton(
             tooltip: S.exportGpx,

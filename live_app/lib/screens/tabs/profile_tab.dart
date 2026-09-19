@@ -7,6 +7,7 @@ import '../../core/api_client.dart';
 import '../../core/formatters.dart';
 import '../../core/lr_theme.dart';
 import '../../i18n/strings.dart';
+import '../../models/integration.dart';
 import '../../models/ride_alert.dart';
 import '../../services/app_services.dart';
 import '../../services/spotify_service.dart';
@@ -15,6 +16,7 @@ import '../../widgets/lr_common.dart';
 import '../data_field_editor.dart';
 import '../alert_settings_screen.dart';
 import '../garage_screen.dart';
+import '../integrations_screen.dart';
 import '../profile_editor_screen.dart';
 import '../safety_screen.dart';
 import '../segments_screen.dart';
@@ -243,6 +245,38 @@ class _ProfileTabState extends State<ProfileTab> {
                       onTap: () => Navigator.of(context).push(
                         MaterialPageRoute<void>(
                           builder: (_) => const WhoopScreen(),
+                        ),
+                      ),
+                    ),
+                  ),
+                  const Divider(height: 1),
+                  AnimatedBuilder(
+                    animation: Listenable.merge([
+                      services.strava,
+                      services.health,
+                    ]),
+                    builder: (context, _) => ListTile(
+                      leading: const Icon(Icons.cloud_upload_outlined),
+                      title: Text(S.exportAndSync),
+                      subtitle: Text(
+                        [
+                              if (services.strava.isConnected)
+                                IntegrationProvider.strava.label,
+                              if (services.health.isReady) S.healthTitle,
+                            ].isEmpty
+                            ? S.integrations
+                            : [
+                                if (services.strava.isConnected)
+                                  IntegrationProvider.strava.label,
+                                if (services.health.isReady) S.healthTitle,
+                              ].join(' · '),
+                        maxLines: 2,
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                      trailing: const Icon(Icons.chevron_right),
+                      onTap: () => Navigator.of(context).push(
+                        MaterialPageRoute<void>(
+                          builder: (_) => const IntegrationsScreen(),
                         ),
                       ),
                     ),
