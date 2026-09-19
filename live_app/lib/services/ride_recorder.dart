@@ -21,6 +21,8 @@ import 'alert_controller.dart';
 import 'alert_engine.dart';
 import 'climb_tracker.dart';
 import 'garage_service.dart';
+import 'race_mode_controller.dart';
+import 'safety_service.dart';
 import 'sensor_hub.dart';
 import 'weather_service.dart';
 
@@ -39,6 +41,8 @@ class RideRecorder extends ChangeNotifier {
     required this.sensors,
     required this.alerts,
     required this.garage,
+    required this.race,
+    required this.safety,
     required this.live,
     required this.weather,
     required this.profile,
@@ -51,6 +55,8 @@ class RideRecorder extends ChangeNotifier {
   final SensorHub sensors;
   final AlertController alerts;
   final GarageService garage;
+  final RaceModeController race;
+  final SafetyService safety;
 
   /// Gdzie zawodnik jest względem podjazdów na trasie.
   final ClimbTracker climbs = ClimbTracker();
@@ -161,6 +167,8 @@ class RideRecorder extends ChangeNotifier {
       _onPosition,
       onError: _onPositionError,
     );
+
+    safety.startWatching();
 
     // Ekran blokady jest napędzany rejestratorem, a nie widokiem jazdy:
     // aktywność startuje razem z przejazdem i żyje tak długo jak on, nawet
@@ -314,6 +322,11 @@ class RideRecorder extends ChangeNotifier {
       );
     }
 
+    // Tryb wyścigu nie ma prawa przeżyć przejazdu i zostawić telefonu
+    // z podkręconą jasnością.
+    unawaited(race.reset());
+    safety.stopWatching();
+
     _state = RideState.idle;
     _metrics = finalMetrics;
     _startedAt = null;
@@ -408,6 +421,11 @@ class RideRecorder extends ChangeNotifier {
 
     _updateProgress(sample.point);
     _updateClimb(sample.point);
+    safety.updateRide(
+      speedKmh: _rawSpeedKmh ?? _accumulator.speedKmh,
+      position: sample.point,
+      liveUrl: live.viewerUrl,
+    );
     _publish();
 
     unawaited(_pushTelemetry(position));

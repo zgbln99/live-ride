@@ -23,6 +23,8 @@ import '../widgets/navigation_header.dart';
 import '../widgets/ride_controls.dart';
 import '../widgets/ride_alert_overlay.dart';
 import '../widgets/ride_page_view.dart';
+import '../widgets/screen_lock_overlay.dart';
+import '../widgets/sos_overlay.dart';
 import '../widgets/ride_map.dart';
 import '../widgets/weather_field.dart';
 import 'data_field_editor.dart';
@@ -73,7 +75,18 @@ class _RideComputerScreenState extends State<RideComputerScreen> {
 
   bool get _chromeVisible => _chrome.visible;
 
-  void _wakeChrome() => _chrome.wake();
+  /// Dotknięcie przywraca sterowanie — ale nie w trybie wyścigu.
+  ///
+  /// W wyścigu ekran ma pokazywać tylko liczby, a przypadkowe muśnięcie
+  /// kierownicy nie może tego psuć. Świadome przytrzymanie
+  /// ([_wakeChromeDeliberately]) działa zawsze, więc z trybu zawsze da się
+  /// wyjść — wyjście bez wyjścia byłoby pułapką.
+  void _wakeChrome() {
+    if (_services.race.isRaceMode) return;
+    _chrome.wake();
+  }
+
+  void _wakeChromeDeliberately() => _chrome.wake();
 
   /// Runs [action] with the controls pinned open, for anything that puts a
   /// sheet or a dialog on top of the ride computer.
@@ -140,6 +153,8 @@ class _RideComputerScreenState extends State<RideComputerScreen> {
         services.live,
         services.spotify,
         services.alerts,
+        services.race,
+        services.safety,
         _chrome,
       ]),
       builder: (context, _) {
@@ -159,109 +174,130 @@ class _RideComputerScreenState extends State<RideComputerScreen> {
                 // Every touch anywhere on the instrument brings the controls
                 // back. The listener only observes: it never swallows the
                 // gesture, so a pan still pans the map on the same touch.
-                : Listener(
-                    onPointerDown: (_) => _wakeChrome(),
-                    child: LayoutBuilder(
-                      builder: (context, constraints) => Column(
-                        children: [
-                          if (navigating)
-                            NavigationHeader(
-                              progress: recorder.progress,
-                              metric: profile.metricUnits,
-                              routeName: recorder.route?.name ?? S.route,
-                              etaSeconds: _etaSeconds(recorder),
-                              live: services.live.isActive,
-                              mapMatched: recorder.plan?.mapMatched ?? true,
-                              chromeVisible: _chromeVisible,
-                              onExit: _confirmExit,
-                              onOverview: () => _mapKey.currentState?.fitRoute(
-                                points: recorder.plan?.shape,
-                              ),
-                            )
-                          else
-                            _freeRideHeader(recorder),
-                          // ClimbPro wchodzi tylko wtedy, gdy zawodnik jest
-                          // na wykrytym podjeździe; poza nim nie zabiera
-                          // mapie ani piksela.
-                          if (recorder.climbProgress != null)
-                            ClimbProPanel(
-                              progress: recorder.climbProgress!,
-                              profile:
-                                  recorder.route?.analysis.profile ?? const [],
-                              metric: profile.metricUnits,
+                : Stack(
+                    children: [
+                      GestureDetector(
+                        behavior: HitTestBehavior.translucent,
+                        onLongPress: _wakeChromeDeliberately,
+                        child: Listener(
+                          onPointerDown: (_) => _wakeChrome(),
+                          child: LayoutBuilder(
+                            builder: (context, constraints) => Column(
+                              children: [
+                                if (navigating)
+                                  NavigationHeader(
+                                    progress: recorder.progress,
+                                    metric: profile.metricUnits,
+                                    routeName: recorder.route?.name ?? S.route,
+                                    etaSeconds: _etaSeconds(recorder),
+                                    live: services.live.isActive,
+                                    mapMatched:
+                                        recorder.plan?.mapMatched ?? true,
+                                    chromeVisible: _chromeVisible,
+                                    onExit: _confirmExit,
+                                    onOverview: () =>
+                                        _mapKey.currentState?.fitRoute(
+                                          points: recorder.plan?.shape,
+                                        ),
+                                  )
+                                else
+                                  _freeRideHeader(recorder),
+                                // ClimbPro wchodzi tylko wtedy, gdy zawodnik jest
+                                // na wykrytym podjeździe; poza nim nie zabiera
+                                // mapie ani piksela.
+                                if (recorder.climbProgress != null)
+                                  ClimbProPanel(
+                                    progress: recorder.climbProgress!,
+                                    profile:
+                                        recorder.route?.analysis.profile ??
+                                        const [],
+                                    metric: profile.metricUnits,
+                                  ),
+                                // Powiadomienie wjeżdża nad mapę, nigdy nad pola
+                                // danych ani nad pauzę.
+                                RideAlertOverlay(
+                                  alert: services.alerts.current,
+                                  onDismiss: services.alerts.dismiss,
+                                ),
+                                Expanded(child: _mapArea(recorder)),
+                                RidePageView(
+                                  key: _pagesKey,
+                                  pages: profile.ridePages,
+                                  height: _gridHeight(
+                                    profile
+                                        .ridePages[_pageIndex.clamp(
+                                          0,
+                                          profile.ridePages.length - 1,
+                                        )]
+                                        .layout,
+                                    constraints.maxHeight,
+                                  ),
+                                  showIndicator: _chromeVisible,
+                                  onPageChanged: (index) =>
+                                      setState(() => _pageIndex = index),
+                                  // While the controls are retired a tap is a
+                                  // request for them back, not a request to
+                                  // reconfigure a field.
+                                  onFieldTap: _chromeVisible
+                                      ? (_, _) => _openFieldPicker()
+                                      : null,
+                                  // Przytrzymanie zmienia to jedno pole w miejscu,
+                                  // bez wchodzenia w ustawienia.
+                                  onFieldLongPress: _chromeVisible
+                                      ? _replaceField
+                                      : null,
+                                  data: RideFieldContext(
+                                    metrics: recorder.metrics,
+                                    metric: profile.metricUnits,
+                                    weather: services.weather.current,
+                                    remainingMeters:
+                                        recorder.progress?.remainingMeters,
+                                    etaSeconds: _etaSeconds(recorder)?.round(),
+                                    training: services.profile.trainingProfile,
+                                    riderWeightKg: profile.weightKg,
+                                  ),
+                                ),
+                                ChromeFade(
+                                  visible: _chromeVisible,
+                                  collapse: true,
+                                  child: RideControls(
+                                    state: recorder.state,
+                                    busy:
+                                        _busy ||
+                                        recorder.state == RideState.saving,
+                                    liveActive: services.live.isActive,
+                                    onPause: () {
+                                      recorder.pause();
+                                      _wakeChrome();
+                                    },
+                                    onResume: () {
+                                      recorder.resume();
+                                      _wakeChrome();
+                                    },
+                                    onStop: _finish,
+                                    onLive: _openLiveSheet,
+                                  ),
+                                ),
+                                // Kept outside the collapse so the bottom row of data
+                                // fields never ends up under the home indicator.
+                                Container(
+                                  color: LR.surface,
+                                  height: MediaQuery.paddingOf(context).bottom,
+                                ),
+                              ],
                             ),
-                          // Powiadomienie wjeżdża nad mapę, nigdy nad pola
-                          // danych ani nad pauzę.
-                          RideAlertOverlay(
-                            alert: services.alerts.current,
-                            onDismiss: services.alerts.dismiss,
                           ),
-                          Expanded(child: _mapArea(recorder)),
-                          RidePageView(
-                            key: _pagesKey,
-                            pages: profile.ridePages,
-                            height: _gridHeight(
-                              profile
-                                  .ridePages[_pageIndex.clamp(
-                                    0,
-                                    profile.ridePages.length - 1,
-                                  )]
-                                  .layout,
-                              constraints.maxHeight,
-                            ),
-                            showIndicator: _chromeVisible,
-                            onPageChanged: (index) =>
-                                setState(() => _pageIndex = index),
-                            // While the controls are retired a tap is a
-                            // request for them back, not a request to
-                            // reconfigure a field.
-                            onFieldTap: _chromeVisible
-                                ? (_, _) => _openFieldPicker()
-                                : null,
-                            // Przytrzymanie zmienia to jedno pole w miejscu,
-                            // bez wchodzenia w ustawienia.
-                            onFieldLongPress: _chromeVisible
-                                ? _replaceField
-                                : null,
-                            data: RideFieldContext(
-                              metrics: recorder.metrics,
-                              metric: profile.metricUnits,
-                              weather: services.weather.current,
-                              remainingMeters:
-                                  recorder.progress?.remainingMeters,
-                              etaSeconds: _etaSeconds(recorder)?.round(),
-                              training: services.profile.trainingProfile,
-                              riderWeightKg: profile.weightKg,
-                            ),
-                          ),
-                          ChromeFade(
-                            visible: _chromeVisible,
-                            collapse: true,
-                            child: RideControls(
-                              state: recorder.state,
-                              busy: _busy || recorder.state == RideState.saving,
-                              liveActive: services.live.isActive,
-                              onPause: () {
-                                recorder.pause();
-                                _wakeChrome();
-                              },
-                              onResume: () {
-                                recorder.resume();
-                                _wakeChrome();
-                              },
-                              onStop: _finish,
-                              onLive: _openLiveSheet,
-                            ),
-                          ),
-                          // Kept outside the collapse so the bottom row of data
-                          // fields never ends up under the home indicator.
-                          Container(
-                            color: LR.surface,
-                            height: MediaQuery.paddingOf(context).bottom,
-                          ),
-                        ],
+                        ),
                       ),
-                    ),
+                      ScreenLockOverlay(
+                        locked: services.race.isScreenLocked,
+                        onUnlock: services.race.unlockScreen,
+                      ),
+                      // Alarm jest ponad wszystkim, także ponad blokadą
+                      // ekranu: nie ma stanu, w którym zawodnik nie może go
+                      // anulować.
+                      SosOverlay(safety: services.safety, onSend: _sendSos),
+                    ],
                   ),
           ),
         );
@@ -602,7 +638,11 @@ class _RideComputerScreenState extends State<RideComputerScreen> {
       context: context,
       showDragHandle: true,
       builder: (sheetContext) => AnimatedBuilder(
-        animation: services.profile,
+        animation: Listenable.merge([
+          services.profile,
+          services.race,
+          services.safety,
+        ]),
         builder: (context, _) {
           final profile = services.profile.profile;
           return SafeArea(
@@ -643,10 +683,70 @@ class _RideComputerScreenState extends State<RideComputerScreen> {
                 ListTile(
                   leading: const Icon(Icons.grid_view),
                   title: Text(S.dataFields),
-                  subtitle: Text(profile.layout.label),
+                  subtitle: Text(
+                    profile.ridePages.map((page) => page.name).join(' · '),
+                  ),
                   onTap: () {
                     Navigator.pop(sheetContext);
                     _openFieldPicker();
+                  },
+                ),
+                const Divider(height: 1),
+                SwitchListTile(
+                  secondary: const Icon(Icons.flag_outlined),
+                  value: services.race.isRaceMode,
+                  onChanged: (value) {
+                    unawaited(services.race.setRaceMode(value));
+                  },
+                  title: Text(S.raceMode),
+                  subtitle: Text(
+                    services.race.lastError ?? S.raceModeHint,
+                    style: services.race.lastError == null
+                        ? null
+                        : const TextStyle(color: LR.alert),
+                  ),
+                ),
+                if (services.race.isRaceMode)
+                  SwitchListTile(
+                    value: services.race.boostBrightness,
+                    onChanged: (value) {
+                      unawaited(services.race.setBoostBrightness(value));
+                    },
+                    title: Text(S.boostBrightness),
+                  ),
+                ListTile(
+                  leading: const Icon(
+                    Icons.report_problem_outlined,
+                    color: LR.alert,
+                  ),
+                  title: Text(
+                    S.sos,
+                    style: const TextStyle(
+                      color: LR.alert,
+                      fontWeight: FontWeight.w900,
+                    ),
+                  ),
+                  subtitle: Text(
+                    services.safety.settings.crashContacts.isEmpty
+                        ? S.crashDetectionNeedsContact
+                        : S.sosCountdown(
+                            services.safety.settings.countdownSeconds,
+                          ),
+                  ),
+                  onTap: services.safety.settings.crashContacts.isEmpty
+                      ? null
+                      : () {
+                          Navigator.pop(sheetContext);
+                          services.safety.triggerManual();
+                        },
+                ),
+                ListTile(
+                  leading: const Icon(Icons.lock_outline),
+                  title: Text(S.lockScreen),
+                  subtitle: Text(S.holdToUnlock.toLowerCase()),
+                  onTap: () {
+                    Navigator.pop(sheetContext);
+                    services.race.lockScreen();
                   },
                 ),
                 const SizedBox(height: 12),
@@ -674,6 +774,17 @@ class _RideComputerScreenState extends State<RideComputerScreen> {
     pages[pageIndex] = pages[pageIndex].withFieldAt(fieldIndex, field);
     await profileService.update(profile.copyWith(pages: pages));
     if (mounted) setState(() {});
+  }
+
+  /// Wysyła alarm i pokazuje, co dalej, gdy system odmówi.
+  Future<void> _sendSos() async {
+    final sent = await _services.safety.sendAlert();
+    if (!mounted) return;
+    if (!sent) {
+      showLrMessage(context, S.sosSendFailed, error: true);
+      return;
+    }
+    _services.safety.cancelAlarm();
   }
 
   Future<void> _openFieldPicker() async {

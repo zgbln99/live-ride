@@ -36,7 +36,10 @@ p['CFBundleName'] = 'Live Ride'
 p['NSLocationWhenInUseUsageDescription'] = 'Live Ride uses your location for cycling navigation and ride recording.'
 p['NSLocationAlwaysAndWhenInUseUsageDescription'] = 'Live Ride uses your location in the background so navigation and LIVE tracking continue with the screen locked.'
 p['NSBluetoothAlwaysUsageDescription'] = 'Live Ride uses Bluetooth to receive live heart rate from WHOOP and other heart-rate sensors.'
-p['NSMotionUsageDescription'] = 'Live Ride uses motion data to keep speed and distance accurate while riding.'
+p['NSMotionUsageDescription'] = (
+    'Live Ride uses motion data to keep speed and distance accurate and to '
+    'detect a crash while riding.'
+)
 # The ride computer is read at arm's length on a handlebar mount, so it is
 # portrait-and-landscape but never upside down.
 p['UISupportedInterfaceOrientations'] = [
@@ -64,8 +67,15 @@ url_types.append({
 p['CFBundleURLTypes'] = url_types
 
 # Lets Live Ride tell whether the Spotify app is installed.
+# 'sms' i 'tel' są potrzebne alarmowi SOS: bez nich canLaunchUrl zwraca
+# false i przycisk wyglądałby na zepsuty.
 p['LSApplicationQueriesSchemes'] = sorted(
-    set([*(p.get('LSApplicationQueriesSchemes') or []), 'spotify'])
+    set([
+        *(p.get('LSApplicationQueriesSchemes') or []),
+        'spotify',
+        'sms',
+        'tel',
+    ])
 )
 with plist_path.open('wb') as f:
     plistlib.dump(p, f)
@@ -95,7 +105,20 @@ for path in Path('android').rglob('*'):
 
 manifest = Path('android/app/src/main/AndroidManifest.xml')
 text = manifest.read_text()
-perms = '''    <uses-permission android:name="android.permission.ACCESS_FINE_LOCATION" />\n    <uses-permission android:name="android.permission.ACCESS_COARSE_LOCATION" />\n    <uses-permission android:name="android.permission.ACCESS_BACKGROUND_LOCATION" />\n    <uses-permission android:name="android.permission.BLUETOOTH_SCAN" android:usesPermissionFlags="neverForLocation" />\n    <uses-permission android:name="android.permission.BLUETOOTH_CONNECT" />\n    <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />\n    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_LOCATION" />\n    <uses-permission android:name="android.permission.WAKE_LOCK" />\n    <uses-permission android:name="android.permission.INTERNET" />\n'''
+perms = '''    <uses-permission android:name="android.permission.ACCESS_FINE_LOCATION" />\n    <uses-permission android:name="android.permission.ACCESS_COARSE_LOCATION" />\n    <uses-permission android:name="android.permission.ACCESS_BACKGROUND_LOCATION" />\n    <uses-permission android:name="android.permission.BLUETOOTH_SCAN" android:usesPermissionFlags="neverForLocation" />\n    <uses-permission android:name="android.permission.BLUETOOTH_CONNECT" />\n    <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />\n    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_LOCATION" />\n    <uses-permission android:name="android.permission.WAKE_LOCK" />\n    <uses-permission android:name="android.permission.INTERNET" />\n    <uses-permission android:name="android.permission.HIGH_SAMPLING_RATE_SENSORS" />\n'''
+# Android 11+ wymaga deklaracji, do jakich aplikacji chcemy strzelać
+# intentem — bez tego alarm SOS nie znalazłby aplikacji SMS ani telefonu.
+queries = (
+    '  <queries>\n'
+    '    <intent><action android:name="android.intent.action.SENDTO" />'
+    '<data android:scheme="smsto" /></intent>\n'
+    '    <intent><action android:name="android.intent.action.DIAL" />'
+    '<data android:scheme="tel" /></intent>\n'
+    '  </queries>\n'
+)
+if '<queries>' not in text:
+    text = text.replace('</manifest>', queries + '</manifest>')
+
 if 'android.permission.BLUETOOTH_SCAN' not in text:
     text = text.replace('<manifest xmlns:android="http://schemas.android.com/apk/res/android">', '<manifest xmlns:android="http://schemas.android.com/apk/res/android">\n' + perms)
 text = re.sub(r'android:label="[^"]*"', 'android:label="Live Ride"', text)

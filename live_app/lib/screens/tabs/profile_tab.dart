@@ -16,6 +16,7 @@ import '../data_field_editor.dart';
 import '../alert_settings_screen.dart';
 import '../garage_screen.dart';
 import '../profile_editor_screen.dart';
+import '../safety_screen.dart';
 import '../sensors_screen.dart';
 import '../training_zones_screen.dart';
 import '../whoop_screen.dart';
@@ -241,6 +242,28 @@ class _ProfileTabState extends State<ProfileTab> {
                       onTap: () => Navigator.of(context).push(
                         MaterialPageRoute<void>(
                           builder: (_) => const WhoopScreen(),
+                        ),
+                      ),
+                    ),
+                  ),
+                  const Divider(height: 1),
+                  AnimatedBuilder(
+                    animation: services.safety,
+                    builder: (context, _) => ListTile(
+                      leading: const Icon(Icons.health_and_safety_outlined),
+                      title: Text(S.safety),
+                      subtitle: Text(
+                        services.safety.settings.isUsable
+                            ? '${S.crashDetection} · '
+                                  '${services.safety.settings.crashContacts.length}'
+                            : S.crashDetectionNeedsContact,
+                        maxLines: 2,
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                      trailing: const Icon(Icons.chevron_right),
+                      onTap: () => Navigator.of(context).push(
+                        MaterialPageRoute<void>(
+                          builder: (_) => const SafetyScreen(),
                         ),
                       ),
                     ),

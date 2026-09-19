@@ -5,6 +5,7 @@ import 'package:dio/dio.dart';
 import 'package:dio_cookie_manager/dio_cookie_manager.dart';
 import 'package:path_provider/path_provider.dart';
 
+import '../i18n/strings.dart';
 import '../models/navigation_plan.dart';
 import '../models/ride_route.dart';
 import 'geo.dart';
@@ -60,6 +61,19 @@ class ApiClient {
 
   String? _mapStyle;
 
+  /// Wołane, gdy serwer odrzuci żądanie z powodu wygasłej sesji.
+  ///
+  /// Klient nie wie, co z tym zrobić — wie tylko, że to się stało. Decyzję
+  /// (pokazać logowanie, nie przerywając jazdy) podejmuje aplikacja.
+  void Function()? onSessionExpired;
+
+  /// Ścieżki, na których 401 nie znaczy „sesja wygasła", tylko „złe hasło".
+  static const List<String> _publicPaths = [
+    '/auth/login',
+    '/auth/register',
+    '/auth/logout',
+  ];
+
   Future<void> init() async {
     final dir = await getApplicationSupportDirectory();
     cookieJar = PersistCookieJar(
@@ -74,6 +88,19 @@ class ApiClient {
       ),
     );
     dio.interceptors.add(CookieManager(cookieJar));
+    dio.interceptors.add(
+      InterceptorsWrapper(
+        onError: (error, handler) {
+          final status = error.response?.statusCode;
+          final path = error.requestOptions.path;
+          if ((status == 401 || status == 403) &&
+              !_publicPaths.any(path.startsWith)) {
+            onSessionExpired?.call();
+          }
+          handler.next(error);
+        },
+      ),
+    );
   }
 
   Future<bool> hasSession() async {
@@ -93,9 +120,7 @@ class ApiClient {
       );
       return _identityFrom(response.data, fallbackUsername: username.trim());
     } on DioException catch (e) {
-      throw ApiException(
-        _describe(e, unauthorized: 'Wrong username or password.'),
-      );
+      throw ApiException(_describe(e, unauthorized: S.wrongCredentials));
     }
   }
 
@@ -115,9 +140,7 @@ class ApiClient {
         },
       );
     } on DioException catch (e) {
-      throw ApiException(
-        _describe(e, badRequest: 'That username or email is already taken.'),
-      );
+      throw ApiException(_describe(e, badRequest: S.usernameTaken));
     }
     return login(username, password);
   }
@@ -156,9 +179,7 @@ class ApiClient {
       _mapStyle = style;
       return style;
     } on DioException catch (e) {
-      throw ApiException(
-        _describe(e, generic: 'Could not load the map style.'),
-      );
+      throw ApiException(_describe(e, generic: S.mapStyleFailed));
     }
   }
 
@@ -216,9 +237,7 @@ class ApiClient {
         Map<String, dynamic>.from(response.data as Map),
       );
     } on DioException catch (e) {
-      throw ApiException(
-        _describe(e, unauthorized: 'Sign in again to start a LIVE session.'),
-      );
+      throw ApiException(_describe(e, unauthorized: S.liveSignInAgain));
     }
   }
 
@@ -239,8 +258,8 @@ class ApiClient {
       throw ApiException(
         _describe(
           e,
-          notFound: 'No active LIVE session uses that code.',
-          badRequest: 'That LIVE code does not look right.',
+          notFound: S.liveCodeNotFound,
+          badRequest: S.liveCodeInvalid,
         ),
       );
     }
@@ -269,31 +288,30 @@ class ApiClient {
     String? unauthorized,
     String? notFound,
     String? badRequest,
-    String generic = 'The Live Ride server could not be reached.',
+    String? generic,
   }) {
     switch (error.type) {
       case DioExceptionType.connectionTimeout:
       case DioExceptionType.receiveTimeout:
       case DioExceptionType.sendTimeout:
-        return 'The Live Ride server timed out. Check your connection.';
+        return S.serverTimeout;
       case DioExceptionType.connectionError:
       case DioExceptionType.unknown:
-        return 'No connection to $serverOrigin.';
+        return S.serverUnreachable(serverOrigin);
       case DioExceptionType.badResponse:
         final status = error.response?.statusCode;
         if (status == 401 || status == 403) {
-          return unauthorized ?? 'You are not signed in.';
+          return unauthorized ?? S.notSignedIn;
         }
-        if (status == 404) return notFound ?? 'Not found on the server.';
-        if (status == 400)
-          return badRequest ?? 'The server rejected the request.';
-        return 'Server error $status.';
+        if (status == 404) return notFound ?? S.serverNotFound;
+        if (status == 400) return badRequest ?? S.serverRejected;
+        return S.serverError(status);
       case DioExceptionType.cancel:
-        return 'Request cancelled.';
+        return S.requestCancelled;
       case DioExceptionType.badCertificate:
-        return 'The server certificate could not be verified.';
+        return S.badCertificate;
       default:
-        return generic;
+        return generic ?? S.serverUnreachable(serverOrigin);
     }
   }
 }

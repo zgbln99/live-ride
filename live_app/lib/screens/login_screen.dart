@@ -8,9 +8,12 @@ import '../widgets/lr_common.dart';
 
 /// Sign in or create an account on the rider's own Live Ride server.
 class LoginScreen extends StatefulWidget {
-  const LoginScreen({super.key, required this.onSignedIn});
+  const LoginScreen({super.key, required this.onSignedIn, this.notice});
 
   final VoidCallback onSignedIn;
+
+  /// Komunikat pokazywany nad formularzem, np. o wygasłej sesji.
+  final String? notice;
 
   @override
   State<LoginScreen> createState() => _LoginScreenState();
@@ -24,6 +27,12 @@ class _LoginScreenState extends State<LoginScreen> {
   bool _register = false;
   bool _busy = false;
   String? _error;
+
+  @override
+  void initState() {
+    super.initState();
+    _error = widget.notice;
+  }
 
   @override
   void dispose() {

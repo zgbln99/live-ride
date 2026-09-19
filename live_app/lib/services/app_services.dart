@@ -17,8 +17,10 @@ import 'live_activity_service.dart';
 import 'live_service.dart';
 import 'location_service.dart';
 import 'profile_service.dart';
+import 'race_mode_controller.dart';
 import 'ride_recorder.dart';
 import 'ride_storage_service.dart';
+import 'safety_service.dart';
 import 'route_library_service.dart';
 import 'route_weather_service.dart';
 import 'sensor_hub.dart';
@@ -46,6 +48,8 @@ class AppServices {
     required this.heartRate,
     required this.sensors,
     required this.alerts,
+    required this.race,
+    required this.safety,
     required this.live,
     required this.location,
     required this.routing,
@@ -64,6 +68,8 @@ class AppServices {
     final sensors = SensorHub(heartRate: heartRate, settings: settings);
     final alerts = AlertController(settings: settings);
     final garage = GarageService(BikeDao(db));
+    final race = RaceModeController(settings: settings);
+    final safety = SafetyService(settings: settings);
     final live = LiveSessionController(api, heartRate, profile);
     final rides = RideStorageService(gpx, RideDao(db));
     final weather = WeatherService();
@@ -84,6 +90,8 @@ class AppServices {
       heartRate: heartRate,
       sensors: sensors,
       alerts: alerts,
+      race: race,
+      safety: safety,
       live: live,
       location: location,
       routing: RoutingService(api),
@@ -97,6 +105,8 @@ class AppServices {
         sensors: sensors,
         alerts: alerts,
         garage: garage,
+        race: race,
+        safety: safety,
         live: live,
         weather: weather,
         profile: profile,
@@ -127,6 +137,12 @@ class AppServices {
 
   /// Powiadomienia w czasie jazdy.
   final AlertController alerts;
+
+  /// Tryb wyścigu i blokada ekranu.
+  final RaceModeController race;
+
+  /// Wykrywanie upadku, SOS i kontakty alarmowe.
+  final SafetyService safety;
   final LiveSessionController live;
   final LocationService location;
   final RoutingService routing;
@@ -149,6 +165,8 @@ class AppServices {
     unawaited(heartRate.restore());
     unawaited(sensors.restore());
     unawaited(alerts.restore());
+    unawaited(race.restore());
+    unawaited(safety.restore());
   }
 
   Future<void> dispose() async {
@@ -157,6 +175,11 @@ class AppServices {
     weather.dispose();
     profile.dispose();
     spotify.dispose();
+    alerts.dispose();
+    race.dispose();
+    safety.dispose();
+    garage.dispose();
+    await sensors.dispose();
     await heartRate.dispose();
     await database.close();
   }

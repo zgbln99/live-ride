@@ -304,6 +304,57 @@ class Strings {
   String get autoPauseHint =>
       'Licznik zatrzymuje się na postoju i rusza, gdy ruszysz.';
 
+  // ---------------------------------------------------------- bezpieczeństwo
+  String get safety => 'Bezpieczeństwo';
+  String get crashDetection => 'Wykrywanie upadku';
+  String get crashDetectionHint =>
+      'Mocne uderzenie, nagły spadek prędkości i bezruch po nim. Każde z '
+      'osobna zdarza się w normalnej jeździe — dopiero razem znaczą coś '
+      'złego.';
+  String get crashDetectionNeedsContact =>
+      'Dodaj kontakt alarmowy — bez niego alarm nie ma komu nic zgłosić.';
+  String get sensitivity => 'Czułość';
+  String get countdown => 'Odliczanie';
+  String get countdownHint => 'Tyle masz na anulowanie fałszywego alarmu.';
+  String get emergencyContacts => 'Kontakty alarmowe';
+  String get addContact => 'Dodaj kontakt';
+  String get contactName => 'Imię';
+  String get contactPhone => 'Numer telefonu';
+  String get notifyOnCrash => 'Powiadom przy upadku';
+  String get shareLiveLinkLabel => 'Dołącz link LIVE';
+  String get shareLiveLinkHint =>
+      'Gdy sesja LIVE jest aktywna, wiadomość zawiera link z Twoją pozycją '
+      'na żywo.';
+  String get sos => 'SOS';
+  String get sosCrashTitle => 'Wygląda na upadek';
+  String get sosManualTitle => 'Alarm SOS';
+  String get sosCancel => 'NIC MI NIE JEST';
+  String get sosSendNow => 'WYŚLIJ TERAZ';
+  String sosCountdown(int seconds) =>
+      'Za $seconds s wyślę wiadomość do kontaktów alarmowych.';
+  String get sosCrashMessage =>
+      'Live Ride wykrył upadek podczas mojej jazdy. Moja ostatnia znana '
+      'pozycja:';
+  String get sosManualMessage =>
+      'Potrzebuję pomocy. Moja ostatnia znana pozycja:';
+  String get sosSendFailed =>
+      'Nie udało się otworzyć wiadomości. Zadzwoń bezpośrednio:';
+  String get call => 'Zadzwoń';
+  String get noEmergencyContacts => 'Brak kontaktów alarmowych';
+  String get smsDisclaimer =>
+      'Wiadomość otwiera się w aplikacji SMS, żebyś zobaczył jej treść przed '
+      'wysłaniem. Automatyczna wysyłka bez Twojego udziału nie jest możliwa '
+      'na iOS i Live Ride nie udaje, że jest.';
+
+  String get raceMode => 'Tryb wyścigu';
+  String get raceModeHint =>
+      'Tylko liczby, bez przycisków, z podbitą jasnością ekranu.';
+  String get lockScreen => 'Zablokuj ekran';
+  String get holdToUnlock => 'PRZYTRZYMAJ, ABY ODBLOKOWAĆ';
+  String get boostBrightness => 'Podbij jasność';
+  String get brightnessUnavailable =>
+      'System nie pozwolił zmienić jasności ekranu.';
+
   String get climbInProgress => 'PODJAZD';
   String get climbDone => 'PODJAZD ZALICZONY';
   String get remainingClimb => 'DO SZCZYTU';
