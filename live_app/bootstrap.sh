@@ -32,10 +32,16 @@ with plist_path.open('wb') as f:
     plistlib.dump(p, f)
 
 pbx = Path('ios/Runner.xcodeproj/project.pbxproj')
-s = pbx.read_text()
-s = re.sub(r'PRODUCT_BUNDLE_IDENTIFIER = [^;]+\.RunnerTests;', 'PRODUCT_BUNDLE_IDENTIFIER = pl.marekpiatak.liveride.RunnerTests;', s)
-s = re.sub(r'PRODUCT_BUNDLE_IDENTIFIER = [^;]+;', 'PRODUCT_BUNDLE_IDENTIFIER = pl.marekpiatak.liveride;', s)
-pbx.write_text(s)
+lines = []
+for line in pbx.read_text().splitlines():
+    if 'PRODUCT_BUNDLE_IDENTIFIER =' in line:
+        indent = line[:len(line) - len(line.lstrip())]
+        if 'RunnerTests' in line:
+            line = f'{indent}PRODUCT_BUNDLE_IDENTIFIER = pl.marekpiatak.liveride.RunnerTests;'
+        else:
+            line = f'{indent}PRODUCT_BUNDLE_IDENTIFIER = pl.marekpiatak.liveride;'
+    lines.append(line)
+pbx.write_text('\n'.join(lines) + '\n')
 
 for path in Path('android').rglob('*'):
     if not path.is_file():
