@@ -16,7 +16,7 @@ class LiveRideDatabase {
   static const String fileName = 'live_ride.db';
 
   /// Podbijaj przy każdej zmianie schematu i dopisuj krok w [_upgrade].
-  static const int schemaVersion = 1;
+  static const int schemaVersion = 2;
 
   final DatabaseFactory? _factory;
   final String? _path;
@@ -69,10 +69,25 @@ class LiveRideDatabase {
   }
 
   static Future<void> _upgrade(Database db, int from, int to) async {
-    // Pierwsza wersja schematu; kolejne migracje dopisujemy tutaj krokami.
+    if (from < 2) {
+      // Rozdzielenie pauzy automatycznej od ręcznej. Przejazdy zapisane
+      // wcześniej nie znają tego podziału i zostają z zerami: lepiej, żeby
+      // podsumowanie milczało o pauzach, niż żeby zmyśliło ich długość.
+      for (final column in _v2Columns) {
+        await db.execute('ALTER TABLE rides ADD COLUMN $column');
+      }
+    }
   }
 
-  /// Pełny schemat wersji 1.
+  /// Kolumny dołożone w wersji 2 — jedno źródło prawdy dla [_schema]
+  /// i [_upgrade], żeby świeża baza i baza po migracji nie mogły się
+  /// rozjechać.
+  static const List<String> _v2Columns = [
+    'auto_paused_seconds INTEGER NOT NULL DEFAULT 0',
+    'manual_paused_seconds INTEGER NOT NULL DEFAULT 0',
+  ];
+
+  /// Pełny schemat najnowszej wersji.
   static const List<String> _schema = [
     '''
     CREATE TABLE rides (
@@ -82,6 +97,8 @@ class LiveRideDatabase {
       ended_at INTEGER NOT NULL,
       elapsed_seconds INTEGER NOT NULL DEFAULT 0,
       moving_seconds INTEGER NOT NULL DEFAULT 0,
+      auto_paused_seconds INTEGER NOT NULL DEFAULT 0,
+      manual_paused_seconds INTEGER NOT NULL DEFAULT 0,
       distance_meters REAL NOT NULL DEFAULT 0,
       ascent_meters REAL NOT NULL DEFAULT 0,
       descent_meters REAL NOT NULL DEFAULT 0,

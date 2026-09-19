@@ -37,7 +37,7 @@ struct RideLiveActivity: Widget {
                     )
                 }
                 DynamicIslandExpandedRegion(.center) {
-                    Text(context.state.paused ? "PAUSED" : context.attributes.title)
+                    Text(context.state.paused ? context.state.pauseBadge : context.attributes.title)
                         .font(.caption2.weight(.heavy))
                         .foregroundColor(context.state.paused ? LRColor.muted : LRColor.accent)
                         .lineLimit(1)
@@ -131,7 +131,7 @@ private struct LockScreenView: View {
                 .lineLimit(1)
             Spacer(minLength: 4)
             if state.paused {
-                Badge(text: "PAUSED", color: LRColor.muted)
+                Badge(text: state.pauseBadge, color: LRColor.muted)
             } else if state.live {
                 Badge(text: "LIVE", color: LRColor.alert)
             }

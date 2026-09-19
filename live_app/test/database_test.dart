@@ -1,3 +1,5 @@
+import 'dart:io';
+
 import 'package:flutter_test/flutter_test.dart';
 import 'package:live_ride/core/geo.dart';
 import 'package:live_ride/data/database.dart';
@@ -20,6 +22,8 @@ RecordedRide buildRide({
   int points = 100,
   DateTime? startedAt,
   double distance = 25000,
+  int autoPaused = 0,
+  int manualPaused = 0,
 }) {
   final start = startedAt ?? DateTime(2026, 5, 1, 8);
   return RecordedRide(
@@ -29,6 +33,8 @@ RecordedRide buildRide({
     endedAt: start.add(const Duration(hours: 1)),
     elapsedSeconds: 3600,
     movingSeconds: 3400,
+    autoPausedSeconds: autoPaused,
+    manualPausedSeconds: manualPaused,
     distanceMeters: distance,
     elevationGainMeters: 420,
     elevationLossMeters: 410,
@@ -92,6 +98,66 @@ void main() {
         expect(tables, contains(table), reason: 'brak tabeli $table');
       }
       await database.close();
+    });
+
+    test('migracja do wersji 2 dokłada kolumny pauz i nie gubi przejazdu', () async {
+      // Migracja musi się odbyć na pliku: baza w pamięci znika przy zamknięciu,
+      // więc nie da się na niej otworzyć starej wersji schematu po raz drugi.
+      final directory = await Directory.systemTemp.createTemp('live_ride_db');
+      final path = '${directory.path}/live_ride.db';
+      addTearDown(() => directory.delete(recursive: true));
+
+      // Krok 1: postarz plik do wersji 1, zdejmując z niego to, co dołożyła
+      // wersja 2. Reszta schematu zostaje prawdziwa.
+      final fresh = LiveRideDatabase(factory: databaseFactoryFfi, path: path);
+      await (await fresh.open()).close();
+      await fresh.close();
+
+      final legacy = await databaseFactoryFfi.openDatabase(path);
+      await legacy.execute(
+        'ALTER TABLE rides DROP COLUMN auto_paused_seconds',
+      );
+      await legacy.execute(
+        'ALTER TABLE rides DROP COLUMN manual_paused_seconds',
+      );
+      await legacy.execute('PRAGMA user_version = 1');
+      await legacy.insert('rides', {
+        'id': 'stary-przejazd',
+        'name': 'Sprzed migracji',
+        'started_at': DateTime(2026, 4, 1, 9).millisecondsSinceEpoch,
+        'ended_at': DateTime(2026, 4, 1, 10).millisecondsSinceEpoch,
+        'elapsed_seconds': 3600,
+        'moving_seconds': 3400,
+        'distance_meters': 30000.0,
+        'created_at': DateTime(2026, 4, 1, 10).millisecondsSinceEpoch,
+      });
+      await legacy.close();
+
+      // Krok 2: aplikacja otwiera go ponownie i musi go podnieść.
+      final migrated = LiveRideDatabase(
+        factory: databaseFactoryFfi,
+        path: path,
+      );
+      final dao = RideDao(migrated);
+      final loaded = await dao.findById('stary-przejazd');
+
+      expect(loaded, isNotNull, reason: 'migracja zgubiła przejazd');
+      expect(loaded!.distanceMeters, 30000);
+      expect(loaded.elapsedSeconds, 3600);
+      // Stary zapis nie wie, ile z tego było postojem — i nie zmyśla.
+      expect(loaded.autoPausedSeconds, 0);
+      expect(loaded.manualPausedSeconds, 0);
+      expect(loaded.hasPauseBreakdown, isFalse);
+
+      // A nowy przejazd zapisany po migracji już ten podział ma.
+      await dao.save(
+        buildRide(id: 'po-migracji', autoPaused: 300, manualPaused: 120),
+      );
+      final recent = await dao.findById('po-migracji');
+      expect(recent!.autoPausedSeconds, 300);
+      expect(recent.manualPausedSeconds, 120);
+      expect(recent.pausedTime, const Duration(minutes: 7));
+      await migrated.close();
     });
 
     test('usunięcie przejazdu kasuje jego punkty', () async {

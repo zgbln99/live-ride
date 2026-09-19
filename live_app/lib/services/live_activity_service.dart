@@ -5,6 +5,7 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter/services.dart';
 
 import '../core/formatters.dart';
+import '../i18n/strings.dart';
 import '../models/navigation_plan.dart';
 import '../models/ride_metrics.dart';
 
@@ -89,6 +90,7 @@ class LiveActivityService {
     required bool live,
     required bool metric,
     NavigationProgress? progress,
+    bool automaticPause = false,
   }) async {
     if (!_active) return;
 
@@ -98,6 +100,7 @@ class LiveActivityService {
       live: live,
       metric: metric,
       progress: progress,
+      automaticPause: automaticPause,
     );
     final signature = payload.values.join('|');
     final now = DateTime.now();
@@ -140,6 +143,7 @@ class LiveActivityService {
     required bool live,
     required bool metric,
     NavigationProgress? progress,
+    bool automaticPause = false,
   }) {
     final maneuver = progress?.next;
     return {
@@ -152,6 +156,12 @@ class LiveActivityService {
       'ascent': Fmt.elevation(metrics.elevationGainMeters, metric: metric),
       'ascentUnit': Fmt.elevationUnit(metric: metric),
       'paused': paused,
+      // Gotowa etykieta, a nie flaga do zinterpretowania po stronie Swifta:
+      // ekran blokady ma mówić dokładnie to samo co kierownica, a „PAUZA"
+      // i „AUTO PAUZA" to dla zawodnika dwie różne sytuacje.
+      'pauseLabel': !paused
+          ? ''
+          : (automaticPause ? S.autoPauseShort : S.manualPauseShort),
       'live': live,
       'maneuver': maneuver?.instruction ?? '',
       'maneuverDistance': maneuver == null

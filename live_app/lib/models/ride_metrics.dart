@@ -10,6 +10,8 @@ class RideMetrics {
     this.maxSpeedKmh = 0,
     this.distanceMeters = 0,
     this.elapsed = Duration.zero,
+    this.recording = Duration.zero,
+    this.paused = Duration.zero,
     this.movingTime = Duration.zero,
     this.altitudeMeters,
     this.elevationGainMeters = 0,
@@ -33,7 +35,18 @@ class RideMetrics {
   final double speedKmh;
   final double maxSpeedKmh;
   final double distanceMeters;
+  /// Czas od startu do teraz, razem z każdym postojem.
   final Duration elapsed;
+
+  /// Czas, przez który licznik chodził: [elapsed] bez pauz.
+  ///
+  /// Krótki postój na światłach, poniżej progu auto-pauzy, wlicza się tutaj —
+  /// i dlatego to nie to samo co [movingTime].
+  final Duration recording;
+
+  /// Łączny czas pauz, automatycznych i ręcznych razem.
+  final Duration paused;
+
   final Duration movingTime;
   final double? altitudeMeters;
   final double elevationGainMeters;

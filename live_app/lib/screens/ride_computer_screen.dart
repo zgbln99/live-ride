@@ -19,6 +19,7 @@ import '../services/ride_recorder.dart';
 import '../widgets/chrome_fade.dart';
 import '../widgets/climb_pro_panel.dart';
 import '../widgets/lr_common.dart';
+import '../widgets/pause_banner.dart';
 import '../widgets/navigation_header.dart';
 import '../widgets/ride_controls.dart';
 import '../widgets/ride_alert_overlay.dart';
@@ -247,6 +248,17 @@ class _RideComputerScreenState extends State<RideComputerScreen> {
                                         const [],
                                     metric: profile.metricUnits,
                                   ),
+                                // Pasek pauzy stoi nad powiadomieniami: gdy
+                                // licznik stoi, to jest najważniejsza rzecz
+                                // na ekranie.
+                                if (recorder.state == RideState.paused)
+                                  PauseBanner(
+                                    automatic: recorder.isAutoPaused,
+                                    onResume: () {
+                                      recorder.resume();
+                                      _wakeChrome();
+                                    },
+                                  ),
                                 // Powiadomienie wjeżdża nad mapę, nigdy nad pola
                                 // danych ani nad pauzę.
                                 RideAlertOverlay(
@@ -395,7 +407,11 @@ class _RideComputerScreenState extends State<RideComputerScreen> {
               ),
               const SizedBox(width: 2),
               LrStatusChip(
-                label: paused ? S.paused : S.recording,
+                label: paused
+                    ? (recorder.isAutoPaused
+                          ? S.autoPauseShort
+                          : S.manualPauseShort)
+                    : S.recording,
                 color: paused ? LR.inkSoft : LR.alert,
                 filled: !paused,
               ),

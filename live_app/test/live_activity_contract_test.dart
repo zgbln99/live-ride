@@ -197,6 +197,16 @@ void main() {
     );
   });
 
+  test('the Lock Screen names the kind of pause it is showing', () {
+    // „PAUZA" wpisana na sztywno w widgecie nie odróżnia postoju wykrytego
+    // przez licznik od pauzy wciśniętej przez rowerzystę, a to jedyne, co
+    // odróżnia „stoję na światłach" od „skończyłem na dziś".
+    final swift = widget.readAsStringSync();
+    expect(swift.contains('"PAUSED"'), isFalse);
+    expect(swift.contains('pauseBadge'), isTrue);
+    expect(attributes.readAsStringSync(), contains('pauseLabel'));
+  });
+
   test('the widget renders every field the state carries', () {
     final swift = widget.readAsStringSync();
     for (final field in [

@@ -298,8 +298,16 @@ class RideMetricsAccumulator {
     _sensorSpeedAt = at ?? DateTime.now();
   }
 
+  /// Składa migawkę licznika.
+  ///
+  /// [elapsed] to czas zegarowy od startu, [recording] ten sam czas bez pauz.
+  /// Rozróżnienie nie jest kosmetyczne: średnia ogólna dzieli dystans przez
+  /// pierwszy, a TSS liczy się z drugiego — kawa na trasie nie ma prawa
+  /// podnieść obciążenia treningowego.
   RideMetrics build({
     required Duration elapsed,
+    Duration? recording,
+    Duration paused = Duration.zero,
     required int pointCount,
     required bool hasFix,
   }) => RideMetrics(
@@ -307,6 +315,8 @@ class RideMetricsAccumulator {
     maxSpeedKmh: _maxSpeedKmh,
     distanceMeters: _distanceMeters,
     elapsed: elapsed,
+    recording: recording ?? elapsed,
+    paused: paused,
     movingTime: movingTime,
     altitudeMeters: _altitude,
     elevationGainMeters: _elevation.gainMeters,
@@ -318,7 +328,9 @@ class RideMetricsAccumulator {
     cadenceRpm: _cadence,
     averageCadenceRpm: averageCadenceRpm,
     maxCadenceRpm: _cadenceCount == 0 ? null : _cadenceMax,
-    power: _power.hasData ? _power.build(elapsed: elapsed) : null,
+    power: _power.hasData
+        ? _power.build(elapsed: recording ?? elapsed)
+        : null,
     workKj: _workJoules > 0 ? _workJoules / 1000 : null,
     sensorSpeedKmh: _sensorSpeedKmh,
     gpsAccuracyMeters: _accuracy,

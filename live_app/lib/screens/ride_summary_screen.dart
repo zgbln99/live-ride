@@ -119,6 +119,15 @@ class _RideSummaryScreenState extends State<RideSummaryScreen> {
                   value: Fmt.duration(_ride.elapsed),
                   valueSize: 30,
                 ),
+                // Wiersz pauzy pokazuje się tylko przejazdom, które go znają.
+                // Przejazd sprzed rozdzielenia pauz pokazałby tu zero, co
+                // znaczyłoby „nigdzie się nie zatrzymałem" — a tego nie wiemy.
+                if (_ride.hasPauseBreakdown)
+                  LrStat(
+                    label: S.pausedTime,
+                    value: Fmt.duration(_ride.pausedTime),
+                    valueSize: 30,
+                  ),
                 LrStat(
                   label: S.avgSpeed,
                   value: Fmt.speed(_ride.averageSpeedKmh, metric: metric),

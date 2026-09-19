@@ -69,6 +69,8 @@ class RecordedRide {
     required this.endedAt,
     required this.elapsedSeconds,
     required this.movingSeconds,
+    this.autoPausedSeconds = 0,
+    this.manualPausedSeconds = 0,
     required this.distanceMeters,
     required this.elevationGainMeters,
     required this.points,
@@ -95,8 +97,18 @@ class RecordedRide {
   final String name;
   final DateTime startedAt;
   final DateTime endedAt;
+  /// Czas zegarowy od startu do mety, razem z postojami.
   final int elapsedSeconds;
   final int movingSeconds;
+
+  /// Czas, przez który licznik stał, bo rower stał.
+  ///
+  /// Przejazdy zapisane przed rozdzieleniem pauz mają tu zero — i wtedy
+  /// [pausedTime] jest po prostu zerem, zamiast zmyślać podział.
+  final int autoPausedSeconds;
+
+  /// Czas, przez który licznik stał, bo rowerzysta go zatrzymał.
+  final int manualPausedSeconds;
   final double distanceMeters;
   final double elevationGainMeters;
   final double elevationLossMeters;
@@ -129,6 +141,25 @@ class RecordedRide {
 
   Duration get elapsed => Duration(seconds: elapsedSeconds);
   Duration get movingTime => Duration(seconds: movingSeconds);
+
+  /// Pauza automatyczna i ręczna razem.
+  Duration get pausedTime =>
+      Duration(seconds: autoPausedSeconds + manualPausedSeconds);
+  Duration get autoPausedTime => Duration(seconds: autoPausedSeconds);
+  Duration get manualPausedTime => Duration(seconds: manualPausedSeconds);
+
+  /// Czas, przez który licznik chodził.
+  Duration get recordingTime {
+    final seconds = elapsedSeconds - autoPausedSeconds - manualPausedSeconds;
+    return Duration(seconds: seconds < 0 ? 0 : seconds);
+  }
+
+  /// Czy ten przejazd w ogóle zna podział czasu na pauzy.
+  ///
+  /// Stare zapisy go nie znają; ekran podsumowania nie pokazuje wtedy
+  /// wiersza „Pauza" zamiast pokazywać w nim zero.
+  bool get hasPauseBreakdown =>
+      autoPausedSeconds > 0 || manualPausedSeconds > 0;
 
   double get averageSpeedKmh =>
       movingSeconds <= 0 ? 0 : (distanceMeters / movingSeconds) * 3.6;
@@ -176,6 +207,8 @@ class RecordedRide {
     endedAt: endedAt,
     elapsedSeconds: elapsedSeconds,
     movingSeconds: movingSeconds,
+    autoPausedSeconds: autoPausedSeconds,
+    manualPausedSeconds: manualPausedSeconds,
     distanceMeters: distanceMeters,
     elevationGainMeters: elevationGainMeters,
     elevationLossMeters: elevationLossMeters,
@@ -205,6 +238,8 @@ class RecordedRide {
     'ended_at': endedAt.toIso8601String(),
     'elapsed_seconds': elapsedSeconds,
     'moving_seconds': movingSeconds,
+    'auto_paused_seconds': autoPausedSeconds,
+    'manual_paused_seconds': manualPausedSeconds,
     'distance_meters': distanceMeters,
     'elevation_gain_meters': elevationGainMeters,
     'elevation_loss_meters': elevationLossMeters,
@@ -248,6 +283,10 @@ class RecordedRide {
       // their moving time rather than showing zero.
       elapsedSeconds: (json['elapsed_seconds'] as num?)?.toInt() ?? moving,
       movingSeconds: moving,
+      autoPausedSeconds:
+          (json['auto_paused_seconds'] as num?)?.toInt() ?? 0,
+      manualPausedSeconds:
+          (json['manual_paused_seconds'] as num?)?.toInt() ?? 0,
       distanceMeters: (json['distance_meters'] as num?)?.toDouble() ?? 0,
       elevationGainMeters:
           (json['elevation_gain_meters'] as num?)?.toDouble() ?? 0,

@@ -19,6 +19,11 @@ public struct RideActivityAttributes: ActivityAttributes {
         public var ascent: String
         public var ascentUnit: String
         public var paused: Bool
+        /// „AUTO PAUZA" albo „PAUZA" — puste, gdy jazda trwa.
+        ///
+        /// Etykietę składa Flutter, bo tylko on wie, czy postój wykrył
+        /// licznik, czy nacisnął go rowerzysta.
+        public var pauseLabel: String
         public var live: Bool
         public var maneuver: String
         public var maneuverDistance: String
@@ -35,6 +40,7 @@ public struct RideActivityAttributes: ActivityAttributes {
             ascent: String = "0",
             ascentUnit: String = "m",
             paused: Bool = false,
+            pauseLabel: String = "",
             live: Bool = false,
             maneuver: String = "",
             maneuverDistance: String = "",
@@ -50,6 +56,7 @@ public struct RideActivityAttributes: ActivityAttributes {
             self.ascent = ascent
             self.ascentUnit = ascentUnit
             self.paused = paused
+            self.pauseLabel = pauseLabel
             self.live = live
             self.maneuver = maneuver
             self.maneuverDistance = maneuverDistance
@@ -71,6 +78,7 @@ public struct RideActivityAttributes: ActivityAttributes {
                 ascent: payload["ascent"] as? String ?? "0",
                 ascentUnit: payload["ascentUnit"] as? String ?? "m",
                 paused: payload["paused"] as? Bool ?? false,
+                pauseLabel: payload["pauseLabel"] as? String ?? "",
                 live: payload["live"] as? Bool ?? false,
                 maneuver: payload["maneuver"] as? String ?? "",
                 maneuverDistance: payload["maneuverDistance"] as? String ?? "",
@@ -78,6 +86,13 @@ public struct RideActivityAttributes: ActivityAttributes {
                     ?? "location.north.line",
                 offRoute: payload["offRoute"] as? Bool ?? false
             )
+        }
+
+        /// Co napisać na odznace postoju: etykieta z aplikacji, a gdy jej
+        /// nie ma (starsza wersja aplikacji, świeżo po aktualizacji) — słowo
+        /// zastępcze, żeby odznaka nigdy nie była pusta.
+        public var pauseBadge: String {
+            pauseLabel.isEmpty ? "PAUZA" : pauseLabel
         }
 
         /// True when there is a turn worth showing instead of the ride stats.
