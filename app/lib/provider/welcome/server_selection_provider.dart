@@ -1,4 +1,3 @@
-import 'package:dio/dio.dart';
 import 'package:riverpod_annotation/riverpod_annotation.dart';
 import 'package:wanderer/models/server_instance.dart';
 
@@ -13,16 +12,19 @@ class ServerState {
 
 @riverpod
 class ServerSelectionNotifier extends _$ServerSelectionNotifier {
+  static const _liveRide = ServerInstance(
+    name: 'Live Ride',
+    url: 'https://ride.76-13-3-214.sslip.io',
+    description: 'Live Ride self-hosted server',
+  );
+
   @override
   Future<ServerState> build() async {
-    final dio = Dio();
-    final response = await dio.get('https://wanderer.to/server/servers.json');
-
-    final List<dynamic> data = response.data;
-    return ServerState(
-      data.map((json) => ServerInstance.fromJson(json)).toList(),
-      null,
-    );
+    // Live Ride is a dedicated self-hosted product, not a generic Wanderer
+    // instance browser. Selecting our server up-front removes the upstream
+    // wanderer.to directory from onboarding and makes login/register ready
+    // immediately.
+    return ServerState(const [_liveRide], _liveRide);
   }
 
   void setSelectedServer(ServerInstance server) {
