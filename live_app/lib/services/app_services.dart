@@ -5,9 +5,11 @@ import 'package:flutter/widgets.dart';
 import '../core/api_client.dart';
 import '../data/database.dart';
 import '../data/ride_dao.dart';
+import '../data/bike_dao.dart';
 import '../data/route_dao.dart';
 import '../data/settings_dao.dart';
 import 'alert_controller.dart';
+import 'garage_service.dart';
 import 'geocoding_service.dart';
 import 'gpx_service.dart';
 import 'heart_rate_service.dart';
@@ -37,6 +39,7 @@ class AppServices {
     required this.gpx,
     required this.routes,
     required this.rides,
+    required this.garage,
     required this.profile,
     required this.weather,
     required this.routeWeather,
@@ -60,6 +63,7 @@ class AppServices {
     final settings = SettingsDao(db);
     final sensors = SensorHub(heartRate: heartRate, settings: settings);
     final alerts = AlertController(settings: settings);
+    final garage = GarageService(BikeDao(db));
     final live = LiveSessionController(api, heartRate, profile);
     final rides = RideStorageService(gpx, RideDao(db));
     final weather = WeatherService();
@@ -73,6 +77,7 @@ class AppServices {
       gpx: gpx,
       routes: RouteLibraryService(gpx, RouteDao(db)),
       rides: rides,
+      garage: garage,
       profile: profile,
       weather: weather,
       routeWeather: RouteWeatherService(),
@@ -91,6 +96,7 @@ class AppServices {
         heartRate: heartRate,
         sensors: sensors,
         alerts: alerts,
+        garage: garage,
         live: live,
         weather: weather,
         profile: profile,
@@ -106,6 +112,9 @@ class AppServices {
   final GpxService gpx;
   final RouteLibraryService routes;
   final RideStorageService rides;
+
+  /// Garaż: rowery, liczniki i serwis.
+  final GarageService garage;
   final ProfileService profile;
   final WeatherService weather;
 
@@ -133,6 +142,7 @@ class AppServices {
     await rides.migrateLegacyFiles();
     await routes.migrateLegacyFiles();
     await profile.load();
+    await garage.load();
     // These reach the filesystem and the Bluetooth radio, so they run in the
     // background rather than holding up the first frame.
     unawaited(spotify.restore());

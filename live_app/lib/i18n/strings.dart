@@ -492,6 +492,29 @@ class Strings {
   String get nextTrack => 'Następny utwór';
   String get play => 'Odtwórz';
 
+  // -------------------------------------------------------------- garaż
+  String get garage => 'Garaż';
+  String get addBike => 'Dodaj rower';
+  String get bikeName => 'Nazwa roweru';
+  String get bikeKind => 'Typ';
+  String get bikeWeight => 'Waga (kg)';
+  String get defaultBike => 'Rower domyślny';
+  String get defaultShort => 'DOMYŚLNY';
+  String get setOdometer => 'Ustaw przebieg';
+  String get addComponent => 'Dodaj komponent';
+  String get component => 'Komponent';
+  String get serviceLimit => 'Przebieg serwisowy (km)';
+  String get serviceLimitHint =>
+      'Po tylu kilometrach Live Ride przypomni o wymianie. Zostaw puste, '
+      'jeśli nie chcesz przypomnienia.';
+  String get noServiceLimit => 'bez limitu serwisowego';
+  String get replacedComponent => 'Wymieniony — zeruj przebieg';
+  String get garageEmpty => 'Garaż jest pusty';
+  String get garageEmptyMessage =>
+      'Dodaj rower, a Live Ride będzie liczyć jego przebieg i przypominać '
+      'o wymianie łańcucha, klocków czy opon.';
+  String get serviceDue => 'Serwis';
+
   // -------------------------------------------------------------- profil
   String get profile => 'Profil';
   String get displayName => 'Nazwa wyświetlana';

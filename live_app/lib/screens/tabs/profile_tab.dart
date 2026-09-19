@@ -14,6 +14,7 @@ import '../../services/weather_service.dart';
 import '../../widgets/lr_common.dart';
 import '../data_field_editor.dart';
 import '../alert_settings_screen.dart';
+import '../garage_screen.dart';
 import '../sensors_screen.dart';
 import '../whoop_screen.dart';
 
@@ -229,6 +230,42 @@ class _ProfileTabState extends State<ProfileTab> {
                         ),
                       ),
                     ),
+                  ),
+                  const Divider(height: 1),
+                  AnimatedBuilder(
+                    animation: services.garage,
+                    builder: (context, _) {
+                      final due = services.garage.dueSoon;
+                      return ListTile(
+                        leading: const Icon(Icons.pedal_bike),
+                        title: Text(S.garage),
+                        subtitle: Text(
+                          services.garage.bikes.isEmpty
+                              ? S.garageEmpty
+                              : [
+                                  services.garage.bikes
+                                      .map((bike) => bike.name)
+                                      .join(' · '),
+                                  if (due.isNotEmpty)
+                                    '${S.serviceDue}: ${due.length}',
+                                ].join(' — '),
+                          maxLines: 2,
+                          overflow: TextOverflow.ellipsis,
+                          style: due.isEmpty
+                              ? null
+                              : LR.body.copyWith(
+                                  fontSize: 12.5,
+                                  color: LR.alert,
+                                ),
+                        ),
+                        trailing: const Icon(Icons.chevron_right),
+                        onTap: () => Navigator.of(context).push(
+                          MaterialPageRoute<void>(
+                            builder: (_) => const GarageScreen(),
+                          ),
+                        ),
+                      );
+                    },
                   ),
                   const Divider(height: 1),
                   AnimatedBuilder(

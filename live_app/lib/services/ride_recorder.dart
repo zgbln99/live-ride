@@ -20,6 +20,7 @@ import 'ride_storage_service.dart';
 import 'alert_controller.dart';
 import 'alert_engine.dart';
 import 'climb_tracker.dart';
+import 'garage_service.dart';
 import 'sensor_hub.dart';
 import 'weather_service.dart';
 
@@ -37,6 +38,7 @@ class RideRecorder extends ChangeNotifier {
     required this.heartRate,
     required this.sensors,
     required this.alerts,
+    required this.garage,
     required this.live,
     required this.weather,
     required this.profile,
@@ -48,6 +50,7 @@ class RideRecorder extends ChangeNotifier {
   final HeartRateService heartRate;
   final SensorHub sensors;
   final AlertController alerts;
+  final GarageService garage;
 
   /// Gdzie zawodnik jest względem podjazdów na trasie.
   final ClimbTracker climbs = ClimbTracker();
@@ -297,11 +300,18 @@ class RideRecorder extends ChangeNotifier {
             : (finalMetrics.workKj! * 0.24).round(),
         routeId: _route?.id,
         routeName: _route?.name,
+        bikeId: garage.activeBike?.id,
         riderName: profile.riderName,
         points: List.unmodifiable(_points),
       );
       await storage.save(ride);
       saved = ride;
+      // Licznik roweru rośnie razem z przejazdem, żeby przypomnienia
+      // serwisowe miały się na czym oprzeć.
+      await garage.recordRide(
+        bikeId: ride.bikeId,
+        distanceMeters: ride.distanceMeters,
+      );
     }
 
     _state = RideState.idle;
