@@ -35,21 +35,9 @@ class _TrailSourceSelectScreenState
   bool _plannerLoading = false;
   bool _recorderLoading = false;
 
-  /// Requests location permission (mirroring `launch_navigation.dart`'s
-  /// `launchNavigation` gate — `NavigationScreen` does not self-request it),
-  /// then waits for a real GPS fix before pushing the trail-less
-  /// GPS-recording session — without this, `NavigationScreen` has no
-  /// `response.shape` to derive a map center from and would briefly open at
-  /// `Geographic(0, 0)`. `_recorderLoading` drives the card's spinner and
-  /// disables all three source cards for the duration, matching
-  /// `_openPlanner`/`_importGpx`'s existing loading-flag pattern.
   Future<void> _openRecorder(AppLocalizations l10n) async {
     if (_recorderLoading) return;
 
-    // Same entry-point picker `_openPlanner` uses — a trail-less recording
-    // has no trail category for `costingForCategory` to derive "Follow
-    // roads"' costing from at save time, so the choice is captured here
-    // instead and threaded through to `NavigationScreen.recordingCosting`.
     final bucket = await showTravelProfileSheet(context);
     if (!mounted || bucket == null) return;
 
@@ -81,10 +69,6 @@ class _TrailSourceSelectScreenState
         return;
       }
     }
-    // Background location is what keeps tracking alive when the app is
-    // cleared from recents — tracelet stops on task removal without it. Shows
-    // Play's required disclosure before the system prompt on Android; recording
-    // proceeds either way if declined.
     if (mounted) {
       permission = await requestBackgroundLocation(context, ref, permission);
     }
@@ -92,10 +76,6 @@ class _TrailSourceSelectScreenState
     if (!mounted) return;
     setState(() => _recorderLoading = true);
     try {
-      // Settles the app-wide online status before the session starts — fire
-      // and forget. The recorder's map no longer depends on it: the one style
-      // path resolves from the persisted `/map/style-sources` copy when the
-      // network is unreachable.
       unawaited(ref.read(onlineStatusProvider.notifier).refresh());
       final pos = await ref
           .read(foregroundPositionStreamProvider.notifier)
@@ -158,53 +138,103 @@ class _TrailSourceSelectScreenState
   Geographic _fallbackCenter(Settings? settings) {
     final loc = settings?.location;
     if (loc != null) return Geographic(lat: loc.lat, lon: loc.lon);
-
     return const Geographic(lat: 0, lon: 0);
+  }
+
+  void _showImportError(AppLocalizations l10n, [String? detail]) {
+    final text = detail == null || detail.isEmpty
+        ? l10n.trail_source_import_error
+        : '${l10n.trail_source_import_error}\n$detail';
+    ref
+        .read(toastProvider.notifier)
+        .add(
+          ToastMessage(
+            type: ToastType.error,
+            icon: FontAwesomeIcons.circleExclamation,
+            text: text,
+          ),
+        );
+  }
+
+  /// Copies the selected document into app-owned temporary storage.
+  ///
+  /// This is deliberate even when iOS gives file_picker a non-null path.
+  /// iCloud Drive and third-party File Provider URLs can be security-scoped;
+  /// once the picker closes, that path can look valid while becoming
+  /// unreadable. Bytes captured while access is live are the reliable bridge.
+  Future<String?> _materializePickedFile(PlatformFile picked) async {
+    final safeName = picked.name.replaceAll(RegExp(r'[^A-Za-z0-9._-]'), '_');
+    final tempDir = await getTemporaryDirectory();
+    final tempFile = File(
+      '${tempDir.path}/${DateTime.now().microsecondsSinceEpoch}_$safeName',
+    );
+
+    final bytes = picked.bytes;
+    if (bytes != null && bytes.isNotEmpty) {
+      await tempFile.writeAsBytes(bytes, flush: true);
+      return tempFile.path;
+    }
+
+    final originalPath = picked.path;
+    if (originalPath == null) return null;
+
+    try {
+      final original = File(originalPath);
+      if (!await original.exists()) return null;
+      await original.copy(tempFile.path);
+      return tempFile.path;
+    } on FileSystemException {
+      return null;
+    }
   }
 
   Future<void> _importGpx(AppLocalizations l10n) async {
     if (_importLoading) return;
 
-    // iOS can grey out otherwise-valid GPX files when a custom extension
-    // filter is translated into an unknown/unsupported UTType. Show the
-    // normal Files picker there and validate the extension ourselves after
-    // selection. `withData` is also a fallback for iCloud providers that do
-    // not immediately expose a local filesystem path.
     final isIos = Platform.isIOS;
-    final result = await FilePicker.pickFiles(
-      type: isIos ? FileType.any : FileType.custom,
-      allowedExtensions: isIos ? null : trailImportExtensions,
-      withData: isIos,
-    );
+    FilePickerResult? result;
+    try {
+      result = await FilePicker.pickFiles(
+        type: isIos ? FileType.any : FileType.custom,
+        allowedExtensions: isIos ? null : trailImportExtensions,
+        // Always ask for bytes. This fixes iCloud/Files providers on iOS and
+        // Android content URIs that do not map to a durable filesystem path.
+        withData: true,
+      );
+    } catch (_) {
+      if (mounted) {
+        _showImportError(l10n, 'Nie można otworzyć aplikacji Pliki.');
+      }
+      return;
+    }
+
     final picked = result?.files.single;
     if (picked == null) return;
 
-    var path = picked.path;
-    if (path == null && picked.bytes != null) {
-      final tempDir = await getTemporaryDirectory();
-      final safeName = picked.name.replaceAll(RegExp(r'[^A-Za-z0-9._-]'), '_');
-      final tempFile = File(
-        '${tempDir.path}/${DateTime.now().microsecondsSinceEpoch}_$safeName',
+    final dot = picked.name.lastIndexOf('.');
+    final ext = (picked.extension ?? (dot >= 0 ? picked.name.substring(dot + 1) : ''))
+        .toLowerCase();
+    if (!trailImportExtensions.contains(ext)) {
+      _showImportError(
+        l10n,
+        'Obsługiwane pliki: GPX, KML, KMZ, TCX i FIT.',
       );
-      await tempFile.writeAsBytes(picked.bytes!, flush: true);
-      path = tempFile.path;
-    }
-
-    if (path == null) {
-      ref
-          .read(toastProvider.notifier)
-          .add(
-            ToastMessage(
-              type: ToastType.error,
-              icon: FontAwesomeIcons.circleExclamation,
-              text: l10n.trail_source_import_error,
-            ),
-          );
       return;
     }
 
     setState(() => _importLoading = true);
     try {
+      final path = await _materializePickedFile(picked);
+      if (path == null) {
+        if (mounted) {
+          _showImportError(
+            l10n,
+            'Nie udało się odczytać danych pliku. Pobierz go lokalnie w aplikacji Pliki i spróbuj ponownie.',
+          );
+        }
+        return;
+      }
+
       if (!mounted) return;
       await importTrailFile(
         ref: ref,
@@ -213,6 +243,12 @@ class _TrailSourceSelectScreenState
         navContext: context,
         l10n: l10n,
       );
+    } on FileSystemException catch (e) {
+      if (mounted) {
+        _showImportError(l10n, 'Nie można odczytać pliku: ${e.message}');
+      }
+    } catch (_) {
+      if (mounted) _showImportError(l10n);
     } finally {
       if (mounted) setState(() => _importLoading = false);
     }
@@ -222,11 +258,7 @@ class _TrailSourceSelectScreenState
   Widget build(BuildContext context) {
     final l10n = AppLocalizations.of(context)!;
     final isOnline = ref.watch(onlineStatusProvider);
-
-    // Any in-flight action disables all three cards, so a second tap cannot
-    // race the first.
     final busy = _importLoading || _plannerLoading || _recorderLoading;
-
     final networkBlocked = busy || !isOnline;
 
     return Scaffold(
@@ -235,7 +267,7 @@ class _TrailSourceSelectScreenState
         automaticallyImplyLeading: false,
       ),
       body: ListView(
-        padding: EdgeInsets.symmetric(horizontal: 12),
+        padding: const EdgeInsets.symmetric(horizontal: 12),
         children: [
           _SourceActionCard(
             icon: FontAwesomeIcons.route,
@@ -291,7 +323,7 @@ class _SourceActionCard extends StatelessWidget {
         : theme.colorScheme.secondaryContainer.withValues(alpha: 0.4);
     final resolvedIconColor = disabled
         ? theme.colorScheme.onSurface.withValues(alpha: 0.38)
-        : theme.colorScheme.onSurface.withValues(alpha: 1);
+        : theme.colorScheme.onSurface;
     final resolvedTitleColor = disabled
         ? theme.colorScheme.onSurface.withValues(alpha: 0.38)
         : null;
@@ -312,7 +344,7 @@ class _SourceActionCard extends StatelessWidget {
       child: InkWell(
         onTap: onTap,
         child: Padding(
-          padding: const EdgeInsets.all(16.0),
+          padding: const EdgeInsets.all(16),
           child: Row(
             children: [
               Container(
@@ -324,7 +356,6 @@ class _SourceActionCard extends StatelessWidget {
                 child: FaIcon(icon, color: resolvedIconColor),
               ),
               const SizedBox(width: 16),
-
               Expanded(
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
@@ -347,7 +378,6 @@ class _SourceActionCard extends StatelessWidget {
                 ),
               ),
               const SizedBox(width: 16),
-
               if (isLoading)
                 const SizedBox(
                   width: 16,
