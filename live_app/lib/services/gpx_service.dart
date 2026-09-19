@@ -9,32 +9,37 @@ import '../models/ride_route.dart';
 
 class GpxService {
   Future<RideRoute?> importRoute() async {
-    final result = await FilePicker.platform.pickFiles(
+    final result = await FilePicker.pickFiles(
       type: FileType.any,
       withData: true,
+      allowMultiple: false,
     );
     final file = result?.files.single;
     if (file == null) return null;
-    if (!file.name.toLowerCase().endsWith('.gpx')) {
-      throw const FormatException('Wybierz plik GPX.');
+
+    final name = file.name.trim();
+    if (!name.toLowerCase().endsWith('.gpx')) {
+      throw const FormatException('Wybierz plik z rozszerzeniem .gpx.');
     }
 
-    late final List<int> bytes;
-    if (file.bytes != null && file.bytes!.isNotEmpty) {
-      bytes = file.bytes!;
-    } else if (file.path != null) {
-      bytes = await File(file.path!).readAsBytes();
-    } else {
-      throw const FileSystemException('Nie można odczytać wybranego pliku.');
+    final bytes = await _readPickedFile(file);
+    if (bytes.isEmpty) {
+      throw const FileSystemException('Wybrany plik GPX jest pusty.');
     }
 
-    final xml = utf8.decode(bytes, allowMalformed: true);
-    final route = parseXml(xml, fallbackName: file.name);
+    String xml;
+    try {
+      xml = utf8.decode(bytes);
+    } on FormatException {
+      xml = utf8.decode(bytes, allowMalformed: true);
+    }
+
+    final route = parseXml(xml, fallbackName: name);
 
     final docs = await getApplicationDocumentsDirectory();
     final dir = Directory('${docs.path}/routes');
     await dir.create(recursive: true);
-    final safe = file.name.replaceAll(RegExp(r'[^A-Za-z0-9._-]'), '_');
+    final safe = name.replaceAll(RegExp(r'[^A-Za-z0-9._-]'), '_');
     final destination = File(
       '${dir.path}/${DateTime.now().millisecondsSinceEpoch}_$safe',
     );
@@ -48,8 +53,28 @@ class GpxService {
     );
   }
 
+  Future<List<int>> _readPickedFile(PlatformFile file) async {
+    final inMemory = file.bytes;
+    if (inMemory != null && inMemory.isNotEmpty) {
+      return inMemory;
+    }
+
+    final path = file.path;
+    if (path != null && path.isNotEmpty) {
+      final selected = File(path);
+      if (await selected.exists()) {
+        return selected.readAsBytes();
+      }
+    }
+
+    throw const FileSystemException(
+      'iOS nie udostępnił danych wybranego pliku. Pobierz plik z iCloud do Plików i spróbuj ponownie.',
+    );
+  }
+
   RideRoute parseXml(String xml, {required String fallbackName, String? sourcePath}) {
-    final gpx = GpxReader().fromString(xml);
+    final normalized = xml.startsWith('\ufeff') ? xml.substring(1) : xml;
+    final gpx = GpxReader().fromString(normalized);
     final points = <RidePoint>[];
 
     for (final track in gpx.trks) {
@@ -93,7 +118,9 @@ class GpxService {
     }
 
     if (points.length < 2) {
-      throw const FormatException('GPX nie zawiera poprawnej trasy.');
+      throw FormatException(
+        'GPX został odczytany, ale zawiera tylko ${points.length} poprawnych punktów.',
+      );
     }
 
     final metadataName = gpx.metadata?.name?.trim();
@@ -108,7 +135,7 @@ class GpxService {
     return RideRoute(
       name: name,
       points: points,
-      rawGpx: xml,
+      rawGpx: normalized,
       sourcePath: sourcePath,
     );
   }
@@ -136,9 +163,7 @@ class GpxService {
             sourcePath: file.path,
           ),
         );
-      } catch (_) {
-        // Skip a damaged local file without breaking the whole library.
-      }
+      } catch (_) {}
     }
     return routes;
   }
