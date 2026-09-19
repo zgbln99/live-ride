@@ -18,6 +18,7 @@ import 'ride_recorder.dart';
 import 'ride_storage_service.dart';
 import 'route_library_service.dart';
 import 'route_weather_service.dart';
+import 'sensor_hub.dart';
 import 'routing_service.dart';
 import 'spotify_service.dart';
 import 'weather_service.dart';
@@ -39,6 +40,7 @@ class AppServices {
     required this.weather,
     required this.routeWeather,
     required this.heartRate,
+    required this.sensors,
     required this.live,
     required this.location,
     required this.routing,
@@ -53,6 +55,8 @@ class AppServices {
     final gpx = GpxService();
     final profile = ProfileService();
     final heartRate = HeartRateService();
+    final settings = SettingsDao(db);
+    final sensors = SensorHub(heartRate: heartRate, settings: settings);
     final live = LiveSessionController(api, heartRate, profile);
     final rides = RideStorageService(gpx, RideDao(db));
     final weather = WeatherService();
@@ -60,7 +64,7 @@ class AppServices {
     final liveActivity = LiveActivityService();
     return AppServices._(
       database: db,
-      settings: SettingsDao(db),
+      settings: settings,
       syncQueue: SyncQueueDao(db),
       api: api,
       gpx: gpx,
@@ -70,6 +74,7 @@ class AppServices {
       weather: weather,
       routeWeather: RouteWeatherService(),
       heartRate: heartRate,
+      sensors: sensors,
       live: live,
       location: location,
       routing: RoutingService(api),
@@ -80,6 +85,7 @@ class AppServices {
         location: location,
         storage: rides,
         heartRate: heartRate,
+        sensors: sensors,
         live: live,
         weather: weather,
         profile: profile,
@@ -101,6 +107,9 @@ class AppServices {
   /// Prognoza wzdłuż trasy — używana przez briefing, nie przez komputer jazdy.
   final RouteWeatherService routeWeather;
   final HeartRateService heartRate;
+
+  /// Sensory rowerowe: kadencja, prędkość, moc, trenażer.
+  final SensorHub sensors;
   final LiveSessionController live;
   final LocationService location;
   final RoutingService routing;
@@ -120,6 +129,7 @@ class AppServices {
     // background rather than holding up the first frame.
     unawaited(spotify.restore());
     unawaited(heartRate.restore());
+    unawaited(sensors.restore());
   }
 
   Future<void> dispose() async {

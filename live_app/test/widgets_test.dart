@@ -45,9 +45,9 @@ void main() {
       ),
     );
 
-    expect(find.text('SPEED'), findsOneWidget);
+    expect(find.text(RideDataField.speed.label), findsOneWidget);
     expect(find.text('31.2'), findsOneWidget);
-    expect(find.text('HEART RATE'), findsOneWidget);
+    expect(find.text(RideDataField.heartRate.label), findsOneWidget);
     expect(find.text('151'), findsOneWidget);
     expect(find.text('18.4'), findsOneWidget);
     expect(find.text('52:00'), findsOneWidget);
@@ -67,9 +67,9 @@ void main() {
       ),
     );
 
-    expect(find.text('SPEED'), findsOneWidget);
-    expect(find.text('DISTANCE'), findsOneWidget);
-    expect(find.text('HEART RATE'), findsNothing);
+    expect(find.text(RideDataField.speed.label), findsOneWidget);
+    expect(find.text(RideDataField.distance.label), findsOneWidget);
+    expect(find.text(RideDataField.heartRate.label), findsNothing);
   });
 
   testWidgets('navigation header shows the upcoming maneuver', (tester) async {

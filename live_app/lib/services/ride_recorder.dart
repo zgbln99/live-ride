@@ -17,6 +17,7 @@ import 'local_store.dart';
 import 'location_service.dart';
 import 'profile_service.dart';
 import 'ride_storage_service.dart';
+import 'sensor_hub.dart';
 import 'weather_service.dart';
 
 enum RideState { idle, preparing, recording, paused, saving }
@@ -31,6 +32,7 @@ class RideRecorder extends ChangeNotifier {
     required this.location,
     required this.storage,
     required this.heartRate,
+    required this.sensors,
     required this.live,
     required this.weather,
     required this.profile,
@@ -40,6 +42,7 @@ class RideRecorder extends ChangeNotifier {
   final LocationService location;
   final RideStorageService storage;
   final HeartRateService heartRate;
+  final SensorHub sensors;
   final LiveSessionController live;
   final WeatherService weather;
   final ProfileService profile;
@@ -131,6 +134,12 @@ class RideRecorder extends ChangeNotifier {
     final currentBpm = heartRate.latestBpm;
     if (currentBpm != null) _accumulator.addHeartRate(currentBpm);
 
+    // Kadencja i moc idą prosto z sensorów do akumulatora — rejestrator jest
+    // jedynym miejscem, które je zlicza, więc ekran i zapis nigdy się nie
+    // rozjadą.
+    sensors.addListener(_onSensors);
+    _onSensors();
+
     _positionSub = location.positionStream().listen(
       _onPosition,
       onError: _onPositionError,
@@ -189,6 +198,7 @@ class RideRecorder extends ChangeNotifier {
     _positionSub = null;
     await _heartRateSub?.cancel();
     _heartRateSub = null;
+    sensors.removeListener(_onSensors);
     _ticker?.cancel();
     _ticker = null;
     unawaited(liveActivity.end());
@@ -244,6 +254,7 @@ class RideRecorder extends ChangeNotifier {
     _positionSub = null;
     await _heartRateSub?.cancel();
     _heartRateSub = null;
+    sensors.removeListener(_onSensors);
     _ticker?.cancel();
     _ticker = null;
     unawaited(liveActivity.end());
@@ -341,6 +352,21 @@ class RideRecorder extends ChangeNotifier {
     }
   }
 
+  void _onSensors() {
+    if (_state != RideState.recording) return;
+    final snapshot = sensors.snapshot;
+    final cadence = snapshot.cadenceRpm;
+    if (cadence != null) _accumulator.addCadence(cadence);
+    final power = snapshot.powerWatts;
+    if (power != null) {
+      _accumulator.addPower(
+        power,
+        balancePercent: snapshot.pedalBalancePercent,
+      );
+    }
+    _accumulator.setSensorSpeed(snapshot.speedKmh);
+  }
+
   void _publish() {
     _metrics = _accumulator.build(
       elapsed: elapsed,
@@ -363,6 +389,7 @@ class RideRecorder extends ChangeNotifier {
   void dispose() {
     _positionSub?.cancel();
     _heartRateSub?.cancel();
+    sensors.removeListener(_onSensors);
     _ticker?.cancel();
     super.dispose();
   }

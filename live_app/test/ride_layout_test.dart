@@ -79,12 +79,7 @@ Widget rideScaffold({
           SizedBox(
             // Mirrors the screen's rule: the instrument is capped at a share
             // of the screen so the map is never squeezed out.
-            height: math.min(switch (layout) {
-              RideFieldLayout.two => 190.0,
-              RideFieldLayout.four => 194.0,
-              RideFieldLayout.six => 252.0,
-              RideFieldLayout.eight => 296.0,
-            }, availableHeight * 0.42),
+            height: math.min(layout.preferredHeight, availableHeight * 0.42),
             child: RideDataGrid(
               fields: profile,
               layout: layout,

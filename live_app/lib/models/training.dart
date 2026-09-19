@@ -368,6 +368,7 @@ class PowerMetrics {
     this.normalized,
     this.intensityFactor,
     this.trainingStressScore,
+    this.balancePercent,
   });
 
   final int? current;
@@ -379,6 +380,9 @@ class PowerMetrics {
   final int? normalized;
   final double? intensityFactor;
   final double? trainingStressScore;
+
+  /// Udział lewej nogi w procentach, gdy miernik go podaje.
+  final double? balancePercent;
 
   bool get hasData => current != null || average != null;
 
@@ -401,11 +405,21 @@ class PowerAccumulator {
   int _count = 0;
   int _max = 0;
   int? _current;
+  double? _balance;
   DateTime? _startedAt;
   DateTime? _lastRolling;
 
-  void add(int watts, {DateTime? at}) {
+  /// Czy miernik w ogóle coś przysłał. Bez tego nie da się odróżnić „0 W"
+  /// od „nie ma miernika", a to dwie zupełnie różne rzeczy.
+  bool get hasData => _count > 0;
+
+  void add(int watts, {DateTime? at, double? balancePercent}) {
     if (watts < 0 || watts > 2500) return;
+    if (balancePercent != null &&
+        balancePercent >= 0 &&
+        balancePercent <= 100) {
+      _balance = balancePercent;
+    }
     final now = at ?? DateTime.now();
     _startedAt ??= now;
     _current = watts;
@@ -481,6 +495,7 @@ class PowerAccumulator {
       normalized: normalized,
       intensityFactor: intensity,
       trainingStressScore: tss,
+      balancePercent: _balance,
     );
   }
 
@@ -491,6 +506,7 @@ class PowerAccumulator {
     _count = 0;
     _max = 0;
     _current = null;
+    _balance = null;
     _startedAt = null;
     _lastRolling = null;
   }

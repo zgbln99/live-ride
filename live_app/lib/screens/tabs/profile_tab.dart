@@ -6,11 +6,13 @@ import 'package:flutter/material.dart';
 import '../../core/api_client.dart';
 import '../../core/formatters.dart';
 import '../../core/lr_theme.dart';
+import '../../i18n/strings.dart';
 import '../../services/app_services.dart';
 import '../../services/spotify_service.dart';
 import '../../services/weather_service.dart';
 import '../../widgets/lr_common.dart';
 import '../data_field_editor.dart';
+import '../sensors_screen.dart';
 import '../whoop_screen.dart';
 
 /// Rider identity and app preferences.
@@ -183,6 +185,27 @@ class _ProfileTabState extends State<ProfileTab> {
                       onTap: () => Navigator.of(context).push(
                         MaterialPageRoute<void>(
                           builder: (_) => const WhoopScreen(),
+                        ),
+                      ),
+                    ),
+                  ),
+                  const Divider(height: 1),
+                  AnimatedBuilder(
+                    animation: services.sensors,
+                    builder: (context, _) => ListTile(
+                      leading: const Icon(Icons.sensors),
+                      title: Text(S.sensors),
+                      subtitle: Text(
+                        services.sensors.connected.isEmpty
+                            ? S.noSensorsConnected
+                            : services.sensors.connected
+                                  .map((device) => device.name)
+                                  .join(' · '),
+                      ),
+                      trailing: const Icon(Icons.chevron_right),
+                      onTap: () => Navigator.of(context).push(
+                        MaterialPageRoute<void>(
+                          builder: (_) => const SensorsScreen(),
                         ),
                       ),
                     ),

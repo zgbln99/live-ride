@@ -1,13 +1,17 @@
 import 'package:flutter/material.dart';
 
 import '../core/lr_theme.dart';
+import '../i18n/strings.dart';
 import '../models/ride_data_field.dart';
+import '../models/ride_pages.dart';
+import '../models/rider_profile.dart';
 import '../services/app_services.dart';
 import '../widgets/lr_common.dart';
 
-/// Chooses the ride computer layout and what each field shows.
+/// Edytor stron komputera rowerowego.
 ///
-/// A rider sets this once and it applies to free rides and navigation alike.
+/// Zawodnik ustawia to raz i obowiązuje na wolnej jeździe i na nawigacji.
+/// Stron może być dowolnie wiele; każda ma swój układ i swój zestaw pól.
 Future<void> showDataFieldEditor(BuildContext context, AppServices services) {
   return showModalBottomSheet<void>(
     context: context,
@@ -15,40 +19,99 @@ Future<void> showDataFieldEditor(BuildContext context, AppServices services) {
     isScrollControlled: true,
     builder: (sheetContext) => DraggableScrollableSheet(
       expand: false,
-      initialChildSize: 0.78,
+      initialChildSize: 0.82,
       maxChildSize: 0.95,
       builder: (context, scrollController) =>
-          _FieldEditor(services: services, scrollController: scrollController),
+          _PageEditor(services: services, scrollController: scrollController),
     ),
   );
 }
 
-class _FieldEditor extends StatefulWidget {
-  const _FieldEditor({required this.services, required this.scrollController});
+/// Wybór jednego pola — używany przy przytrzymaniu pola na ekranie jazdy.
+Future<RideDataField?> showFieldPicker(
+  BuildContext context,
+  RiderProfile profile,
+) {
+  return showModalBottomSheet<RideDataField>(
+    context: context,
+    showDragHandle: true,
+    isScrollControlled: true,
+    builder: (sheetContext) => DraggableScrollableSheet(
+      expand: false,
+      initialChildSize: 0.7,
+      maxChildSize: 0.95,
+      builder: (context, scrollController) => _FieldList(
+        scrollController: scrollController,
+        selected: null,
+        onPick: (field) => Navigator.of(sheetContext).pop(field),
+      ),
+    ),
+  );
+}
+
+class _PageEditor extends StatefulWidget {
+  const _PageEditor({required this.services, required this.scrollController});
 
   final AppServices services;
   final ScrollController scrollController;
 
   @override
-  State<_FieldEditor> createState() => _FieldEditorState();
+  State<_PageEditor> createState() => _PageEditorState();
 }
 
-class _FieldEditorState extends State<_FieldEditor> {
-  int _selected = 0;
+class _PageEditorState extends State<_PageEditor> {
+  int _page = 0;
+  int _slot = 0;
+
+  List<RideDataPage> get _pages => widget.services.profile.profile.ridePages;
+
+  Future<void> _save(List<RideDataPage> pages) async {
+    final profileService = widget.services.profile;
+    await profileService.update(
+      profileService.profile.copyWith(
+        pages: pages,
+        // Stare pola trzymamy zgodne z pierwszą stroną, żeby cokolwiek, co
+        // ich jeszcze używa, pokazywało to samo.
+        layout: pages.first.layout,
+        fields: pages.first.activeFields,
+      ),
+    );
+    if (mounted) setState(() {});
+  }
 
   @override
   Widget build(BuildContext context) {
-    final profileService = widget.services.profile;
-    final profile = profileService.profile;
-    final fields = profile.activeFields;
-    if (_selected >= fields.length) _selected = 0;
+    final pages = _pages;
+    if (_page >= pages.length) _page = pages.length - 1;
+    final page = pages[_page];
+    final fields = page.activeFields;
+    if (_slot >= fields.length) _slot = 0;
 
     return Column(
       children: [
-        const Padding(
-          padding: EdgeInsets.fromLTRB(20, 0, 20, 8),
-          child: LrSectionHeader(title: 'Data fields'),
+        Padding(
+          padding: const EdgeInsets.fromLTRB(20, 0, 20, 8),
+          child: LrSectionHeader(
+            title: S.dataFields,
+            trailing: TextButton.icon(
+              icon: const Icon(Icons.auto_awesome, size: 16),
+              label: Text(S.presets),
+              onPressed: _choosePreset,
+            ),
+          ),
         ),
+        _PageTabs(
+          pages: pages,
+          index: _page,
+          onSelect: (index) => setState(() {
+            _page = index;
+            _slot = 0;
+          }),
+          onAdd: pages.length >= 8 ? null : _addPage,
+          onRemove: pages.length <= 1 ? null : () => _removePage(_page),
+          onRename: () => _renamePage(_page),
+        ),
+        const SizedBox(height: 12),
         Padding(
           padding: const EdgeInsets.symmetric(horizontal: 20),
           child: Row(
@@ -57,15 +120,17 @@ class _FieldEditorState extends State<_FieldEditor> {
                 Expanded(
                   child: _LayoutChoice(
                     layout: layout,
-                    selected: profile.layout == layout,
+                    selected: page.layout == layout,
                     onTap: () {
-                      profileService.update(profile.copyWith(layout: layout));
-                      setState(() => _selected = 0);
+                      final next = List<RideDataPage>.of(pages);
+                      next[_page] = page.copyWith(layout: layout);
+                      _slot = 0;
+                      _save(next);
                     },
                   ),
                 ),
                 if (layout != RideFieldLayout.values.last)
-                  const SizedBox(width: 8),
+                  const SizedBox(width: 6),
               ],
             ],
           ),
@@ -80,42 +145,206 @@ class _FieldEditorState extends State<_FieldEditor> {
               for (var i = 0; i < fields.length; i++)
                 ChoiceChip(
                   label: Text('${i + 1}. ${fields[i].label}'),
-                  selected: _selected == i,
+                  selected: _slot == i,
                   showCheckmark: false,
-                  onSelected: (_) => setState(() => _selected = i),
+                  onSelected: (_) => setState(() => _slot = i),
                 ),
             ],
           ),
         ),
         const Divider(height: 24),
         Expanded(
-          child: ListView(
-            controller: widget.scrollController,
-            padding: const EdgeInsets.fromLTRB(12, 0, 12, 24),
-            children: [
-              for (final field in RideDataField.values)
-                ListTile(
-                  dense: true,
-                  title: Text(field.label),
-                  leading: Icon(
-                    field == fields[_selected]
-                        ? Icons.radio_button_checked
-                        : Icons.radio_button_unchecked,
-                    color: field == fields[_selected]
-                        ? LR.accentDeep
-                        : LR.muted,
-                    size: 20,
-                  ),
-                  onTap: () {
-                    final next = List<RideDataField>.of(fields);
-                    next[_selected] = field;
-                    profileService.update(profile.copyWith(fields: next));
-                    setState(() {});
-                  },
-                ),
-            ],
+          child: _FieldList(
+            scrollController: widget.scrollController,
+            selected: fields[_slot],
+            onPick: (field) {
+              final next = List<RideDataPage>.of(pages);
+              next[_page] = page.withFieldAt(_slot, field);
+              _save(next);
+            },
           ),
         ),
+      ],
+    );
+  }
+
+  Future<void> _addPage() async {
+    final pages = List<RideDataPage>.of(_pages)
+      ..add(
+        RideDataPage(
+          name: '${S.page} ${_pages.length + 1}',
+          layout: RideFieldLayout.four,
+          fields: const [
+            RideDataField.speed,
+            RideDataField.distance,
+            RideDataField.elapsed,
+            RideDataField.heartRate,
+          ],
+        ),
+      );
+    setState(() => _page = pages.length - 1);
+    await _save(pages);
+  }
+
+  Future<void> _removePage(int index) async {
+    final pages = List<RideDataPage>.of(_pages)..removeAt(index);
+    setState(() => _page = 0);
+    await _save(pages);
+  }
+
+  Future<void> _renamePage(int index) async {
+    final controller = TextEditingController(text: _pages[index].name);
+    final name = await showDialog<String>(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        title: Text(S.rename),
+        content: TextField(
+          controller: controller,
+          autofocus: true,
+          decoration: InputDecoration(labelText: S.page),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(dialogContext),
+            child: Text(S.cancel),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.pop(dialogContext, controller.text),
+            child: Text(S.save),
+          ),
+        ],
+      ),
+    );
+    controller.dispose();
+    if (name == null || name.trim().isEmpty) return;
+    final pages = List<RideDataPage>.of(_pages);
+    pages[index] = pages[index].copyWith(name: name.trim());
+    await _save(pages);
+  }
+
+  Future<void> _choosePreset() async {
+    final preset = await showModalBottomSheet<RidePagePreset>(
+      context: context,
+      showDragHandle: true,
+      builder: (sheetContext) => SafeArea(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Padding(
+              padding: const EdgeInsets.fromLTRB(20, 0, 20, 8),
+              child: LrSectionHeader(title: S.presets),
+            ),
+            for (final preset in RidePagePreset.values)
+              ListTile(
+                title: Text(preset.label),
+                subtitle: Text(
+                  preset.pages.map((page) => page.name).join(' · '),
+                ),
+                onTap: () => Navigator.of(sheetContext).pop(preset),
+              ),
+            const SizedBox(height: 12),
+          ],
+        ),
+      ),
+    );
+    if (preset == null) return;
+    setState(() => _page = 0);
+    await _save(preset.pages);
+  }
+}
+
+class _PageTabs extends StatelessWidget {
+  const _PageTabs({
+    required this.pages,
+    required this.index,
+    required this.onSelect,
+    required this.onAdd,
+    required this.onRemove,
+    required this.onRename,
+  });
+
+  final List<RideDataPage> pages;
+  final int index;
+  final void Function(int index) onSelect;
+  final VoidCallback? onAdd;
+  final VoidCallback? onRemove;
+  final VoidCallback onRename;
+
+  @override
+  Widget build(BuildContext context) => SizedBox(
+    height: 40,
+    child: ListView(
+      scrollDirection: Axis.horizontal,
+      padding: const EdgeInsets.symmetric(horizontal: 16),
+      children: [
+        for (var i = 0; i < pages.length; i++)
+          Padding(
+            padding: const EdgeInsets.only(right: 8),
+            child: ChoiceChip(
+              label: Text(pages[i].name),
+              selected: i == index,
+              showCheckmark: false,
+              onSelected: (_) => onSelect(i),
+            ),
+          ),
+        IconButton(
+          tooltip: S.rename,
+          icon: const Icon(Icons.edit_outlined, size: 18),
+          onPressed: onRename,
+        ),
+        IconButton(
+          tooltip: S.delete,
+          icon: const Icon(Icons.remove_circle_outline, size: 18),
+          onPressed: onRemove,
+        ),
+        IconButton(
+          tooltip: S.add,
+          icon: const Icon(Icons.add_circle_outline, size: 18),
+          onPressed: onAdd,
+        ),
+      ],
+    ),
+  );
+}
+
+class _FieldList extends StatelessWidget {
+  const _FieldList({
+    required this.scrollController,
+    required this.selected,
+    required this.onPick,
+  });
+
+  final ScrollController scrollController;
+  final RideDataField? selected;
+  final void Function(RideDataField field) onPick;
+
+  @override
+  Widget build(BuildContext context) {
+    return ListView(
+      controller: scrollController,
+      padding: const EdgeInsets.fromLTRB(12, 0, 12, 24),
+      children: [
+        for (final group in RideFieldGroup.values) ...[
+          Padding(
+            padding: const EdgeInsets.fromLTRB(8, 12, 8, 4),
+            child: Text(group.label, style: LR.fieldLabel),
+          ),
+          for (final field in RideDataField.values.where(
+            (field) => field.group == group,
+          ))
+            ListTile(
+              dense: true,
+              title: Text(field.label),
+              leading: Icon(
+                field == selected
+                    ? Icons.radio_button_checked
+                    : Icons.radio_button_unchecked,
+                color: field == selected ? LR.accentDeep : LR.muted,
+                size: 20,
+              ),
+              onTap: () => onPick(field),
+            ),
+        ],
       ],
     );
   }
@@ -137,7 +366,7 @@ class _LayoutChoice extends StatelessWidget {
     onTap: onTap,
     borderRadius: BorderRadius.circular(5),
     child: Container(
-      padding: const EdgeInsets.symmetric(vertical: 10),
+      padding: const EdgeInsets.symmetric(vertical: 8),
       decoration: BoxDecoration(
         color: selected ? LR.accent.withValues(alpha: 0.14) : LR.surface,
         border: Border.all(
@@ -149,10 +378,10 @@ class _LayoutChoice extends StatelessWidget {
       child: Column(
         children: [
           _LayoutGlyph(layout: layout),
-          const SizedBox(height: 8),
+          const SizedBox(height: 6),
           Text(
             '${layout.fieldCount}',
-            style: const TextStyle(fontWeight: FontWeight.w900, fontSize: 13),
+            style: const TextStyle(fontWeight: FontWeight.w900, fontSize: 12),
           ),
         ],
       ),
@@ -167,8 +396,8 @@ class _LayoutGlyph extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) => SizedBox(
-    width: 30,
-    height: 26,
+    width: 24,
+    height: 22,
     child: Column(
       children: [
         for (var row = 0; row < layout.rows; row++)

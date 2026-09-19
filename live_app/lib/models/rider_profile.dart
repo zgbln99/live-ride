@@ -1,4 +1,5 @@
 import 'ride_data_field.dart';
+import 'ride_pages.dart';
 
 /// Rider identity and app-wide preferences.
 ///
@@ -29,6 +30,7 @@ class RiderProfile {
       RideDataField.distance,
       RideDataField.elapsed,
     ],
+    this.pages = const <RideDataPage>[],
   });
 
   final String displayName;
@@ -57,6 +59,17 @@ class RiderProfile {
 
   final RideFieldLayout layout;
   final List<RideDataField> fields;
+
+  /// Strony komputera rowerowego, przesuwane palcem w bok.
+  ///
+  /// Pusta lista znaczy „jeszcze nie ustawione" — wtedy [ridePages] składa
+  /// jedną stronę ze starych [layout] i [fields], żeby nikt nie stracił
+  /// swojego układu przy aktualizacji.
+  final List<RideDataPage> pages;
+
+  List<RideDataPage> get ridePages => pages.isNotEmpty
+      ? pages
+      : [RideDataPage(name: 'Jazda', layout: layout, fields: activeFields)];
 
   /// The name used for LIVE sessions, ride titles and the profile header.
   String get effectiveName {
@@ -130,6 +143,7 @@ class RiderProfile {
     Object? restingHeartRate = _keep,
     RideFieldLayout? layout,
     List<RideDataField>? fields,
+    List<RideDataPage>? pages,
   }) => RiderProfile(
     displayName: displayName ?? this.displayName,
     username: username ?? this.username,
@@ -153,6 +167,7 @@ class RiderProfile {
         : restingHeartRate as int?,
     layout: layout ?? this.layout,
     fields: fields ?? this.fields,
+    pages: pages ?? this.pages,
   );
 
   Map<String, dynamic> toJson() => {
@@ -174,6 +189,7 @@ class RiderProfile {
     'resting_heart_rate': restingHeartRate,
     'layout': layout.name,
     'fields': fields.map((f) => f.name).toList(),
+    'pages': pages.map((page) => page.toJson()).toList(),
   };
 
   factory RiderProfile.fromJson(Map<String, dynamic> json) {
@@ -210,6 +226,10 @@ class RiderProfile {
               .firstOrNull ??
           RideFieldLayout.four,
       fields: rawFields.isEmpty ? const RiderProfile().fields : rawFields,
+      pages: (json['pages'] as List<dynamic>? ?? const [])
+          .whereType<Map<String, dynamic>>()
+          .map(RideDataPage.fromJson)
+          .toList(),
     );
   }
 }

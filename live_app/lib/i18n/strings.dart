@@ -100,6 +100,8 @@ class Strings {
   String get keepScreenOn => 'Nie wygaszaj ekranu';
   String get showWeather => 'Pokazuj pogodę';
   String get dataFields => 'Pola danych';
+  String get presets => 'Zestawy';
+  String get page => 'Strona';
   String get recenter => 'Wyśrodkuj';
   String get zoomIn => 'Przybliż';
   String get zoomOut => 'Oddal';
@@ -170,7 +172,6 @@ class Strings {
   String get addPage => 'Dodaj stronę';
   String get removePage => 'Usuń stronę';
   String get pageName => 'Nazwa strony';
-  String get presets => 'Gotowe zestawy';
   String get presetTouring => 'Wycieczka';
   String get presetTraining => 'Trening';
   String get presetRace => 'Wyścig';
@@ -358,6 +359,25 @@ class Strings {
   String get heartRateServiceLabel => 'Usługa tętna';
   String get tapToConnectWhoop =>
       'Dotknij, aby połączyć · wymaga Broadcast Heart Rate';
+
+  String get pairedSensors => 'Sparowane sensory';
+  String get foundSensors => 'Znalezione';
+  String get searchingSensors => 'Szukam sensorów…';
+  String get sensorSources => 'Źródła danych';
+  String get speedSource => 'Prędkość';
+  String get cadenceSource => 'Kadencja';
+  String get wheelCircumference => 'Obwód koła';
+  String get wheelCircumferenceHint =>
+      '2105 mm to typowe 700×25c. Zły obwód przekłamie dystans z czujnika.';
+  String get sensorStale => 'brak sygnału';
+  String get autoConnectOn => 'Łącz automatycznie';
+  String get autoConnectOff => 'Nie łącz automatycznie';
+
+  String get heartRateStrap => 'Pasek na klatę';
+  String get noSensorsConnected => 'Żaden sensor nie jest połączony';
+  String get cadence => 'Kadencja';
+  String get power => 'Moc';
+  String get connect => 'POŁĄCZ';
 
   // -------------------------------------------------------------- muzyka
   String get music => 'Muzyka';

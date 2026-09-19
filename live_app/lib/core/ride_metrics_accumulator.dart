@@ -1,5 +1,6 @@
 import 'dart:math' as math;
 
+import '../models/training.dart';
 import '../models/ride_metrics.dart';
 import 'geo.dart';
 
@@ -80,6 +81,15 @@ class RideMetricsAccumulator {
   int _hrCount = 0;
   int _hrMax = 0;
   int? _hr;
+
+  final PowerAccumulator _power = PowerAccumulator();
+  double _cadenceSum = 0;
+  int _cadenceCount = 0;
+  double _cadenceMax = 0;
+  double? _cadence;
+  double? _sensorSpeedKmh;
+  double _workJoules = 0;
+  DateTime? _lastPowerAt;
 
   double get distanceMeters => _distanceMeters;
   Duration get movingTime =>
@@ -216,6 +226,40 @@ class RideMetricsAccumulator {
     _gradientPercent = (rise / run * 100).clamp(-35.0, 35.0);
   }
 
+  double? get cadenceRpm => _cadence;
+
+  double? get averageCadenceRpm =>
+      _cadenceCount == 0 ? null : _cadenceSum / _cadenceCount;
+
+  /// Kadencja z sensora. Zera są liczone do średniej celowo: jazda z wybiegu
+  /// to część przejazdu i średnia kadencja, która je pomija, kłamie.
+  void addCadence(double rpm) {
+    if (rpm < 0 || rpm > 250) return;
+    _cadence = rpm;
+    _cadenceSum += rpm;
+    _cadenceCount++;
+    if (rpm > _cadenceMax) _cadenceMax = rpm;
+  }
+
+  /// Moc z miernika albo trenażera.
+  void addPower(int watts, {DateTime? at, double? balancePercent}) {
+    if (watts < 0 || watts > 2500) return;
+    final now = at ?? DateTime.now();
+    _power.add(watts, at: now, balancePercent: balancePercent);
+    final previous = _lastPowerAt;
+    if (previous != null) {
+      final seconds = now.difference(previous).inMilliseconds / 1000;
+      // Przerwa dłuższa niż 10 s to nie jazda, tylko luka w danych.
+      if (seconds > 0 && seconds <= 10) _workJoules += watts * seconds;
+    }
+    _lastPowerAt = now;
+  }
+
+  /// Prędkość z czujnika koła — nadpisuje GPS tylko wtedy, gdy ktoś ją poda.
+  void setSensorSpeed(double? kmh) {
+    _sensorSpeedKmh = kmh != null && kmh >= 0 && kmh < 150 ? kmh : null;
+  }
+
   RideMetrics build({
     required Duration elapsed,
     required int pointCount,
@@ -233,6 +277,12 @@ class RideMetricsAccumulator {
     heartRate: _hr,
     averageHeartRate: averageHeartRate,
     maxHeartRate: maxHeartRate,
+    cadenceRpm: _cadence,
+    averageCadenceRpm: averageCadenceRpm,
+    maxCadenceRpm: _cadenceCount == 0 ? null : _cadenceMax,
+    power: _power.hasData ? _power.build(elapsed: elapsed) : null,
+    workKj: _workJoules > 0 ? _workJoules / 1000 : null,
+    sensorSpeedKmh: _sensorSpeedKmh,
     gpsAccuracyMeters: _accuracy,
     headingDegrees: _heading,
     pointCount: pointCount,
@@ -257,5 +307,13 @@ class RideMetricsAccumulator {
     _hrCount = 0;
     _hrMax = 0;
     _hr = null;
+    _power.reset();
+    _cadenceSum = 0;
+    _cadenceCount = 0;
+    _cadenceMax = 0;
+    _cadence = null;
+    _sensorSpeedKmh = null;
+    _workJoules = 0;
+    _lastPowerAt = null;
   }
 }

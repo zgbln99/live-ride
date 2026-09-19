@@ -15,6 +15,7 @@ class RideDataGrid extends StatelessWidget {
     required this.layout,
     required this.data,
     this.onFieldTap,
+    this.onFieldLongPress,
     this.compact = false,
   });
 
@@ -22,6 +23,9 @@ class RideDataGrid extends StatelessWidget {
   final RideFieldLayout layout;
   final RideFieldContext data;
   final void Function(int index)? onFieldTap;
+
+  /// Przytrzymanie pola zmienia je w miejscu — tak samo jak na Edge.
+  final void Function(int index)? onFieldLongPress;
 
   /// Slightly shorter rows, used when the map needs the space.
   final bool compact;
@@ -46,6 +50,9 @@ class RideDataGrid extends StatelessWidget {
               rows: layout.rows,
               compact: compact,
               onTap: onFieldTap == null ? null : () => onFieldTap!(index),
+              onLongPress: onFieldLongPress == null
+                  ? null
+                  : () => onFieldLongPress!(index),
             ),
           ),
         );
@@ -84,6 +91,7 @@ class _DataCell extends StatelessWidget {
     required this.rows,
     required this.compact,
     this.onTap,
+    this.onLongPress,
   });
 
   final RideDataField field;
@@ -91,6 +99,7 @@ class _DataCell extends StatelessWidget {
   final int rows;
   final bool compact;
   final VoidCallback? onTap;
+  final VoidCallback? onLongPress;
 
   @override
   Widget build(BuildContext context) {
@@ -170,10 +179,10 @@ class _DataCell extends StatelessWidget {
       },
     );
 
-    if (onTap == null) return body;
+    if (onTap == null && onLongPress == null) return body;
     return Material(
       color: Colors.transparent,
-      child: InkWell(onTap: onTap, child: body),
+      child: InkWell(onTap: onTap, onLongPress: onLongPress, child: body),
     );
   }
 }

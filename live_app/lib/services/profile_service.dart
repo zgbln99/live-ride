@@ -1,6 +1,7 @@
 import 'package:flutter/foundation.dart';
 
 import '../models/rider_profile.dart';
+import '../models/training.dart';
 import 'local_store.dart';
 
 /// Owns rider identity and app preferences and notifies the UI on change.
@@ -17,6 +18,17 @@ class ProfileService extends ChangeNotifier {
 
   /// Convenience for every caller that just needs a name to publish.
   String get riderName => _profile.effectiveName;
+
+  /// Strefy i progi zawodnika złożone z tego, co ma w profilu.
+  ///
+  /// Gdy profil jest pusty, strefy wychodzą puste i pola stref pokazują „--"
+  /// zamiast wyliczać je z niczego.
+  TrainingProfile get trainingProfile => TrainingProfile(
+    maxHeartRate: _profile.effectiveMaxHeartRate,
+    restingHeartRate: _profile.restingHeartRate,
+    functionalThresholdPower: _profile.ftpWatts,
+    weightKg: _profile.weightKg,
+  );
 
   Future<void> load() async {
     final json = await _store.readJson(_fileName);

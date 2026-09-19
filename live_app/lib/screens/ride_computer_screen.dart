@@ -9,6 +9,7 @@ import '../core/idle_chrome_controller.dart';
 import '../core/lr_theme.dart';
 import '../models/navigation_plan.dart';
 import '../models/ride_data_field.dart';
+import '../models/ride_pages.dart';
 import '../models/ride_record.dart';
 import '../models/ride_route.dart';
 import '../services/app_services.dart';
@@ -18,7 +19,7 @@ import '../widgets/chrome_fade.dart';
 import '../widgets/lr_common.dart';
 import '../widgets/navigation_header.dart';
 import '../widgets/ride_controls.dart';
-import '../widgets/ride_data_grid.dart';
+import '../widgets/ride_page_view.dart';
 import '../widgets/ride_map.dart';
 import '../widgets/weather_field.dart';
 import 'data_field_editor.dart';
@@ -176,29 +177,41 @@ class _RideComputerScreenState extends State<RideComputerScreen> {
                           else
                             _freeRideHeader(recorder),
                           Expanded(child: _mapArea(recorder)),
-                          SizedBox(
+                          RidePageView(
+                            key: _pagesKey,
+                            pages: profile.ridePages,
                             height: _gridHeight(
-                              profile.layout,
+                              profile
+                                  .ridePages[_pageIndex.clamp(
+                                    0,
+                                    profile.ridePages.length - 1,
+                                  )]
+                                  .layout,
                               constraints.maxHeight,
                             ),
-                            child: RideDataGrid(
-                              fields: profile.activeFields,
-                              layout: profile.layout,
-                              compact: profile.layout.rows > 2,
-                              // While the controls are retired a tap is a
-                              // request for them back, not a request to
-                              // reconfigure a field.
-                              onFieldTap: _chromeVisible
-                                  ? (_) => _openFieldPicker()
-                                  : null,
-                              data: RideFieldContext(
-                                metrics: recorder.metrics,
-                                metric: profile.metricUnits,
-                                weather: services.weather.current,
-                                remainingMeters:
-                                    recorder.progress?.remainingMeters,
-                                etaSeconds: _etaSeconds(recorder)?.round(),
-                              ),
+                            showIndicator: _chromeVisible,
+                            onPageChanged: (index) =>
+                                setState(() => _pageIndex = index),
+                            // While the controls are retired a tap is a
+                            // request for them back, not a request to
+                            // reconfigure a field.
+                            onFieldTap: _chromeVisible
+                                ? (_, _) => _openFieldPicker()
+                                : null,
+                            // Przytrzymanie zmienia to jedno pole w miejscu,
+                            // bez wchodzenia w ustawienia.
+                            onFieldLongPress: _chromeVisible
+                                ? _replaceField
+                                : null,
+                            data: RideFieldContext(
+                              metrics: recorder.metrics,
+                              metric: profile.metricUnits,
+                              weather: services.weather.current,
+                              remainingMeters:
+                                  recorder.progress?.remainingMeters,
+                              etaSeconds: _etaSeconds(recorder)?.round(),
+                              training: services.profile.trainingProfile,
+                              riderWeightKg: profile.weightKg,
                             ),
                           ),
                           ChromeFade(
@@ -253,12 +266,7 @@ class _RideComputerScreenState extends State<RideComputerScreen> {
   }
 
   /// The height the data fields would like, before the screen has a say.
-  double _preferredGridHeight(RideFieldLayout layout) => switch (layout) {
-    RideFieldLayout.two => 190,
-    RideFieldLayout.four => 194,
-    RideFieldLayout.six => 252,
-    RideFieldLayout.eight => 296,
-  };
+  double _preferredGridHeight(RideFieldLayout layout) => layout.preferredHeight;
 
   /// The height the data fields actually get.
   ///
@@ -630,6 +638,24 @@ class _RideComputerScreenState extends State<RideComputerScreen> {
         },
       ),
     );
+  }
+
+  final GlobalKey<RidePageViewState> _pagesKey = GlobalKey();
+  int _pageIndex = 0;
+
+  /// Podmienia jedno pole na przytrzymanej pozycji.
+  Future<void> _replaceField(int pageIndex, int fieldIndex) async {
+    final field = await _holdChrome(
+      () => showFieldPicker(context, _services.profile.profile),
+    );
+    if (field == null || !mounted) return;
+    final profileService = _services.profile;
+    final profile = profileService.profile;
+    final pages = List<RideDataPage>.of(profile.ridePages);
+    if (pageIndex < 0 || pageIndex >= pages.length) return;
+    pages[pageIndex] = pages[pageIndex].withFieldAt(fieldIndex, field);
+    await profileService.update(profile.copyWith(pages: pages));
+    if (mounted) setState(() {});
   }
 
   Future<void> _openFieldPicker() async {

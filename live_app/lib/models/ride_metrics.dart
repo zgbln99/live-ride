@@ -1,3 +1,5 @@
+import 'training.dart';
+
 /// An immutable snapshot of the live ride computer values.
 ///
 /// The recorder publishes one of these on every update so widgets never read
@@ -16,6 +18,12 @@ class RideMetrics {
     this.heartRate,
     this.averageHeartRate,
     this.maxHeartRate,
+    this.cadenceRpm,
+    this.averageCadenceRpm,
+    this.maxCadenceRpm,
+    this.power,
+    this.workKj,
+    this.sensorSpeedKmh,
     this.gpsAccuracyMeters,
     this.headingDegrees,
     this.pointCount = 0,
@@ -34,6 +42,23 @@ class RideMetrics {
   final int? heartRate;
   final int? averageHeartRate;
   final int? maxHeartRate;
+
+  /// Kadencja z sensora BLE. Null, gdy nikt jej nie nadaje — i wtedy pola
+  /// kadencji w ogóle się nie pokazują, zamiast pokazywać zero.
+  final double? cadenceRpm;
+  final double? averageCadenceRpm;
+  final double? maxCadenceRpm;
+
+  /// Moc z miernika. [PowerMetrics.empty] oznacza brak miernika.
+  final PowerMetrics? power;
+
+  /// Praca wykonana w kJ — liczona tylko z realnej mocy.
+  final double? workKj;
+
+  /// Prędkość z czujnika koła, gdy jest dokładniejsza niż GPS (np. w tunelu
+  /// albo na trenażerze).
+  final double? sensorSpeedKmh;
+
   final double? gpsAccuracyMeters;
   final double? headingDegrees;
   final int pointCount;
