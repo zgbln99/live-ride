@@ -2,7 +2,6 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:wanderer/components/base/wanderer_button.dart';
 import 'package:wanderer/components/welcome/oauth_provider_buttons.dart';
-import 'package:wanderer/components/welcome/server_selctor.dart';
 import 'package:wanderer/components/welcome/topography_background.dart';
 import 'package:wanderer/i18n/app_localizations.dart';
 import 'package:wanderer/provider/auth_provider.dart';
@@ -60,10 +59,15 @@ class WelcomeScreen extends ConsumerWidget {
                       fontWeight: FontWeight.w600,
                     ),
                   ),
-                  const Spacer(),
-                  const Spacer(flex: 2),
-                  const ServerSelector(),
-                  const SizedBox(height: 24),
+                  const SizedBox(height: 8),
+                  Text(
+                    'Navigation • live tracking • ride data',
+                    textAlign: TextAlign.center,
+                    style: theme.textTheme.bodyMedium?.copyWith(
+                      color: theme.colorScheme.onSurface.withValues(alpha: 0.5),
+                    ),
+                  ),
+                  const Spacer(flex: 3),
                   Column(
                     crossAxisAlignment: CrossAxisAlignment.stretch,
                     children: [
