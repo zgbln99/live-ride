@@ -3,8 +3,10 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 
 import '../core/formatters.dart';
+import '../core/api_client.dart';
 import '../core/lr_theme.dart';
 import '../i18n/strings.dart';
+import '../models/ride_route.dart';
 import '../services/app_services.dart';
 import '../widgets/lr_common.dart';
 import 'ride_computer_screen.dart';
@@ -21,12 +23,112 @@ class HomeShell extends StatefulWidget {
 
   final VoidCallback onLogout;
 
+  /// Numery zakładek dolnego paska. Stałe, bo odwołują się do nich ekrany
+  /// spoza powłoki.
+  static const int tabRideIndex = 0;
+  static const int tabRoutesIndex = 1;
+
+  /// Prośba o przełączenie zakładki z dowolnego miejsca w aplikacji.
+  ///
+  /// Ekran wypchnięty na stos (np. „Offline i synchronizacja") nie zna
+  /// powłoki, ale bywa, że musi odesłać zawodnika tam, gdzie akcja naprawdę
+  /// się wykonuje — mapy offline pobiera się przy trasie, nie w ustawieniach.
+  static final ValueNotifier<int?> requestedTab = ValueNotifier<int?>(null);
+
+  /// Wraca do powłoki i otwiera wskazaną zakładkę.
+  static void openTab(BuildContext context, int index) {
+    Navigator.of(context).popUntil((route) => route.isFirst);
+    requestedTab.value = index;
+  }
+
   @override
   State<HomeShell> createState() => _HomeShellState();
 }
 
 class _HomeShellState extends State<HomeShell> {
   int _tab = 0;
+
+  AppServices? _services;
+
+  @override
+  void initState() {
+    super.initState();
+    HomeShell.requestedTab.addListener(_onTabRequested);
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      final services = AppServices.of(context);
+      _services = services;
+      services.deepLinks.addListener(_onDeepLink);
+      unawaited(services.deepLinks.start());
+      // Link, którym uruchomiono aplikację, czeka już w serwisie.
+      _onDeepLink();
+    });
+  }
+
+  @override
+  void dispose() {
+    HomeShell.requestedTab.removeListener(_onTabRequested);
+    _services?.deepLinks.removeListener(_onDeepLink);
+    super.dispose();
+  }
+
+  /// Trasa otwarta z linku „Otwórz w Live Ride".
+  ///
+  /// Pytamy, zanim cokolwiek zapiszemy: kliknięcie linku to zgoda na
+  /// obejrzenie trasy, a nie na dopisanie jej do czyjejś biblioteki.
+  Future<void> _onDeepLink() async {
+    final services = _services;
+    final token = services?.deepLinks.takeRouteToken();
+    if (services == null || token == null || !mounted) return;
+
+    final RideRoute route;
+    try {
+      route = await services.api.fetchSharedRoute(token);
+    } on ApiException catch (e) {
+      if (mounted) showLrMessage(context, e.message, error: true);
+      return;
+    } catch (e, stack) {
+      debugPrint('Live Ride: trasa z linku: $e\n$stack');
+      if (mounted) showLrMessage(context, S.routeLinkNotFound, error: true);
+      return;
+    }
+    if (!mounted) return;
+
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        title: Text(S.routeLinkTitle),
+        content: Text(
+          S.routeLinkBody(
+            route.name,
+            '${Fmt.distance(route.distanceMeters)} ${Fmt.distanceUnit()}',
+          ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(dialogContext, false),
+            child: Text(S.cancel),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.pop(dialogContext, true),
+            child: Text(S.routeLinkAdd),
+          ),
+        ],
+      ),
+    );
+    if (confirmed != true || !mounted) return;
+
+    await services.routes.save(route);
+    if (!mounted) return;
+    showLrMessage(context, S.routeLinkImported(route.name));
+    setState(() => _tab = HomeShell.tabRoutesIndex);
+  }
+
+  void _onTabRequested() {
+    final index = HomeShell.requestedTab.value;
+    if (index == null || index < 0 || index >= _tabs.length) return;
+    HomeShell.requestedTab.value = null;
+    if (mounted) setState(() => _tab = index);
+  }
 
   /// Zakładki są getterem, a nie stałą: ich etykiety pochodzą z tekstów,
   /// a te da się podmienić w locie razem z językiem.

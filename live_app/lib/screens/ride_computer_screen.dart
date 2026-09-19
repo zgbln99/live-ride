@@ -120,9 +120,10 @@ class _RideComputerScreenState extends State<RideComputerScreen> {
           _fatalError = e.message;
           _openSettingsOnError = e.openSettings;
         });
-      } catch (e) {
+      } catch (e, stack) {
+        debugPrint('Live Ride: start jazdy nie powiódł się: $e\n$stack');
         if (!mounted) return;
-        setState(() => _fatalError = e.toString());
+        setState(() => _fatalError = S.somethingWentWrong);
       }
     }
     if (mounted) _chrome.restart();

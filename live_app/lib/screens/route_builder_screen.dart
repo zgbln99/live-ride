@@ -109,8 +109,9 @@ class _RouteBuilderScreenState extends State<RouteBuilderScreen> {
     try {
       final style = await _services.api.fetchMapStyle();
       if (mounted) setState(() => _style = style);
-    } catch (e) {
-      if (mounted) setState(() => _error = e.toString());
+    } catch (e, stack) {
+      debugPrint('Live Ride: kreator trasy: $e\n$stack');
+      if (mounted) setState(() => _error = S.somethingWentWrong);
     }
   }
 

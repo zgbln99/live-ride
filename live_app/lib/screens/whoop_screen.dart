@@ -47,9 +47,12 @@ class _WhoopScreenState extends State<WhoopScreen> {
     setState(() => _error = null);
     try {
       await _hr.startScan();
-    } catch (e) {
+    } catch (e, stack) {
+      debugPrint('Live Ride: czujnik tętna: $e\n$stack');
       if (mounted) {
-        setState(() => _error = e is StateError ? e.message : e.toString());
+        setState(
+          () => _error = e is StateError ? e.message : S.somethingWentWrong,
+        );
       }
     }
   }
@@ -58,10 +61,13 @@ class _WhoopScreenState extends State<WhoopScreen> {
     setState(() => _error = null);
     try {
       await _hr.connect(device.id);
-      if (mounted) showLrMessage(context, 'Connected to ${device.name}');
-    } catch (e) {
+      if (mounted) showLrMessage(context, S.connectedTo(device.name));
+    } catch (e, stack) {
+      debugPrint('Live Ride: czujnik tętna: $e\n$stack');
       if (mounted) {
-        setState(() => _error = e is StateError ? e.message : e.toString());
+        setState(
+          () => _error = e is StateError ? e.message : S.somethingWentWrong,
+        );
       }
     }
   }

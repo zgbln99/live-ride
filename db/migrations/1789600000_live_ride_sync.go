@@ -74,7 +74,6 @@ func init() {
 			&core.TextField{Name: "share_token", Max: 64},
 			// Ile razy ktoś skopiował tę trasę do siebie.
 			&core.NumberField{Name: "copy_count", OnlyInt: true},
-			&core.RelationField{Name: "copied_from", CollectionId: "", MaxSelect: 1},
 			&core.DateField{Name: "client_updated_at"},
 		)
 		routes.Indexes = append(routes.Indexes,
@@ -85,12 +84,19 @@ func init() {
 		if err := app.Save(routes); err != nil {
 			return err
 		}
-		// Samoodniesienie da się ustawić dopiero, gdy kolekcja ma już id.
-		if field, ok := routes.Fields.GetByName("copied_from").(*core.RelationField); ok {
-			field.CollectionId = routes.Id
-			if err := app.Save(routes); err != nil {
-				return err
-			}
+		// Samoodniesienie da się dodać dopiero, gdy kolekcja ma już id.
+		//
+		// Nie wystarczy dołożyć pola z pustym `CollectionId` i poprawić go po
+		// zapisie: walidacja odrzuca puste odniesienie już przy pierwszym
+		// zapisie i cała migracja przerywa się błędem
+		// „fields: (15: (collectionId: cannot be blank.).)". Wtedy nie
+		// powstaje ŻADNA z kolekcji tej migracji, a wszystkie trasy
+		// synchronizacji odpowiadają 404 — mimo poprawnego kodu HTTP.
+		routes.Fields.Add(
+			&core.RelationField{Name: "copied_from", CollectionId: routes.Id, MaxSelect: 1},
+		)
+		if err := app.Save(routes); err != nil {
+			return err
 		}
 
 		// -------------------------------------------------------- segmenty

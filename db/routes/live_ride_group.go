@@ -39,6 +39,7 @@ func LiveRideSetPrivacy(e *core.RequestEvent) error {
 		ShareSpeed     *bool `json:"share_speed"`
 		ShareHeartRate *bool `json:"share_heart_rate"`
 		SharePower     *bool `json:"share_power"`
+		ShareBattery   *bool `json:"share_battery"`
 	}
 	if err := e.BindBody(&data); err != nil {
 		return apis.NewBadRequestError("Failed to read request data", err)
@@ -58,6 +59,9 @@ func LiveRideSetPrivacy(e *core.RequestEvent) error {
 	if data.SharePower != nil {
 		participant.Set("share_power", *data.SharePower)
 	}
+	if data.ShareBattery != nil {
+		participant.Set("share_battery", *data.ShareBattery)
+	}
 
 	if err := e.App.Save(participant); err != nil {
 		return apis.NewBadRequestError("Failed to store privacy settings", err)
@@ -68,6 +72,7 @@ func LiveRideSetPrivacy(e *core.RequestEvent) error {
 		"share_speed":      participant.GetBool("share_speed"),
 		"share_heart_rate": participant.GetBool("share_heart_rate"),
 		"share_power":      participant.GetBool("share_power"),
+		"share_battery":    participant.GetBool("share_battery"),
 	})
 }
 

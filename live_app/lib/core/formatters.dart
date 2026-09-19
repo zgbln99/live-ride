@@ -116,6 +116,24 @@ abstract final class Fmt {
 
   static String dateTime(DateTime time) => '${date(time)} · ${clock(time)}';
 
+  /// Rozmiar pliku po ludzku: 42 MB, 1,3 GB.
+  ///
+  /// Podstawa 1024, bo tak liczy system telefonu i tak wygląda liczba w
+  /// ustawieniach pamięci — inna podstawa dawałaby dwie różne prawdy.
+  static String bytes(int value) {
+    if (value < 1024) return '$value B';
+    const units = ['kB', 'MB', 'GB', 'TB'];
+    var size = value / 1024;
+    var unit = 0;
+    while (size >= 1024 && unit < units.length - 1) {
+      size /= 1024;
+      unit++;
+    }
+    final digits = size >= 100 ? 0 : (size >= 10 ? 1 : 2);
+    final number = size.toStringAsFixed(digits).replaceAll('.', ',');
+    return '$number ${units[unit]}';
+  }
+
   static String temperature(double celsius, {bool metric = true}) {
     if (!celsius.isFinite) return '--';
     final value = metric ? celsius : celsius * 9 / 5 + 32;

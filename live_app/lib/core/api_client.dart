@@ -8,6 +8,7 @@ import 'package:path_provider/path_provider.dart';
 import '../i18n/strings.dart';
 import '../models/navigation_plan.dart';
 import '../models/ride_route.dart';
+import '../services/routing_service.dart';
 import 'geo.dart';
 
 /// An error worth showing to a rider.
@@ -26,6 +27,8 @@ class LiveSession {
     required this.participantId,
     required this.shareToken,
     required this.joinToken,
+    this.visibility = 'unlisted',
+    this.hasRoute = false,
   });
 
   final String id;
@@ -33,11 +36,29 @@ class LiveSession {
   final String shareToken;
   final String joinToken;
 
+  /// „public", „unlisted" albo „disabled" — tak, jak mówi serwer.
+  final String visibility;
+
+  /// Czy do sesji przypięto zaplanowaną trasę. Bez niej publiczna strona nie
+  /// ma czego narysować jako planu i nie pokaże ETA.
+  final bool hasRoute;
+
+  LiveSession copyWith({String? shareToken, String? visibility}) => LiveSession(
+    id: id,
+    participantId: participantId,
+    shareToken: shareToken ?? this.shareToken,
+    joinToken: joinToken,
+    visibility: visibility ?? this.visibility,
+    hasRoute: hasRoute,
+  );
+
   factory LiveSession.fromJson(Map<String, dynamic> json) => LiveSession(
     id: json['id'] as String,
     participantId: json['participant_id'] as String? ?? '',
     shareToken: json['share_token'] as String? ?? '',
     joinToken: json['join_token'] as String? ?? '',
+    visibility: json['visibility'] as String? ?? 'unlisted',
+    hasRoute: json['has_route'] as bool? ?? false,
   );
 }
 
@@ -230,6 +251,9 @@ class ApiClient {
   Future<LiveSession> createLive({
     required String title,
     String? displayName,
+    String? routeClientId,
+    String visibility = 'unlisted',
+    bool expireOnEnd = false,
   }) async {
     try {
       final response = await dio.post(
@@ -238,6 +262,11 @@ class ApiClient {
           'title': title,
           if (displayName != null && displayName.trim().isNotEmpty)
             'display_name': displayName.trim(),
+          // Trasa po client_id: serwer sam sprawdzi, że należy do nadawcy.
+          if (routeClientId != null && routeClientId.isNotEmpty)
+            'route_client_id': routeClientId,
+          'visibility': visibility,
+          'expire_on_end': expireOnEnd,
         },
       );
       return LiveSession.fromJson(
@@ -326,11 +355,75 @@ class ApiClient {
     ];
   }
 
+  /// Zmienia widoczność publicznego linku, jego wygasanie albo sam token.
+  ///
+  /// Zwraca aktualny token: po `rotate` jest inny niż wcześniej i to on
+  /// unieważnia wszystko, co już zostało rozesłane.
+  Future<Map<String, dynamic>> setLiveShare(
+    String sessionId, {
+    String? visibility,
+    bool? expireOnEnd,
+    int? expireInHours,
+    bool rotateToken = false,
+  }) async {
+    final response = await dio.post<Map<String, dynamic>>(
+      '/live-rides/$sessionId/share',
+      data: {
+        // Pominięte pole znaczy dla serwera „nie zmieniam" — dlatego null
+        // wypada z żądania, zamiast lecieć jako wartość.
+        'visibility': ?visibility,
+        'expire_on_end': ?expireOnEnd,
+        'expire_in_hours': ?expireInHours,
+        if (rotateToken) 'rotate_token': true,
+      },
+    );
+    return response.data ?? const {};
+  }
+
   Future<void> stopLive(String sessionId) async {
     await dio.post('/live-rides/$sessionId/stop');
   }
 
   String viewerUrl(String shareToken) => '$serverOrigin/live/$shareToken';
+
+  /// Publiczna strona trasy — druga strona, nie mylić z podglądem LIVE.
+  String routeUrl(String shareToken) => '$serverOrigin/route/$shareToken';
+
+  /// Pobiera trasę spod publicznego linku.
+  ///
+  /// Nie wymaga logowania po stronie serwera — tak jak strona WWW, którą ten
+  /// sam token otwiera w przeglądarce.
+  Future<RideRoute> fetchSharedRoute(String shareToken) async {
+    try {
+      final response = await dio.get<Map<String, dynamic>>(
+        '/live-routes/${Uri.encodeComponent(shareToken)}',
+      );
+      final data = response.data;
+      if (data == null) throw ApiException(S.routeLinkNotFound);
+
+      final polyline = data['polyline'] as String? ?? '';
+      final points = decodeValhallaPolyline(polyline);
+      if (points.length < 2) throw ApiException(S.routeLinkNotFound);
+
+      return RideRoute(
+        // Kopia dostaje własny identyfikator: od teraz to osobna trasa w
+        // bibliotece, którą można zmieniać bez ruszania oryginału.
+        id: 'shared_${DateTime.now().microsecondsSinceEpoch}',
+        name: (data['name'] as String? ?? '').trim().isEmpty
+            ? S.route
+            : (data['name'] as String).trim(),
+        description: data['description'] as String? ?? '',
+        tags: [
+          for (final tag in (data['tags'] as List? ?? const []))
+            if (tag is String) tag,
+        ],
+        points: points,
+        source: RouteSource.imported,
+      );
+    } on DioException catch (e) {
+      throw ApiException(_describe(e, notFound: S.routeLinkNotFound));
+    }
+  }
 
   String _describe(
     DioException error, {

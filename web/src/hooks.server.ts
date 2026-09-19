@@ -16,6 +16,23 @@ import { apiErrorsAsJson, isApiRequest } from '$lib/server/api_errors'
 const SEARCH_TOKEN_VERSION = 1;
 const SEARCH_TOKEN_TTL_MS = 60 * 60 * 24 * 1000;
 
+/**
+ * Strony, które znajomy otwiera z linku — bez konta i bez logowania.
+ *
+ * Nie ma na nich wyszukiwarki, więc nie potrzebują tokenu Meilisearch. Bez
+ * tego wyjątku awaria wyszukiwania kładła publiczny podgląd jazdy na żywo:
+ * całe żądanie kończyło się błędem 500, mimo że mapa i telemetria działały.
+ */
+function isPublicViewerRoute(url: URL): boolean {
+  return (
+    url.pathname.startsWith('/live/') ||
+    url.pathname.startsWith('/route/') ||
+    url.pathname.startsWith('/api/v1/live/') ||
+    url.pathname.startsWith('/api/v1/live-routes/') ||
+    url.pathname.startsWith('/api/v1/live-segments/')
+  );
+}
+
 function csrf(allowedPaths: string[]): Handle {
   return async ({ event, resolve }) => {
     const { request, url } = event;
@@ -98,7 +115,7 @@ const auth: Handle = async ({ event, resolve }) => {
     }
   }
 
-  if (!meilisearchToken) {
+  if (!meilisearchToken && !isPublicViewerRoute(url)) {
     try {
       const tokenResponse = await pb.send("/search/token", { method: "GET", fetch: event.fetch });
       meilisearchToken = tokenResponse.token

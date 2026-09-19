@@ -24,6 +24,8 @@ import 'race_mode_controller.dart';
 import 'ride_recorder.dart';
 import 'ride_storage_service.dart';
 import 'pace_partner.dart';
+import 'deep_link_service.dart';
+import 'phone_battery.dart';
 import 'safety_service.dart';
 import 'offline_map_service.dart';
 import 'segment_service.dart';
@@ -74,6 +76,8 @@ class AppServices {
     required this.geocoding,
     required this.spotify,
     required this.liveActivity,
+    required this.battery,
+    required this.deepLinks,
     required this.recorder,
   });
 
@@ -99,12 +103,12 @@ class AppServices {
       routes: RouteDao(db),
       segments: SegmentDao(db),
     );
-    final offlineMaps = OfflineMapService();
+    final offlineMaps = OfflineMapService(settings: settings);
     final pace = PacePartnerService();
     final live = LiveSessionController(
       api,
-      heartRate,
       profile,
+      heartRate: heartRate,
       sensors: sensors,
       settings: settings,
     );
@@ -112,6 +116,8 @@ class AppServices {
     final weather = WeatherService();
     final location = LocationService();
     final liveActivity = LiveActivityService();
+    final battery = PhoneBattery();
+    final deepLinks = DeepLinkService();
     return AppServices._(
       database: db,
       settings: settings,
@@ -143,6 +149,8 @@ class AppServices {
       geocoding: GeocodingService(api),
       spotify: SpotifyService(),
       liveActivity: liveActivity,
+      battery: battery,
+      deepLinks: deepLinks,
       recorder: RideRecorder(
         location: location,
         storage: rides,
@@ -161,9 +169,16 @@ class AppServices {
         weather: weather,
         profile: profile,
         liveActivity: liveActivity,
+        battery: battery,
       ),
     );
   }
+
+  /// Bateria telefonu — pokazywana obserwującym, jeśli zawodnik pozwoli.
+  final PhoneBattery battery;
+
+  /// Linki `liveride://` otwierane spoza aplikacji.
+  final DeepLinkService deepLinks;
 
   final LiveRideDatabase database;
   final SettingsDao settings;

@@ -12,6 +12,7 @@ import '../models/route/route_weather.dart';
 import '../services/app_services.dart';
 import '../widgets/climb_profile.dart';
 import '../widgets/lr_common.dart';
+import '../widgets/share_sheet.dart';
 import '../widgets/ride_map.dart';
 import '../widgets/route_weather_strip.dart';
 import '../widgets/track_preview.dart';
@@ -57,8 +58,9 @@ class _RouteDetailScreenState extends State<RouteDetailScreen> {
         _briefing = _buildBriefing(route, null);
       });
       unawaitedForecast(route);
-    } catch (e) {
-      if (mounted) setState(() => _error = e.toString());
+    } catch (e, stack) {
+      debugPrint('Live Ride: nie udało się wczytać trasy: $e\n$stack');
+      if (mounted) setState(() => _error = S.somethingWentWrong);
     }
     try {
       final style = await services.api.fetchMapStyle();
@@ -138,6 +140,12 @@ class _RouteDetailScreenState extends State<RouteDetailScreen> {
                 icon: const Icon(Icons.ios_share),
                 onPressed: _share,
               ),
+              if (_summary.isShared)
+                IconButton(
+                  tooltip: S.shareRouteTitle,
+                  icon: const Icon(Icons.link),
+                  onPressed: _shareLink,
+                ),
               IconButton(
                 tooltip: S.downloadOfflineMap,
                 icon: Icon(
@@ -409,6 +417,24 @@ class _RouteDetailScreenState extends State<RouteDetailScreen> {
     final file = await AppServices.of(context).routes.exportGpx(_summary);
     await SharePlus.instance.share(
       ShareParams(files: [XFile(file.path)], subject: _summary.name),
+    );
+  }
+
+  /// Udostępnia publiczną stronę trasy, a nie plik.
+  ///
+  /// Osobno od eksportu GPX: link otwiera się w przeglądarce znajomego bez
+  /// aplikacji i bez konta, a plik trzeba czymś otworzyć.
+  Future<void> _shareLink() async {
+    final token = _summary.shareToken;
+    if (token == null || token.isEmpty) return;
+    final url = AppServices.of(context).api.routeUrl(token);
+    if (!mounted) return;
+    await showLrShareSheet(
+      context,
+      title: S.shareRouteTitle,
+      subtitle: S.shareRouteSubtitle,
+      url: url,
+      message: S.shareRouteMessage(_summary.name, url),
     );
   }
 

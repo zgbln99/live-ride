@@ -175,7 +175,7 @@
     </div>
 {/if}
 
-{#if showWarning && !page.url.pathname.startsWith("/live/")}
+{#if showWarning && !page.url.pathname.startsWith("/live/") && !page.url.pathname.startsWith("/route/")}
     <div
         class="flex items-center justify-between bg-red-200 text-center p-4 text-sm text-black"
         out:slide
@@ -198,7 +198,7 @@
     </div>
 {/if}
 
-{#if page.url.pathname.startsWith("/live/")}
+{#if page.url.pathname.startsWith("/live/") || page.url.pathname.startsWith("/route/")}
     {@render children?.()}
 {:else}
     <NavBar user={data.user}></NavBar>

@@ -27,6 +27,7 @@ import '../models/pace_partner.dart';
 import '../models/ride_alert.dart';
 import '../models/training.dart';
 import 'pace_partner.dart';
+import 'phone_battery.dart';
 import 'segment_matcher.dart';
 import 'safety_service.dart';
 import 'segment_service.dart';
@@ -61,6 +62,7 @@ class RideRecorder extends ChangeNotifier {
     required this.weather,
     required this.profile,
     required this.liveActivity,
+    this.battery,
   });
 
   final LocationService location;
@@ -83,6 +85,9 @@ class RideRecorder extends ChangeNotifier {
   final WeatherService weather;
   final ProfileService profile;
   final LiveActivityService liveActivity;
+
+  /// Bateria telefonu dla telemetrii LIVE. Opcjonalna: testy jej nie mają.
+  final PhoneBattery? battery;
 
   final RideMetricsAccumulator _accumulator = RideMetricsAccumulator();
   final List<RecordedRidePoint> _points = [];
@@ -483,6 +488,17 @@ class RideRecorder extends ChangeNotifier {
     );
   }
 
+  /// Stan, który zobaczą obserwujący.
+  ///
+  /// Rozróżnienie jest istotne: „POSTÓJ" to zawodnik na światłach, „PAUZA" to
+  /// świadomie zatrzymany licznik. Widz, który widzi tylko „stoi", nie wie,
+  /// czy czekać, czy jechać na spotkanie.
+  String get _liveState {
+    if (_state == RideState.paused) return _autoPaused ? 'stopped' : 'paused';
+    if (_autoPaused) return 'stopped';
+    return 'riding';
+  }
+
   void _updateProgress(GeoPoint point) {
     final plan = _plan;
     if (plan == null || plan.shape.length < 2) return;
@@ -495,6 +511,10 @@ class RideRecorder extends ChangeNotifier {
       position,
       distanceMeters: _accumulator.distanceMeters,
       elevationGainMeters: _accumulator.elevationGainMeters,
+      state: _liveState,
+      movingSeconds: _metrics.movingTime.inSeconds,
+      maxSpeedKmh: _metrics.maxSpeedKmh,
+      batteryPercent: battery?.percent ?? 0,
     );
     final failed = !ok;
     if (_liveTelemetryFailed != failed) {

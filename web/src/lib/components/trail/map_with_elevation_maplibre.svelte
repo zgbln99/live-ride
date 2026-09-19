@@ -27,6 +27,7 @@
     import type { Feature, FeatureCollection, GeoJSON } from "geojson";
     import * as M from "maplibre-gl";
     import "maplibre-gl/dist/maplibre-gl.css";
+    import { ensureMapLibreWorker } from "$lib/util/maplibre_worker";
     import { onDestroy, onMount, untrack } from "svelte";
 
     interface Props {
@@ -899,6 +900,7 @@
             },
             ...mapOptions,
         };
+        ensureMapLibreWorker();
         map = new M.Map(finalMapOptions);
 
         layerManager = new LayerManager(map, { overpassActionFactory: buildPoiAnchorAction });

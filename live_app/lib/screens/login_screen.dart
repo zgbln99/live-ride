@@ -65,8 +65,9 @@ class _LoginScreenState extends State<LoginScreen> {
       if (mounted) widget.onSignedIn();
     } on ApiException catch (e) {
       if (mounted) setState(() => _error = e.message);
-    } catch (e) {
-      if (mounted) setState(() => _error = e.toString());
+    } catch (e, stack) {
+      debugPrint('Live Ride: logowanie: $e\n$stack');
+      if (mounted) setState(() => _error = S.somethingWentWrong);
     } finally {
       if (mounted) setState(() => _busy = false);
     }

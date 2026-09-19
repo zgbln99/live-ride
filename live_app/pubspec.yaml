@@ -48,6 +48,10 @@ dependencies:
   # Apple Health / Health Connect workout export.
   health: ^13.3.1
   url_launcher: ^6.3.2
+  # Otwieranie udostępnionej trasy prosto z linku: liveride://route/<token>.
+  # Schemat `liveride` jest już zarejestrowany (bootstrap.sh) dla powrotów
+  # OAuth, ale bez nasłuchu aplikacja nic by z takim adresem nie zrobiła.
+  app_links: ^7.2.1
 
 dev_dependencies:
   flutter_test:

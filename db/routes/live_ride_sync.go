@@ -60,6 +60,13 @@ type liveRideRoutePayload struct {
 	Preferences     map[string]any `json:"preferences"`
 	Privacy         string         `json:"privacy"`
 	ClientUpdatedAt time.Time      `json:"client_updated_at"`
+
+	// Profil wysokości i podjazdy liczy telefon przy budowie trasy. Serwer
+	// ich nie przelicza — publiczna strona trasy nie ma jak zapytać usługi
+	// wysokości przy każdym wejściu, a offline tym bardziej.
+	ElevationProfile []any `json:"elevation_profile"`
+	Climbs           []any `json:"climbs"`
+	Surfaces         []any `json:"surfaces"`
 }
 
 // LiveRideSyncRides stores a batch of finished rides for the signed-in user.
@@ -218,6 +225,9 @@ func LiveRideSyncRoutes(e *core.RequestEvent) error {
 		record.Set("polyline", payload.Polyline)
 		record.Set("waypoints", payload.Waypoints)
 		record.Set("preferences", payload.Preferences)
+		record.Set("elevation_profile", payload.ElevationProfile)
+		record.Set("climbs", payload.Climbs)
+		record.Set("surfaces", payload.Surfaces)
 		record.Set("privacy", normalizeLiveRidePrivacy(payload.Privacy))
 		record.Set("client_updated_at", liveRideUpdatedAt(payload.ClientUpdatedAt))
 
@@ -402,27 +412,6 @@ func LiveRidePullRoutes(e *core.RequestEvent) error {
 	return e.JSON(http.StatusOK, map[string]any{"routes": items})
 }
 
-// LiveRidePublicRouteByToken serves a shared route to anyone holding the link.
-func LiveRidePublicRouteByToken(e *core.RequestEvent) error {
-	token := strings.TrimSpace(e.Request.PathValue("token"))
-	if token == "" {
-		return apis.NewNotFoundError("Route not found", nil)
-	}
-
-	records, err := e.App.FindRecordsByFilter(
-		"live_ride_routes",
-		"share_token = {:token} && privacy != 'private'",
-		"",
-		1,
-		0,
-		dbx.Params{"token": token},
-	)
-	if err != nil || len(records) == 0 {
-		return apis.NewNotFoundError("Route not found", err)
-	}
-	return e.JSON(http.StatusOK, liveRideRouteJSON(records[0]))
-}
-
 // LiveRideCopyRoute copies a shared route into the caller's own library.
 func LiveRideCopyRoute(e *core.RequestEvent) error {
 	user := e.Auth
@@ -467,6 +456,9 @@ func LiveRideCopyRoute(e *core.RequestEvent) error {
 	copied.Set("polyline", source.GetString("polyline"))
 	copied.Set("waypoints", source.Get("waypoints"))
 	copied.Set("preferences", source.Get("preferences"))
+	copied.Set("elevation_profile", source.Get("elevation_profile"))
+	copied.Set("climbs", source.Get("climbs"))
+	copied.Set("surfaces", source.Get("surfaces"))
 	copied.Set("privacy", "private")
 	copied.Set("copied_from", source.Id)
 	copied.Set("client_updated_at", time.Now().UTC())
@@ -666,6 +658,10 @@ func validateLiveRideRoute(payload liveRideRoutePayload) error {
 func liveRideRouteJSON(record *core.Record) map[string]any {
 	return map[string]any{
 		"id":                record.Id,
+		"precision":         liveRidePolylinePrecision,
+		"elevation_profile": record.Get("elevation_profile"),
+		"climbs":            record.Get("climbs"),
+		"surfaces":          record.Get("surfaces"),
 		"client_id":         record.GetString("client_id"),
 		"name":              record.GetString("name"),
 		"description":       record.GetString("description"),

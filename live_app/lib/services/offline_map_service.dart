@@ -6,6 +6,7 @@ import 'package:maplibre/maplibre.dart';
 
 import '../core/api_client.dart';
 import '../core/geo.dart';
+import '../data/settings_dao.dart';
 
 /// Postęp pobierania jednego regionu.
 class OfflineDownload {
@@ -32,8 +33,51 @@ class OfflineDownload {
 /// Silnik mapy sam trzyma kafelki w swojej bazie; ten serwis tylko mówi mu,
 /// co pobrać, i pilnuje, żeby dało się to odwołać i usunąć. Nic tu nie
 /// udaje — gdy platforma nie wspiera trybu offline (web), ekran to mówi.
+/// Ile miejsca zajmuje pobrana mapa i kiedy ją pobrano.
+///
+/// MapLibre nie trzyma tych danych w [OfflineRegion], a zawodnik ma prawo
+/// wiedzieć, ile zjadło mu pamięć telefonu. Rozmiar bierzemy z ostatniej
+/// porcji postępu pobierania — to liczba bajtów, które faktycznie przyszły,
+/// a nie oszacowanie.
+class OfflineMapStats {
+  const OfflineMapStats({
+    required this.bytes,
+    required this.downloadedAt,
+    required this.routeName,
+  });
+
+  final int bytes;
+  final DateTime downloadedAt;
+  final String routeName;
+
+  Map<String, dynamic> toJson() => {
+    'bytes': bytes,
+    'downloaded_at': downloadedAt.toIso8601String(),
+    'route_name': routeName,
+  };
+
+  static OfflineMapStats? fromJson(Object? value) {
+    if (value is! Map) return null;
+    final bytes = value['bytes'];
+    final downloadedAt = DateTime.tryParse(
+      value['downloaded_at'] as String? ?? '',
+    );
+    if (bytes is! int || downloadedAt == null) return null;
+    return OfflineMapStats(
+      bytes: bytes,
+      downloadedAt: downloadedAt,
+      routeName: value['route_name'] as String? ?? '',
+    );
+  }
+}
+
 class OfflineMapService extends ChangeNotifier {
-  OfflineMapService({OfflineManager? manager}) : _injected = manager;
+  OfflineMapService({OfflineManager? manager, SettingsDao? settings})
+    : _injected = manager,
+      _settings = settings;
+
+  /// Klucz, pod którym trzymamy rozmiary i daty pobrań.
+  static const String statsKey = 'offline_map_stats';
 
   /// Zoomy, które naprawdę przydają się w jeździe.
   ///
@@ -47,7 +91,9 @@ class OfflineMapService extends ChangeNotifier {
   static const double paddingMeters = 1500;
 
   final OfflineManager? _injected;
+  final SettingsDao? _settings;
   OfflineManager? _manager;
+  Map<String, OfflineMapStats> _stats = const {};
 
   List<OfflineRegion> _regions = const [];
   OfflineDownload? _current;
@@ -59,6 +105,33 @@ class OfflineMapService extends ChangeNotifier {
   OfflineDownload? get current => _current;
   String? get lastError => _lastError;
   bool get isDownloading => _current != null && !_current!.finished;
+
+  /// Rozmiar i data pobrania mapy dla trasy, albo null, gdy ich nie znamy
+  /// (np. mapa pobrana starszą wersją aplikacji).
+  OfflineMapStats? statsFor(String routeId) => _stats[routeId];
+
+  /// Łączny rozmiar map, o których coś wiemy.
+  int get totalBytes =>
+      _stats.values.fold(0, (sum, stats) => sum + stats.bytes);
+
+  /// Wczytuje zapamiętane rozmiary i daty pobrań.
+  Future<void> restoreStats() async {
+    final stored = await _settings?.readJson(statsKey);
+    if (stored == null) return;
+    final parsed = <String, OfflineMapStats>{};
+    for (final entry in stored.entries) {
+      final stats = OfflineMapStats.fromJson(entry.value);
+      if (stats != null) parsed[entry.key] = stats;
+    }
+    _stats = parsed;
+    notifyListeners();
+  }
+
+  Future<void> _writeStats() async {
+    await _settings?.writeJson(statsKey, {
+      for (final entry in _stats.entries) entry.key: entry.value.toJson(),
+    });
+  }
 
   /// Czy trasa ma pobrany region.
   bool hasRegionFor(String routeId) =>
@@ -125,6 +198,7 @@ class OfflineMapService extends ChangeNotifier {
 
     await _subscription?.cancel();
     final completer = Completer<void>();
+    var downloadedBytes = 0;
     _subscription = manager
         .downloadRegion(
           mapStyleUrl: styleUrl ?? ApiClient.mapStyleUrl,
@@ -140,6 +214,7 @@ class OfflineMapService extends ChangeNotifier {
             // więc procent potrafi skakać — dopóki nie jest znana na
             // pewno, nie pokazujemy go jako skończonego.
             final total = progress.totalTiles;
+            downloadedBytes = progress.loadedBytes;
             _current = OfflineDownload(
               routeId: routeId,
               routeName: routeName,
@@ -177,6 +252,17 @@ class OfflineMapService extends ChangeNotifier {
         );
 
     await completer.future;
+    if (downloadedBytes > 0) {
+      _stats = {
+        ..._stats,
+        routeId: OfflineMapStats(
+          bytes: downloadedBytes,
+          downloadedAt: DateTime.now(),
+          routeName: routeName,
+        ),
+      };
+      await _writeStats();
+    }
     await refresh();
   }
 
@@ -190,12 +276,27 @@ class OfflineMapService extends ChangeNotifier {
   Future<void> deleteRegion(int regionId) async {
     final manager = await _ensureManager();
     if (manager == null) return;
+    final routeId = _routeIdFor(regionId);
     try {
       await manager.deleteRegion(regionId: regionId);
     } on PlatformException catch (e) {
       _lastError = e.message;
     }
+    if (routeId != null && _stats.containsKey(routeId)) {
+      final next = Map<String, OfflineMapStats>.from(_stats)..remove(routeId);
+      _stats = next;
+      await _writeStats();
+    }
     await refresh();
+  }
+
+  String? _routeIdFor(int regionId) {
+    for (final region in _regions) {
+      if (region.id != regionId) continue;
+      final routeId = region.metadata['route_id'];
+      return routeId is String ? routeId : null;
+    }
+    return null;
   }
 
   /// Prostokąt wokół trasy z zapasem, żeby zjazd z trasy nie wyszedł poza

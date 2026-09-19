@@ -16,14 +16,18 @@ import 'sensor_hub.dart';
 class LiveSessionController extends ChangeNotifier {
   LiveSessionController(
     this.api,
-    this.heartRate,
     this.profile, {
+
+    /// Źródła pomiarów są opcjonalne, tak jak w rzeczywistości: zawodnik bez
+    /// paska i bez miernika mocy nadal transmituje pozycję i prędkość.
+    this.heartRate,
     SensorHub? sensors,
     SettingsDao? settings,
   }) : _sensors = sensors,
        _settings = settings;
 
   static const String privacyKey = 'live_privacy';
+  static const String shareKey = 'live_share';
 
   /// Co ile odświeżamy wiadomości grupy. Rzadziej niż telemetrię: wiadomość
   /// sprzed dziesięciu sekund wciąż jest aktualna, pozycja już nie.
@@ -34,7 +38,7 @@ class LiveSessionController extends ChangeNotifier {
   static const Duration telemetryInterval = Duration(seconds: 3);
 
   final ApiClient api;
-  final HeartRateService heartRate;
+  final HeartRateService? heartRate;
   final ProfileService profile;
   final SensorHub? _sensors;
   final SettingsDao? _settings;
@@ -45,6 +49,7 @@ class LiveSessionController extends ChangeNotifier {
   bool _lastPushFailed = false;
   String? _title;
   LivePrivacy _privacy = const LivePrivacy();
+  LiveShareSettings _share = const LiveShareSettings();
   List<LiveMessage> _messages = const [];
   DateTime? _messagesFetchedAt;
   GeoPoint? _meetup;
@@ -60,6 +65,7 @@ class LiveSessionController extends ChangeNotifier {
   DateTime? get lastAcceptedAt => _lastAcceptedAt;
   bool get lastPushFailed => _lastPushFailed;
   LivePrivacy get privacy => _privacy;
+  LiveShareSettings get share => _share;
   List<LiveMessage> get messages => List.unmodifiable(_messages);
   GeoPoint? get meetup => _meetup;
   String get meetupLabel => _meetupLabel;
@@ -67,13 +73,77 @@ class LiveSessionController extends ChangeNotifier {
 
   Future<void> restore() async {
     final stored = await _settings?.readJson(privacyKey);
-    if (stored == null) return;
-    try {
-      _privacy = LivePrivacy.fromJson(stored);
-    } catch (_) {
-      _privacy = const LivePrivacy();
+    if (stored != null) {
+      try {
+        _privacy = LivePrivacy.fromJson(stored);
+      } catch (_) {
+        _privacy = const LivePrivacy();
+      }
+    }
+    final storedShare = await _settings?.readJson(shareKey);
+    if (storedShare != null) {
+      try {
+        _share = LiveShareSettings.fromJson(storedShare);
+      } catch (_) {
+        _share = const LiveShareSettings();
+      }
     }
     notifyListeners();
+  }
+
+  /// Tekst, który idzie do systemowego arkusza udostępniania.
+  ///
+  /// Imię bierze się z profilu, nigdy z kodu — „Marek jedzie teraz" wpisane
+  /// na sztywno byłoby kłamstwem u każdego innego zawodnika.
+  String shareMessage() {
+    final link = viewerUrl ?? '';
+    return '${profile.riderName} jedzie teraz na rowerze 🚴\n'
+        'Śledź przejazd na żywo w Live Ride:\n$link';
+  }
+
+  /// Zmienia widoczność linku albo jego wygasanie.
+  ///
+  /// Wybór zapisuje się lokalnie także wtedy, gdy nie ma połączenia: kolejna
+  /// sesja ma startować z ustawieniem, które zawodnik już wybrał.
+  Future<bool> updateShare(LiveShareSettings settings) async {
+    _share = settings;
+    notifyListeners();
+    await _settings?.writeJson(shareKey, settings.toJson());
+
+    final active = _session;
+    if (active == null) return true;
+    try {
+      final result = await api.setLiveShare(
+        active.id,
+        visibility: settings.visibility.wire,
+        expireOnEnd: settings.expiry.expiresOnEnd,
+        // 0 czyści datę wygaśnięcia po stronie serwera.
+        expireInHours: settings.expiry.hours ?? 0,
+      );
+      _session = active.copyWith(
+        visibility: result['visibility'] as String? ?? settings.visibility.wire,
+      );
+      notifyListeners();
+      return true;
+    } catch (_) {
+      return false;
+    }
+  }
+
+  /// Wystawia nowy token i unieważnia każdy rozesłany link.
+  Future<bool> rotateShareLink() async {
+    final active = _session;
+    if (active == null) return false;
+    try {
+      final result = await api.setLiveShare(active.id, rotateToken: true);
+      final token = result['share_token'] as String?;
+      if (token == null || token.isEmpty) return false;
+      _session = active.copyWith(shareToken: token);
+      notifyListeners();
+      return true;
+    } catch (_) {
+      return false;
+    }
   }
 
   /// Zmienia ustawienia prywatności.
@@ -145,13 +215,16 @@ class LiveSessionController extends ChangeNotifier {
     }
   }
 
-  Future<LiveSession> create({String? title}) async {
+  Future<LiveSession> create({String? title, String? routeClientId}) async {
     final resolved = (title ?? '').trim().isNotEmpty
         ? title!.trim()
         : '${profile.riderName} · Live Ride';
     final created = await api.createLive(
       title: resolved,
       displayName: profile.riderName,
+      routeClientId: routeClientId,
+      visibility: _share.visibility.wire,
+      expireOnEnd: _share.expiry.expiresOnEnd,
     );
     _session = created;
     _title = resolved;
@@ -162,6 +235,16 @@ class LiveSessionController extends ChangeNotifier {
     _messagesFetchedAt = null;
     notifyListeners();
     unawaited(api.setLivePrivacy(created.id, _privacy.toJson()));
+    // Wygasanie „po X godzinach" ustawia się osobno: przy tworzeniu sesji
+    // serwer zna tylko „po zakończeniu".
+    final hours = _share.expiry.hours;
+    if (hours != null) {
+      unawaited(
+        api
+            .setLiveShare(created.id, expireInHours: hours)
+            .catchError((_) => <String, dynamic>{}),
+      );
+    }
     return created;
   }
 
@@ -208,6 +291,13 @@ class LiveSessionController extends ChangeNotifier {
     Position position, {
     required double distanceMeters,
     double elevationGainMeters = 0,
+
+    /// „riding", „paused" albo „stopped". Bez tego publiczna strona nie
+    /// odróżni świateł od pauzy ani jednego od utraty zasięgu.
+    String state = 'riding',
+    int movingSeconds = 0,
+    double maxSpeedKmh = 0,
+    int batteryPercent = 0,
   }) async {
     final active = _session;
     if (active == null) return true;
@@ -239,7 +329,7 @@ class LiveSessionController extends ChangeNotifier {
         // Prywatność rozstrzyga serwer przy wydawaniu migawki, ale pola,
         // których zawodnik nie udostępnia, w ogóle nie opuszczają telefonu.
         'heart_rate_bpm': _privacy.shareHeartRate
-            ? (heartRate.latestBpm ?? 0)
+            ? (heartRate?.latestBpm ?? 0)
             : 0,
         'cadence_rpm': _privacy.sharePower
             ? (_sensors?.snapshot.cadenceRpm?.round() ?? 0)
@@ -249,6 +339,13 @@ class LiveSessionController extends ChangeNotifier {
             : 0,
         'distance_m': distanceMeters,
         'elevation_gain_m': elevationGainMeters,
+        'state': state,
+        'moving_seconds': movingSeconds,
+        'max_speed_kmh': _clamp(maxSpeedKmh, 0, 200),
+        // Bateria wychodzi z telefonu tylko wtedy, gdy zawodnik na to
+        // pozwolił — serwer i tak filtruje, ale nieudostępnione pole nie ma
+        // powodu opuszczać urządzenia.
+        'battery_percent': _privacy.shareBattery ? batteryPercent : 0,
       });
       _lastAcceptedAt = now;
       _lastPushFailed = false;

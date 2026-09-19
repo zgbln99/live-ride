@@ -10,11 +10,33 @@ import '../data/route_dao.dart';
 import '../data/segment_dao.dart';
 import '../models/ride_record.dart';
 import '../models/ride_route.dart';
+import '../core/geo.dart';
 import '../models/segment.dart';
 import 'routing_service.dart';
 
 /// Co dzieje się z synchronizacją.
 enum SyncPhase { idle, running, offline, failed }
+
+/// Dlaczego synchronizacja się nie udała.
+///
+/// To jest jedyne, co wychodzi z warstwy sieciowej do interfejsu. Surowy
+/// `DioException` z opisem `validateStatus`, adresem dokumentacji HTTP i
+/// stosem wywołań nie jest komunikatem dla zawodnika — jest komunikatem dla
+/// programisty i zostaje w logu.
+enum SyncFailure {
+  /// Brak zasięgu, wyłączona transmisja danych, tunel.
+  offline,
+
+  /// Serwer odpowiedział błędem albo w ogóle nie odpowiedział na czas.
+  server,
+
+  /// Sesja wygasła — bez ponownego zalogowania nic nie pójdzie.
+  session,
+
+  /// Serwer nie zna tego adresu. Prawie zawsze znaczy, że wdrożona wersja
+  /// backendu jest starsza niż aplikacja.
+  outdatedServer,
+}
 
 /// Wysyła lokalne przejazdy i trasy na serwer.
 ///
@@ -48,13 +70,22 @@ class SyncService extends ChangeNotifier {
   SyncPhase _phase = SyncPhase.idle;
   DateTime? _lastSuccess;
   DateTime? _lastAttempt;
-  String? _lastError;
+  SyncFailure? _failure;
+  String? _technicalError;
   int _pendingRides = 0;
   int _pendingRoutes = 0;
 
   SyncPhase get phase => _phase;
   DateTime? get lastSuccess => _lastSuccess;
-  String? get lastError => _lastError;
+
+  /// Dlaczego ostatnia próba się nie udała — albo null, gdy się udała.
+  SyncFailure? get failure => _failure;
+
+  /// Surowy opis błędu. WYŁĄCZNIE do logu i ekranu diagnostycznego; nigdy do
+  /// zwykłego interfejsu.
+  @visibleForTesting
+  String? get technicalError => _technicalError;
+
   int get pendingCount => _pendingRides + _pendingRoutes;
   bool get isRunning => _phase == SyncPhase.running;
 
@@ -82,20 +113,52 @@ class SyncService extends ChangeNotifier {
       await _pushRoutes();
       await _pushSegments();
       _lastSuccess = DateTime.now();
-      _lastError = null;
+      _failure = null;
+      _technicalError = null;
       _phase = SyncPhase.idle;
       await refreshPending();
       return true;
-    } on DioException catch (e) {
-      _lastError = e.message;
-      _phase = _isOffline(e) ? SyncPhase.offline : SyncPhase.failed;
-      notifyListeners();
+    } on DioException catch (e, stack) {
+      _fail(classify(e), e, stack);
       return false;
-    } catch (e) {
-      _lastError = e.toString();
-      _phase = SyncPhase.failed;
-      notifyListeners();
+    } catch (e, stack) {
+      _fail(SyncFailure.server, e, stack);
       return false;
+    }
+  }
+
+  void _fail(SyncFailure failure, Object error, StackTrace stack) {
+    _failure = failure;
+    _technicalError = error.toString();
+    _phase = failure == SyncFailure.offline
+        ? SyncPhase.offline
+        : SyncPhase.failed;
+    // Szczegóły techniczne trafiają do logu deweloperskiego i nigdzie indziej.
+    debugPrint('Live Ride sync failed ($failure): $error\n$stack');
+    // Liczba oczekujących rekordów nie zmienia się przy błędzie: kolejka
+    // zostaje nietknięta do POTWIERDZONEJ wysyłki.
+    notifyListeners();
+  }
+
+  /// Zamienia wyjątek sieciowy na powód zrozumiały dla interfejsu.
+  @visibleForTesting
+  static SyncFailure classify(DioException error) {
+    switch (error.type) {
+      case DioExceptionType.connectionError:
+      case DioExceptionType.connectionTimeout:
+      case DioExceptionType.sendTimeout:
+      case DioExceptionType.receiveTimeout:
+        return SyncFailure.offline;
+      case DioExceptionType.badResponse:
+        final status = error.response?.statusCode;
+        if (status == 401 || status == 403) return SyncFailure.session;
+        // 404 na własnym endpointcie synchronizacji nie znaczy „brak
+        // przejazdu", tylko „serwer nie ma tej trasy HTTP" — czyli działa
+        // starsza wersja backendu, niż zakłada aplikacja.
+        if (status == 404) return SyncFailure.outdatedServer;
+        return SyncFailure.server;
+      default:
+        return SyncFailure.server;
     }
   }
 
@@ -105,14 +168,6 @@ class SyncService extends ChangeNotifier {
     if (_phase == SyncPhase.idle) return false;
     return DateTime.now().difference(attempt) < retryDelay;
   }
-
-  static bool _isOffline(DioException error) => switch (error.type) {
-    DioExceptionType.connectionError ||
-    DioExceptionType.connectionTimeout ||
-    DioExceptionType.sendTimeout ||
-    DioExceptionType.receiveTimeout => true,
-    _ => false,
-  };
 
   Future<void> _pushRides() async {
     final pending = await _rides.pendingSync();
@@ -214,7 +269,9 @@ class SyncService extends ChangeNotifier {
   /// Oznacza jako zsynchronizowane tylko to, co serwer potwierdził.
   ///
   /// Gdyby oznaczać wszystko, co wysłaliśmy, przejazd odrzucony przez
-  /// walidację zniknąłby z kolejki i nigdy by nie doszedł.
+  /// walidację zniknąłby z kolejki i nigdy by nie doszedł. Dlatego przy
+  /// częściowym powodzeniu — osiemnaście z dwudziestu — dwa pozostałe
+  /// zostają w kolejce i pojadą przy następnej próbie.
   Future<void> _markSynced(
     Map<String, dynamic>? response,
     Future<void> Function(String clientId) mark,
@@ -270,6 +327,10 @@ class SyncService extends ChangeNotifier {
     'polyline': encodeValhallaPolyline(route.points),
     'waypoints': [for (final waypoint in route.waypoints) waypoint.toJson()],
     'preferences': route.preferences.toJson(),
+    // Profil i podjazdy liczy telefon. Bez nich publiczna strona trasy nie ma
+    // czego narysować, a serwer nie ma skąd wziąć wysokości.
+    'elevation_profile': elevationProfileJson(route),
+    'climbs': climbsJson(route),
     // Serwer nazywa to „link", aplikacja „unlisted" — jedno tłumaczenie
     // w jednym miejscu zamiast dwóch nazw w całym kodzie.
     'privacy': switch (route.privacy) {
@@ -279,4 +340,64 @@ class SyncService extends ChangeNotifier {
     },
     'client_updated_at': route.updatedAt.toUtc().toIso8601String(),
   };
+
+  /// Ile próbek profilu wysokości wysyłamy.
+  ///
+  /// Wykres na stronie ma szerokość paruset pikseli — tysiąc punktów na nim
+  /// nie da się odróżnić od dwustu, a rośnie o nie każde żądanie.
+  static const int profileSamples = 240;
+
+  /// Profil wysokości jako pary [dystans, wysokość].
+  ///
+  /// Zwraca pustą listę, gdy trasa nie ma wysokości: pusty profil znaczy
+  /// „nie wiem", a wykres z samych zer wyglądałby jak idealnie płaska trasa.
+  @visibleForTesting
+  static List<Map<String, num>> elevationProfileJson(RideRoute route) {
+    final points = route.points;
+    if (points.length < 2) return const [];
+    if (!points.any((point) => point.elevation != null)) return const [];
+
+    final cumulative = cumulativeDistances(points);
+    final step = points.length <= profileSamples
+        ? 1
+        : (points.length / profileSamples).ceil();
+
+    final samples = <Map<String, num>>[];
+    for (var i = 0; i < points.length; i += step) {
+      final elevation = points[i].elevation;
+      if (elevation == null) continue;
+      samples.add({
+        'd': cumulative[i].round(),
+        'e': double.parse(elevation.toStringAsFixed(1)),
+      });
+    }
+    // Ostatni punkt zawsze zostaje: bez niego profil kończyłby się przed metą.
+    final lastElevation = points.last.elevation;
+    if (lastElevation != null &&
+        (samples.isEmpty || samples.last['d'] != cumulative.last.round())) {
+      samples.add({
+        'd': cumulative.last.round(),
+        'e': double.parse(lastElevation.toStringAsFixed(1)),
+      });
+    }
+    return samples.length < 2 ? const [] : samples;
+  }
+
+  /// Wykryte podjazdy trasy w formacie publicznej strony.
+  @visibleForTesting
+  static List<Map<String, Object>> climbsJson(RideRoute route) {
+    final analysis = route.analysis;
+    return [
+      for (final climb in analysis.climbs)
+        {
+          'start_m': climb.startDistanceMeters.round(),
+          'length_m': climb.lengthMeters.round(),
+          'gain_m': climb.gainMeters.round(),
+          'avg_gradient': double.parse(
+            climb.averageGradientPercent.toStringAsFixed(1),
+          ),
+          'category': climb.category.shortLabel,
+        },
+    ];
+  }
 }

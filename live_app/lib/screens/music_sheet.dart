@@ -53,8 +53,9 @@ class _MusicSheetState extends State<_MusicSheet> {
       await action();
     } on SpotifyException catch (e) {
       if (mounted) showLrMessage(context, e.message, error: true);
-    } catch (e) {
-      if (mounted) showLrMessage(context, e.toString(), error: true);
+    } catch (e, stack) {
+      debugPrint('Live Ride: odtwarzacz: $e\n$stack');
+      if (mounted) showLrMessage(context, S.somethingWentWrong, error: true);
     } finally {
       if (mounted) setState(() => _busy = false);
     }

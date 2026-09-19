@@ -25,6 +25,11 @@ class Strings {
   String get close => 'Zamknij';
   String get back => 'Wróć';
   String get retry => 'Spróbuj ponownie';
+
+  /// Ostatnia deska ratunku, gdy nie wiemy, co się stało.
+  ///
+  /// Zawodnik nigdy nie ma zobaczyć treści wyjątku — ta idzie do logu.
+  String get somethingWentWrong => 'Coś poszło nie tak. Spróbuj ponownie.';
   String get done => 'Gotowe';
   String get next => 'Dalej';
   String get share => 'Udostępnij';
@@ -359,15 +364,51 @@ class Strings {
       'zasięgu.';
   String get everythingSynced => 'Wszystko zsynchronizowane';
   String waitingToSync(int count) => 'Czeka na wysłanie: $count';
+  String pendingItems(int count) => switch (count) {
+    1 => '1 element czeka na wysłanie',
+    >= 2 && <= 4 => '$count elementy czekają na wysłanie',
+    _ => '$count elementów czeka na wysłanie',
+  };
   String get lastSync => 'Ostatnia synchronizacja';
   String get syncNow => 'SYNCHRONIZUJ TERAZ';
+  String get syncing => 'Wysyłam…';
+
+  // Komunikaty błędów synchronizacji.
+  //
+  // To są JEDYNE teksty, jakie zawodnik ma prawo zobaczyć, gdy wysyłka się
+  // nie uda. Surowy wyjątek biblioteki HTTP zostaje w logu.
+  String get syncNoInternet => 'Brak internetu';
+  String get syncNoInternetDetail =>
+      'Przejazdy są bezpiecznie zapisane na telefonie. Wyślemy je '
+      'automatycznie po odzyskaniu połączenia.';
+  String get syncServerError => 'Nie udało się teraz zsynchronizować danych';
+  String get syncServerErrorDetail => 'Spróbujemy ponownie automatycznie.';
+  String get syncSessionExpired => 'Wygasła sesja';
+  String get syncSessionExpiredDetail =>
+      'Zaloguj się ponownie, aby synchronizować dane.';
+  String get syncOutdatedServer => 'Serwer wymaga aktualizacji';
+  String get syncOutdatedServerDetail =>
+      'Ta wersja aplikacji używa funkcji, których serwer jeszcze nie ma. '
+      'Twoje przejazdy czekają bezpiecznie na telefonie.';
+  String get syncAllGoodDetail =>
+      'Kopia wszystkich przejazdów i tras jest na serwerze.';
   String get offlineMaps => 'Mapy offline';
   String get offlineMapsExplainer =>
       'Pobierz mapę wokół trasy, a nawigacja zadziała bez zasięgu. Pobieramy '
       'pas 1,5 km wokół trasy w powiększeniach przydatnych w jeździe.';
   String get offlineMapsUnsupported =>
       'Ta platforma nie obsługuje map offline.';
-  String get noOfflineMaps => 'Nie masz pobranych map.';
+  String get noOfflineMaps => 'Nie masz jeszcze map offline.';
+  String get noOfflineMapsDetail =>
+      'Pobierz mapę przy zapisanej trasie, aby korzystać z nawigacji bez '
+      'internetu.';
+  String get pickRoute => 'WYBIERZ TRASĘ';
+  String get downloadedOn => 'Pobrano';
+  String get mapSize => 'Rozmiar';
+  String get totalDownloaded => 'Łącznie pobrane';
+  String get deleteMapTitle => 'Usunąć mapę offline?';
+  String deleteMapBody(String route) =>
+      'Mapa trasy „$route" zniknie z telefonu. Trasa zostaje.';
   String get downloadOfflineMap => 'Pobierz mapę offline';
   String get offlineMapReady => 'Mapa pobrana';
 
@@ -594,6 +635,47 @@ class Strings {
   String get liveCodeNotFound =>
       'Żadna aktywna transmisja nie używa tego kodu.';
   String get liveCodeInvalid => 'Ten kod LIVE nie wygląda poprawnie.';
+  String get liveStartFailed => 'Nie udało się rozpocząć transmisji LIVE.';
+  String get liveJoinFailed => 'Nie udało się dołączyć do transmisji.';
+  String get liveNoRouteHint =>
+      'Ta jazda nie ma wczytanej trasy, więc obserwujący nie zobaczą planu '
+      'ani czasu do mety. Wczytaj trasę przed startem, jeśli chcesz je pokazać.';
+
+  // Udostępnianie linku.
+  String get shareLiveTitle => 'Udostępnij jazdę na żywo';
+  String get shareLiveSubtitle =>
+      'Znajomy otworzy link w przeglądarce — bez aplikacji i bez konta.';
+  String get copyLink => 'KOPIUJ LINK';
+  String get linkCopied => 'Link skopiowany';
+  String get showQr => 'POKAŻ KOD QR';
+  String get hideQr => 'UKRYJ KOD QR';
+  String get linkVisibility => 'KTO MOŻE OTWORZYĆ LINK';
+  String get linkUnlistedHint =>
+      'Działa dla każdego, kto dostał adres. Wyszukiwarki go nie zaindeksują.';
+  String get linkPublicHint =>
+      'Jak wyżej, ale pozwalasz wyszukiwarkom pokazywać tę stronę.';
+  String get linkDisabledHint =>
+      'Link natychmiast przestaje działać dla wszystkich. Możesz go włączyć '
+      'z powrotem.';
+  String get linkExpiry => 'LINK PRZESTANIE DZIAŁAĆ';
+  String get linkSettingsQueued =>
+      'Zapisano na telefonie. Wyślemy na serwer przy najbliższym połączeniu.';
+  String get newLinkAction => 'WYSTAW NOWY LINK';
+  String get newLinkDone => 'Nowy link gotowy. Stary już nie działa.';
+  String get newLinkFailed => 'Nie udało się wystawić nowego linku.';
+  String get shareBattery => 'Bateria telefonu';
+  String get routeLinkNotFound =>
+      'Ten link do trasy już nie działa albo trasa przestała być udostępniana.';
+  String routeLinkImported(String name) => 'Dodano trasę „$name" do biblioteki';
+  String get routeLinkTitle => 'Trasa z linku';
+  String routeLinkBody(String name, String distance) =>
+      'Dodać „$name" ($distance) do swojej biblioteki tras?';
+  String get routeLinkAdd => 'DODAJ DO BIBLIOTEKI';
+  String get shareRouteTitle => 'Udostępnij trasę';
+  String get shareRouteSubtitle =>
+      'Strona z mapą, profilem wysokości i pobraniem GPX. Bez konta.';
+  String shareRouteMessage(String name, String link) =>
+      'Trasa „$name" w Live Ride:\n$link';
 
   // ------------------------------------------------------------- sensory
   String get sensors => 'Sensory';

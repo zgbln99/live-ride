@@ -211,8 +211,11 @@ func registerRoutes(se *core.ServeEvent, client meilisearch.ServiceManager) {
 	se.Router.POST("/live-rides/join", routes.LiveRideJoin).Bind(apis.RequireAuth())
 	se.Router.POST("/live-rides/{id}/telemetry", routes.LiveRideTelemetry).Bind(apis.RequireAuth())
 	se.Router.POST("/live-rides/{id}/stop", routes.LiveRideStop).Bind(apis.RequireAuth())
+	se.Router.POST("/live-rides/{id}/share", routes.LiveRideSetShare).Bind(apis.RequireAuth())
 	se.Router.GET("/live/{token}", routes.LiveRidePublicSnapshot)
 	se.Router.GET("/live/{token}/route", routes.LiveRidePublicRoute)
+	// Ślad przejazdu: raz w całości, potem tylko przyrosty po ?since=.
+	se.Router.GET("/live/{token}/track", routes.LiveRidePublicTrack)
 
 	// Synchronizacja: telefon jest źródłem prawdy, serwer trzyma kopię.
 	se.Router.POST("/live-rides/sync/rides", routes.LiveRideSyncRides).Bind(apis.RequireAuth())
@@ -220,7 +223,10 @@ func registerRoutes(se *core.ServeEvent, client meilisearch.ServiceManager) {
 	se.Router.GET("/live-rides/sync/routes", routes.LiveRidePullRoutes).Bind(apis.RequireAuth())
 	se.Router.POST("/live-rides/sync/segments", routes.LiveRideSyncSegments).Bind(apis.RequireAuth())
 	se.Router.POST("/live-routes/{token}/copy", routes.LiveRideCopyRoute).Bind(apis.RequireAuth())
-	se.Router.GET("/live-routes/{token}", routes.LiveRidePublicRouteByToken)
+	se.Router.GET("/live-routes/{token}", routes.LiveRidePublicRoutePage)
+	// Eksport GPX: znajomy bez konta i bez aplikacji wgra trasę do swojego
+	// licznika albo do Komoota.
+	se.Router.GET("/live-routes/{token}/gpx", routes.LiveRideRouteGPX)
 	se.Router.GET("/live-segments/{token}/leaderboard", routes.LiveRideSegmentLeaderboard)
 
 	// Jazda grupowa: prywatność per zawodnik, punkt zbiórki i wiadomości.

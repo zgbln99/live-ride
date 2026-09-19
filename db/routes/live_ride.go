@@ -26,6 +26,28 @@ type liveRideTelemetryPoint struct {
 	PowerWatts    int       `json:"power_watts"`
 	DistanceM     float64   `json:"distance_m"`
 	ElevationGain float64   `json:"elevation_gain_m"`
+
+	// Stan zawodnika i statystyki sesji jadą z najnowszą próbką, bo tylko
+	// telefon je zna: serwer nie odróżni świateł od pauzy ani nie policzy
+	// czasu w ruchu z próbek, które przyszły z opóźnieniem.
+	State          string  `json:"state"`
+	MovingSeconds  int     `json:"moving_seconds"`
+	MaxSpeedKmh    float64 `json:"max_speed_kmh"`
+	BatteryPercent int     `json:"battery_percent"`
+}
+
+// normalizeLiveRideState przyjmuje tylko nazwy, które strona umie pokazać.
+func normalizeLiveRideState(value string) string {
+	switch strings.ToLower(strings.TrimSpace(value)) {
+	case "paused":
+		return "paused"
+	case "stopped":
+		return "stopped"
+	case "riding":
+		return "riding"
+	default:
+		return ""
+	}
 }
 
 // LiveRideCreate starts a shareable live-tracking session and automatically
@@ -35,6 +57,11 @@ func LiveRideCreate(e *core.RequestEvent) error {
 		Title       string `json:"title"`
 		TrailID     string `json:"trail_id"`
 		DisplayName string `json:"display_name"`
+		// Trasa z biblioteki Live Ride, po client_id nadanym przez telefon.
+		// Bez niej publiczna strona nie ma czego narysować jako planu.
+		RouteClientID string `json:"route_client_id"`
+		Visibility    string `json:"visibility"`
+		ExpireOnEnd   bool   `json:"expire_on_end"`
 	}
 	if err := e.BindBody(&data); err != nil {
 		return apis.NewBadRequestError("Failed to read request data", err)
@@ -63,6 +90,24 @@ func LiveRideCreate(e *core.RequestEvent) error {
 		}
 	}
 
+	// Trasę wskazuje się własnym client_id, więc właściciel może przypiąć
+	// wyłącznie swoją: cudza trasa nie ma szansy trafić na czyjś publiczny
+	// link nawet przez pomyłkę w identyfikatorze.
+	routeID := ""
+	if clientID := strings.TrimSpace(data.RouteClientID); clientID != "" {
+		routes, err := e.App.FindRecordsByFilter(
+			"live_ride_routes",
+			"owner = {:owner} && client_id = {:client}",
+			"",
+			1,
+			0,
+			dbx.Params{"owner": e.Auth.Id, "client": clientID},
+		)
+		if err == nil && len(routes) > 0 {
+			routeID = routes[0].Id
+		}
+	}
+
 	sessions, err := e.App.FindCollectionByNameOrId("live_ride_sessions")
 	if err != nil {
 		return err
@@ -72,6 +117,20 @@ func LiveRideCreate(e *core.RequestEvent) error {
 	if data.TrailID != "" {
 		session.Set("trail", data.TrailID)
 	}
+	if routeID != "" {
+		session.Set("route", routeID)
+	}
+	switch strings.ToLower(strings.TrimSpace(data.Visibility)) {
+	case "public":
+		session.Set("visibility", "public")
+	case "disabled":
+		session.Set("visibility", "disabled")
+	default:
+		// Domyślnie „z linku": działa dla każdego, kto dostał adres, i dla
+		// nikogo poza tym. Literówka nie może upublicznić czyjejś trasy.
+		session.Set("visibility", "unlisted")
+	}
+	session.Set("expire_on_end", data.ExpireOnEnd)
 	session.Set("title", title)
 	session.Set("share_token", security.RandomString(40))
 	session.Set("join_token", normalizeLiveRideJoinToken(security.RandomString(12)))
@@ -93,6 +152,9 @@ func LiveRideCreate(e *core.RequestEvent) error {
 		"share_token":    session.GetString("share_token"),
 		"join_token":     session.GetString("join_token"),
 		"status":         session.GetString("status"),
+		"visibility":     liveRideVisibility(session),
+		"expire_on_end":  session.GetBool("expire_on_end"),
+		"has_route":      routeID != "" || data.TrailID != "",
 		"started_at":     session.GetDateTime("started_at"),
 	})
 }
@@ -217,6 +279,20 @@ func LiveRideTelemetry(e *core.RequestEvent) error {
 		participant.Set("distance_m", newest.DistanceM)
 		participant.Set("elevation_gain_m", newest.ElevationGain)
 		participant.Set("last_seen_at", newest.RecordedAt.UTC())
+		if state := normalizeLiveRideState(newest.State); state != "" {
+			participant.Set("state", state)
+		}
+		if newest.MovingSeconds > 0 {
+			participant.Set("moving_seconds", newest.MovingSeconds)
+		}
+		// Rekord prędkości nigdy nie maleje w trakcie jazdy — telefon, który
+		// po restarcie przysłał niższą wartość, nie może skasować maksimum.
+		if newest.MaxSpeedKmh > participant.GetFloat("max_speed_kmh") {
+			participant.Set("max_speed_kmh", newest.MaxSpeedKmh)
+		}
+		if newest.BatteryPercent > 0 && newest.BatteryPercent <= 100 {
+			participant.Set("battery_percent", newest.BatteryPercent)
+		}
 		if err := e.App.Save(participant); err != nil {
 			return err
 		}
@@ -240,76 +316,49 @@ func LiveRideStop(e *core.RequestEvent) error {
 	if session.GetString("status") != "ended" {
 		session.Set("status", "ended")
 		session.Set("ended_at", time.Now().UTC())
+		// Podsumowanie liczy się raz, tutaj. Po mecie te liczby już się nie
+		// zmienią, a publiczna strona nie ma prawa przy każdym wejściu
+		// przewalać całej historii punktów.
+		if summary := liveRideBuildSummary(e, session); summary != nil {
+			session.Set("summary", summary)
+		}
 		if err := e.App.Save(session); err != nil {
 			return err
 		}
 	}
-	return e.JSON(http.StatusOK, map[string]any{"status": "ended"})
+	return e.JSON(http.StatusOK, map[string]any{
+		"status":     "ended",
+		"link_alive": !liveRideShareExpired(session, time.Now().UTC()),
+	})
 }
 
-// LiveRidePublicSnapshot is intentionally unauthenticated. Possession of the
-// cryptographically random share token is the capability. It returns only the
-// fields needed by the spectator UI and never exposes user ids/emails.
-func LiveRidePublicSnapshot(e *core.RequestEvent) error {
-	token := strings.TrimSpace(e.Request.PathValue("token"))
-	if len(token) < 32 {
-		return apis.NewNotFoundError("Live ride not found", nil)
-	}
-
-	session, err := e.App.FindFirstRecordByData("live_ride_sessions", "share_token", token)
-	if err != nil {
-		return apis.NewNotFoundError("Live ride not found", err)
-	}
-
-	participants, err := e.App.FindRecordsByFilter(
-		"live_ride_participants",
-		"session={:session}",
-		"display_name",
-		100,
-		0,
-		dbx.Params{"session": session.Id},
-	)
+// LiveRidePublicRoute returns the planned route to holders of the spectator
+// token. It is fetched once by the viewer rather than being resent with every
+// live snapshot.
+//
+// Dwa źródła, bo dwie epoki: trasa z biblioteki Live Ride (polilinia w
+// precyzji 6, z profilem wysokości i podjazdami) i stara ścieżka Wanderera
+// (`trails`, polilinia w precyzji 5). Odpowiedź zawsze mówi, w której
+// precyzji jest zakodowana — zgadywanie po stronie strony rysowało trasę
+// dziesięć razy bliżej równika, niż była naprawdę.
+func LiveRidePublicRoute(e *core.RequestEvent) error {
+	access, err := liveRideResolveShare(e)
 	if err != nil {
 		return err
 	}
+	session := access.session
+	liveRideNoStore(e, liveRideVisibility(session) == "public")
 
-	riders := make([]map[string]any, 0, len(participants))
-	for _, participant := range participants {
-		riders = append(riders, liveRideRiderJSON(participant))
+	if access.state != "ok" {
+		return e.JSON(http.StatusOK, map[string]any{"status": access.state, "polyline": ""})
 	}
 
-	snapshot := map[string]any{
-		"title":      session.GetString("title"),
-		"trail_id":   session.GetString("trail"),
-		"status":     session.GetString("status"),
-		"kind":       session.GetString("kind"),
-		"started_at": session.GetDateTime("started_at"),
-		"ended_at":   session.GetDateTime("ended_at"),
-		"riders":     riders,
-	}
-	if session.GetFloat("meetup_lat") != 0 || session.GetFloat("meetup_lon") != 0 {
-		snapshot["meetup"] = map[string]any{
-			"latitude":  session.GetFloat("meetup_lat"),
-			"longitude": session.GetFloat("meetup_lon"),
-			"label":     session.GetString("meetup_label"),
+	if routeID := session.GetString("route"); routeID != "" {
+		if route, err := e.App.FindRecordById("live_ride_routes", routeID); err == nil {
+			return e.JSON(http.StatusOK, liveRideRouteJSONForViewer(route))
 		}
 	}
-	return e.JSON(http.StatusOK, snapshot)
-}
 
-// LiveRidePublicRoute returns the simplified encoded route geometry only to
-// holders of the spectator token. It is fetched once by the viewer rather
-// than being resent with every 3-second live snapshot.
-func LiveRidePublicRoute(e *core.RequestEvent) error {
-	token := strings.TrimSpace(e.Request.PathValue("token"))
-	if len(token) < 32 {
-		return apis.NewNotFoundError("Live ride not found", nil)
-	}
-
-	session, err := e.App.FindFirstRecordByData("live_ride_sessions", "share_token", token)
-	if err != nil {
-		return apis.NewNotFoundError("Live ride not found", err)
-	}
 	trailID := session.GetString("trail")
 	if trailID == "" {
 		return e.JSON(http.StatusOK, map[string]any{"polyline": ""})
@@ -320,14 +369,17 @@ func LiveRidePublicRoute(e *core.RequestEvent) error {
 		return apis.NewNotFoundError("Live ride route not found", err)
 	}
 	return e.JSON(http.StatusOK, map[string]any{
-		"name":           trail.GetString("name"),
-		"polyline":       trail.GetString("polyline"),
-		"distance_m":     trail.GetFloat("distance"),
-		"elevation_gain": trail.GetFloat("elevation_gain"),
-		"min_lat":        trail.GetFloat("min_lat"),
-		"max_lat":        trail.GetFloat("max_lat"),
-		"min_lon":        trail.GetFloat("min_lon"),
-		"max_lon":        trail.GetFloat("max_lon"),
+		"name":     trail.GetString("name"),
+		"polyline": trail.GetString("polyline"),
+		// Kolekcja `trails` koduje polilinie w precyzji 5 (go-polyline),
+		// a nie 6 jak reszta Live Ride.
+		"precision":  5,
+		"distance_m": trail.GetFloat("distance"),
+		"ascent_m":   trail.GetFloat("elevation_gain"),
+		"min_lat":    trail.GetFloat("min_lat"),
+		"max_lat":    trail.GetFloat("max_lat"),
+		"min_lon":    trail.GetFloat("min_lon"),
+		"max_lon":    trail.GetFloat("max_lon"),
 	})
 }
 
@@ -437,54 +489,10 @@ func setLiveRidePointFields(record *core.Record, point liveRideTelemetryPoint) {
 	record.Set("heading_deg", point.HeadingDeg)
 	record.Set("accuracy_m", point.AccuracyM)
 	record.Set("heart_rate_bpm", point.HeartRateBpm)
+	record.Set("power_watts", point.PowerWatts)
+	record.Set("cadence_rpm", point.CadenceRpm)
 	record.Set("distance_m", point.DistanceM)
 	record.Set("elevation_gain_m", point.ElevationGain)
-}
-
-// liveRideRiderJSON builds the spectator view of one participant.
-//
-// Privacy is applied here, on the way out, rather than at write time: the
-// rider can flip a switch mid-ride and the very next snapshot must already
-// respect it, without rewriting rows that were stored before.
-func liveRideRiderJSON(participant *core.Record) map[string]any {
-	share := func(field string) bool {
-		// A participant row created before these fields existed has them all
-		// false, which would silently hide everyone. Treat "never set" as the
-		// documented default instead: position and speed shared, heart rate
-		// and power not.
-		if !liveRideHasPrivacyFields(participant) {
-			return field == "share_position" || field == "share_speed"
-		}
-		return participant.GetBool(field)
-	}
-
-	rider := map[string]any{
-		"id":           participant.Id,
-		"display_name": participant.GetString("display_name"),
-		"last_seen_at": participant.GetDateTime("last_seen_at"),
-		"role":         participant.GetString("role"),
-	}
-
-	if share("share_position") {
-		rider["latitude"] = participant.GetFloat("latitude")
-		rider["longitude"] = participant.GetFloat("longitude")
-		rider["altitude_m"] = participant.GetFloat("altitude_m")
-		rider["heading_deg"] = participant.GetFloat("heading_deg")
-		rider["accuracy_m"] = participant.GetFloat("accuracy_m")
-		rider["distance_m"] = participant.GetFloat("distance_m")
-		rider["elevation_gain_m"] = participant.GetFloat("elevation_gain_m")
-	}
-	if share("share_speed") {
-		rider["speed_kmh"] = participant.GetFloat("speed_kmh")
-	}
-	if share("share_heart_rate") {
-		rider["heart_rate_bpm"] = participant.GetInt("heart_rate_bpm")
-	}
-	if share("share_power") {
-		rider["power_watts"] = participant.GetInt("power_watts")
-		rider["cadence_rpm"] = participant.GetInt("cadence_rpm")
-	}
-	return rider
 }
 
 // liveRideHasPrivacyFields reports whether the rider ever stated a choice.

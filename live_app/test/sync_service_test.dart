@@ -120,6 +120,87 @@ void main() {
       final json = SyncService.routeToJson(route());
       expect(json['client_updated_at'], '2026-05-01T12:00:00.000Z');
     });
+
+    test('niesie profil wysokości dla publicznej strony trasy', () {
+      final json = SyncService.routeToJson(route());
+      final profile = json['elevation_profile'] as List;
+      expect(profile, isNotEmpty);
+
+      final first = profile.first as Map<String, num>;
+      expect(first['d'], 0);
+      expect(first['e'], 100);
+      // Dystans rośnie, więc wykres da się narysować w kolejności.
+      final distances = [for (final point in profile) (point as Map)['d']!];
+      expect(distances, orderedEquals([...distances]..sort()));
+      // Ostatnia próbka sięga końca trasy, inaczej wykres urywałby się
+      // przed metą.
+      expect((profile.last as Map)['e'], 129);
+    });
+
+    test('trasa bez wysokości nie dostaje zmyślonego profilu', () {
+      final flat = RideRoute(
+        id: 'route_flat',
+        name: 'Bez wysokości',
+        points: [
+          for (var i = 0; i < 10; i++)
+            GeoPoint(lat: 52.0 + i * 0.001, lon: 21.0),
+        ],
+        preferences: const RoutePreferences(),
+        updatedAt: DateTime.utc(2026, 5, 1),
+      );
+      // Pusty profil znaczy „nie wiem"; wykres z samych zer wyglądałby jak
+      // idealnie płaska trasa, czego nikt nie zmierzył.
+      expect(SyncService.routeToJson(flat)['elevation_profile'], isEmpty);
+    });
+
+    test('profil jest przerzedzony, a nie wysyłany punkt po punkcie', () {
+      final long = RideRoute(
+        id: 'route_long',
+        name: 'Długa',
+        points: [
+          for (var i = 0; i < 4000; i++)
+            GeoPoint(
+              lat: 52.0 + i * 0.0002,
+              lon: 21.0,
+              elevation: 100 + (i % 200) * 1.0,
+            ),
+        ],
+        preferences: const RoutePreferences(),
+        updatedAt: DateTime.utc(2026, 5, 1),
+      );
+      final profile =
+          SyncService.routeToJson(long)['elevation_profile'] as List;
+      expect(profile.length, lessThanOrEqualTo(SyncService.profileSamples + 2));
+      expect(profile.length, greaterThan(50));
+    });
+
+    test('podjazdy jadą w formacie, który rozumie publiczna strona', () {
+      final hilly = RideRoute(
+        id: 'route_hilly',
+        name: 'Pagórki',
+        points: [
+          for (var i = 0; i < 300; i++)
+            GeoPoint(
+              lat: 52.0 + i * 0.0005,
+              lon: 21.0,
+              // Jeden wyraźny podjazd na środku trasy.
+              elevation: 100 + (i < 150 ? i * 2.0 : (300 - i) * 2.0),
+            ),
+        ],
+        preferences: const RoutePreferences(),
+        updatedAt: DateTime.utc(2026, 5, 1),
+      );
+      final climbs = SyncService.routeToJson(hilly)['climbs'] as List;
+      expect(climbs, isNotEmpty);
+      final first = climbs.first as Map<String, Object>;
+      for (final key in ['start_m', 'length_m', 'gain_m', 'avg_gradient']) {
+        expect(first.containsKey(key), isTrue, reason: key);
+      }
+      expect(first['gain_m'], greaterThan(0));
+      // Kategoria idzie jako skrót („4", „3", „HC"), a nie pełna polska
+      // nazwa — strona dokleja do niej własny opis.
+      expect((first['category'] as String).length, lessThanOrEqualTo(2));
+    });
   });
 }
 

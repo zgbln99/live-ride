@@ -103,6 +103,12 @@ class _GroupRideSheetState extends State<_GroupRideSheet> {
               onChanged: (value) =>
                   live.updatePrivacy(privacy.copyWith(sharePower: value)),
             ),
+            _privacyTile(
+              title: S.shareBattery,
+              value: privacy.shareBattery,
+              onChanged: (value) =>
+                  live.updatePrivacy(privacy.copyWith(shareBattery: value)),
+            ),
             if (!privacy.sharesAnything)
               Padding(
                 padding: const EdgeInsets.only(top: 6),

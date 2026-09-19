@@ -5,11 +5,12 @@ import fs from 'fs';
 import openapiPlugin from 'sveltekit-openapi-generator';
 import { defineConfig } from 'vitest/config';
 import { openapiOptions } from './openapi.config.js';
+import { maplibreWorker } from './vite-plugins/maplibre-worker.js';
 
 const packageJson = JSON.parse(fs.readFileSync('./package.json', 'utf-8'));
 
 export default defineConfig({
-	plugins: [enhancedImages(), openapiPlugin(openapiOptions(packageJson.version)), tailwindcss(), sveltekit()],
+	plugins: [maplibreWorker(), enhancedImages(), openapiPlugin(openapiOptions(packageJson.version)), tailwindcss(), sveltekit()],
 	test: { include: ['src/**/*.{test,spec}.{js,ts}'] },
 	ssr: { noExternal: ['three'] },
 	...(process.env.WANDERER_ENV == "dev" ? {

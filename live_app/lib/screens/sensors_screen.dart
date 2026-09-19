@@ -54,9 +54,12 @@ class _SensorsScreenState extends State<SensorsScreen> {
     setState(() => _error = null);
     try {
       await _hub.startScan();
-    } catch (e) {
+    } catch (e, stack) {
+      debugPrint('Live Ride: czujniki: $e\n$stack');
       if (mounted) {
-        setState(() => _error = e is StateError ? e.message : e.toString());
+        setState(
+          () => _error = e is StateError ? e.message : S.somethingWentWrong,
+        );
       }
     }
   }
@@ -68,9 +71,12 @@ class _SensorsScreenState extends State<SensorsScreen> {
     });
     try {
       await _hub.connect(device.id);
-    } catch (e) {
+    } catch (e, stack) {
+      debugPrint('Live Ride: czujniki: $e\n$stack');
       if (mounted) {
-        setState(() => _error = e is StateError ? e.message : e.toString());
+        setState(
+          () => _error = e is StateError ? e.message : S.somethingWentWrong,
+        );
       }
     } finally {
       if (mounted) setState(() => _busyId = null);
