@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:io';
 
 import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
@@ -8,6 +9,7 @@ import 'package:geolocator/geolocator.dart';
 import 'package:wanderer/actions/request_background_location.dart';
 import 'package:go_router/go_router.dart';
 import 'package:maplibre/maplibre.dart';
+import 'package:path_provider/path_provider.dart';
 import 'package:wanderer/components/route_planner/travel_profile_sheet.dart';
 import 'package:wanderer/i18n/app_localizations.dart';
 import 'package:wanderer/models/settings.dart';
@@ -163,13 +165,43 @@ class _TrailSourceSelectScreenState
   Future<void> _importGpx(AppLocalizations l10n) async {
     if (_importLoading) return;
 
+    // iOS can grey out otherwise-valid GPX files when a custom extension
+    // filter is translated into an unknown/unsupported UTType. Show the
+    // normal Files picker there and validate the extension ourselves after
+    // selection. `withData` is also a fallback for iCloud providers that do
+    // not immediately expose a local filesystem path.
+    final isIos = Platform.isIOS;
     final result = await FilePicker.pickFiles(
-      type: FileType.custom,
-      allowedExtensions: trailImportExtensions,
+      type: isIos ? FileType.any : FileType.custom,
+      allowedExtensions: isIos ? null : trailImportExtensions,
+      withData: isIos,
     );
     final picked = result?.files.single;
-    final path = picked?.path;
-    if (picked == null || path == null) return;
+    if (picked == null) return;
+
+    var path = picked.path;
+    if (path == null && picked.bytes != null) {
+      final tempDir = await getTemporaryDirectory();
+      final safeName = picked.name.replaceAll(RegExp(r'[^A-Za-z0-9._-]'), '_');
+      final tempFile = File(
+        '${tempDir.path}/${DateTime.now().microsecondsSinceEpoch}_$safeName',
+      );
+      await tempFile.writeAsBytes(picked.bytes!, flush: true);
+      path = tempFile.path;
+    }
+
+    if (path == null) {
+      ref
+          .read(toastProvider.notifier)
+          .add(
+            ToastMessage(
+              type: ToastType.error,
+              icon: FontAwesomeIcons.circleExclamation,
+              text: l10n.trail_source_import_error,
+            ),
+          );
+      return;
+    }
 
     setState(() => _importLoading = true);
     try {
