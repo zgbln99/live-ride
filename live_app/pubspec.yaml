@@ -29,11 +29,31 @@ dependencies:
   flutter_web_auth_2: ^5.1.0
   # PKCE code challenge.
   crypto: ^3.0.7
+  # Ride tracks, routes, segments and bikes live in SQLite: a season of GPS
+  # points is far too much for a JSON document store.
+  sqflite: ^2.4.4
+  path: ^1.9.1
+  # Phone battery for LIVE telemetry and the low-battery alert.
+  battery_plus: ^7.1.1
+  # Accelerometer for crash detection.
+  sensors_plus: ^7.1.0
+  # Spoken turn and alert callouts in Polish.
+  flutter_tts: ^4.2.5
+  # Knows when the queued telemetry and rides can be flushed.
+  connectivity_plus: ^7.3.1
+  # Race mode keeps the screen readable in sunlight.
+  screen_brightness: ^2.1.11
+  # Route share QR code, rendered locally — no image service involved.
+  qr_flutter: ^4.1.0
+  # Apple Health / Health Connect workout export.
+  health: ^13.3.1
 
 dev_dependencies:
   flutter_test:
     sdk: flutter
   flutter_lints: ^6.0.0
+  # Runs the real SQLite schema in unit tests instead of mocking it.
+  sqflite_common_ffi: ^2.4.3
 
 flutter:
   uses-material-design: true

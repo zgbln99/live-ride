@@ -1,6 +1,7 @@
 import 'dart:math' as math;
 
 import '../core/geo.dart';
+import '../data/database.dart';
 
 class RecordedRidePoint {
   const RecordedRidePoint({
@@ -10,6 +11,8 @@ class RecordedRidePoint {
     this.altitude,
     this.speedMps = 0,
     this.heartRate,
+    this.cadence,
+    this.power,
     this.distanceMeters = 0,
   });
 
@@ -19,6 +22,8 @@ class RecordedRidePoint {
   final double? altitude;
   final double speedMps;
   final int? heartRate;
+  final int? cadence;
+  final int? power;
 
   /// Cumulative ride distance at this sample. Stored so the elevation profile
   /// and the summary map do not have to re-integrate the track.
@@ -34,6 +39,8 @@ class RecordedRidePoint {
     if (altitude != null) 'altitude': altitude,
     'speed': speedMps,
     if (heartRate != null) 'heart_rate': heartRate,
+    if (cadence != null) 'cadence': cadence,
+    if (power != null) 'power': power,
     'distance_m': distanceMeters,
   };
 
@@ -47,6 +54,8 @@ class RecordedRidePoint {
         altitude: (json['altitude'] as num?)?.toDouble(),
         speedMps: (json['speed'] as num?)?.toDouble() ?? 0,
         heartRate: (json['heart_rate'] as num?)?.toInt(),
+        cadence: (json['cadence'] as num?)?.toInt(),
+        power: (json['power'] as num?)?.toInt(),
         distanceMeters: (json['distance_m'] as num?)?.toDouble() ?? 0,
       );
 }
@@ -67,8 +76,19 @@ class RecordedRide {
     this.maxSpeedKmh = 0,
     this.averageHeartRate,
     this.maxHeartRate,
+    this.averagePower,
+    this.maxPower,
+    this.normalizedPower,
+    this.intensityFactor,
+    this.trainingStressScore,
+    this.averageCadence,
+    this.calories,
+    this.routeId,
     this.routeName,
     this.riderName,
+    this.bikeId,
+    this.syncStatus = SyncStatus.local,
+    this.healthExported = false,
   });
 
   final String id;
@@ -83,9 +103,29 @@ class RecordedRide {
   final double maxSpeedKmh;
   final int? averageHeartRate;
   final int? maxHeartRate;
+  final int? averagePower;
+  final int? maxPower;
+  final int? normalizedPower;
+  final double? intensityFactor;
+  final double? trainingStressScore;
+  final int? averageCadence;
+  final int? calories;
+  final String? routeId;
   final String? routeName;
   final String? riderName;
+  final String? bikeId;
+
+  /// Czy przejazd trafił już na serwer.
+  final SyncStatus syncStatus;
+
+  /// Czy przejazd został zapisany do Apple Health / Health Connect.
+  final bool healthExported;
+
   final List<RecordedRidePoint> points;
+
+  bool get hasPower => averagePower != null && averagePower! > 0;
+  bool get hasCadence => averageCadence != null && averageCadence! > 0;
+  bool get hasHeartRate => averageHeartRate != null && averageHeartRate! > 0;
 
   Duration get elapsed => Duration(seconds: elapsedSeconds);
   Duration get movingTime => Duration(seconds: movingSeconds);
@@ -124,7 +164,12 @@ class RecordedRide {
     return result;
   }
 
-  RecordedRide copyWith({String? name}) => RecordedRide(
+  RecordedRide copyWith({
+    String? name,
+    SyncStatus? syncStatus,
+    bool? healthExported,
+    String? bikeId,
+  }) => RecordedRide(
     id: id,
     name: name ?? this.name,
     startedAt: startedAt,
@@ -137,8 +182,19 @@ class RecordedRide {
     maxSpeedKmh: maxSpeedKmh,
     averageHeartRate: averageHeartRate,
     maxHeartRate: maxHeartRate,
+    averagePower: averagePower,
+    maxPower: maxPower,
+    normalizedPower: normalizedPower,
+    intensityFactor: intensityFactor,
+    trainingStressScore: trainingStressScore,
+    averageCadence: averageCadence,
+    calories: calories,
+    routeId: routeId,
     routeName: routeName,
     riderName: riderName,
+    bikeId: bikeId ?? this.bikeId,
+    syncStatus: syncStatus ?? this.syncStatus,
+    healthExported: healthExported ?? this.healthExported,
     points: points,
   );
 
@@ -155,8 +211,19 @@ class RecordedRide {
     'max_speed_kmh': maxSpeedKmh,
     if (averageHeartRate != null) 'avg_heart_rate': averageHeartRate,
     if (maxHeartRate != null) 'max_heart_rate': maxHeartRate,
+    if (averagePower != null) 'avg_power': averagePower,
+    if (maxPower != null) 'max_power': maxPower,
+    if (normalizedPower != null) 'normalized_power': normalizedPower,
+    if (intensityFactor != null) 'intensity_factor': intensityFactor,
+    if (trainingStressScore != null) 'tss': trainingStressScore,
+    if (averageCadence != null) 'avg_cadence': averageCadence,
+    if (calories != null) 'calories': calories,
+    if (routeId != null) 'route_id': routeId,
     if (routeName != null) 'route_name': routeName,
     if (riderName != null) 'rider_name': riderName,
+    if (bikeId != null) 'bike_id': bikeId,
+    'sync_status': syncStatus.name,
+    'health_exported': healthExported,
     'points': [for (final p in points) p.toJson()],
   };
 
@@ -189,8 +256,19 @@ class RecordedRide {
       maxSpeedKmh: (json['max_speed_kmh'] as num?)?.toDouble() ?? 0,
       averageHeartRate: (json['avg_heart_rate'] as num?)?.toInt(),
       maxHeartRate: (json['max_heart_rate'] as num?)?.toInt(),
+      averagePower: (json['avg_power'] as num?)?.toInt(),
+      maxPower: (json['max_power'] as num?)?.toInt(),
+      normalizedPower: (json['normalized_power'] as num?)?.toInt(),
+      intensityFactor: (json['intensity_factor'] as num?)?.toDouble(),
+      trainingStressScore: (json['tss'] as num?)?.toDouble(),
+      averageCadence: (json['avg_cadence'] as num?)?.toInt(),
+      calories: (json['calories'] as num?)?.toInt(),
+      routeId: json['route_id'] as String?,
       routeName: json['route_name'] as String?,
       riderName: json['rider_name'] as String?,
+      bikeId: json['bike_id'] as String?,
+      syncStatus: SyncStatus.parse(json['sync_status'] as String?),
+      healthExported: json['health_exported'] as bool? ?? false,
       points: points,
     );
   }

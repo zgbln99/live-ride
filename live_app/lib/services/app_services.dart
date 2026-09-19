@@ -3,6 +3,10 @@ import 'dart:async';
 import 'package:flutter/widgets.dart';
 
 import '../core/api_client.dart';
+import '../data/database.dart';
+import '../data/ride_dao.dart';
+import '../data/route_dao.dart';
+import '../data/settings_dao.dart';
 import 'gpx_service.dart';
 import 'heart_rate_service.dart';
 import 'live_activity_service.dart';
@@ -21,6 +25,9 @@ import 'weather_service.dart';
 /// an active ride alive across screen rebuilds and tab switches.
 class AppServices {
   AppServices._({
+    required this.database,
+    required this.settings,
+    required this.syncQueue,
     required this.api,
     required this.gpx,
     required this.routes,
@@ -35,19 +42,23 @@ class AppServices {
     required this.recorder,
   });
 
-  factory AppServices.create(ApiClient api) {
+  factory AppServices.create(ApiClient api, {LiveRideDatabase? database}) {
+    final db = database ?? LiveRideDatabase();
     final gpx = GpxService();
     final profile = ProfileService();
     final heartRate = HeartRateService();
     final live = LiveSessionController(api, heartRate, profile);
-    final rides = RideStorageService(gpx);
+    final rides = RideStorageService(gpx, RideDao(db));
     final weather = WeatherService();
     final location = LocationService();
     final liveActivity = LiveActivityService();
     return AppServices._(
+      database: db,
+      settings: SettingsDao(db),
+      syncQueue: SyncQueueDao(db),
       api: api,
       gpx: gpx,
-      routes: RouteLibraryService(gpx),
+      routes: RouteLibraryService(gpx, RouteDao(db)),
       rides: rides,
       profile: profile,
       weather: weather,
@@ -68,6 +79,9 @@ class AppServices {
     );
   }
 
+  final LiveRideDatabase database;
+  final SettingsDao settings;
+  final SyncQueueDao syncQueue;
   final ApiClient api;
   final GpxService gpx;
   final RouteLibraryService routes;
@@ -82,6 +96,11 @@ class AppServices {
   final RideRecorder recorder;
 
   Future<void> warmUp() async {
+    // Migracja starych plików musi się skończyć, zanim ktokolwiek zapyta
+    // o listę przejazdów, żeby historia nie mrugnęła pustką.
+    await database.open();
+    await rides.migrateLegacyFiles();
+    await routes.migrateLegacyFiles();
     await profile.load();
     // These reach the filesystem and the Bluetooth radio, so they run in the
     // background rather than holding up the first frame.
@@ -96,6 +115,7 @@ class AppServices {
     profile.dispose();
     spotify.dispose();
     await heartRate.dispose();
+    await database.close();
   }
 
   static AppServices of(BuildContext context) {

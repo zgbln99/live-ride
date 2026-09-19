@@ -1,142 +1,169 @@
 import '../core/geo.dart';
+import '../data/database.dart';
+import 'route/route_analysis.dart';
+import 'route/route_preferences.dart';
+import 'route/route_waypoint.dart';
 
+export 'route/route_preferences.dart' show RoutePrivacy, RouteSource;
+
+/// Kształt trasy, wyliczany z geometrii.
 enum RouteShape {
-  loop('Loop'),
-  outAndBack('Out & back'),
-  pointToPoint('Point to point');
+  loop('Pętla'),
+  outAndBack('Tam i z powrotem'),
+  pointToPoint('Z punktu do punktu');
 
   const RouteShape(this.label);
 
   final String label;
+
+  static RouteShape parse(String? value) => RouteShape.values.firstWhere(
+    (shape) => shape.name == value,
+    orElse: () => RouteShape.pointToPoint,
+  );
 }
 
-/// The lightweight record kept in the route library index.
+/// Lekki rekord trasy trzymany na liście.
 ///
-/// Cards render from this alone so opening the Routes tab never has to parse
-/// every stored GPX file.
+/// Karty rysują się z tego i tylko z tego — otwarcie zakładki Trasy nie może
+/// wczytywać geometrii wszystkich tras.
 class RouteSummary {
   const RouteSummary({
     required this.id,
     required this.name,
-    required this.fileName,
     required this.distanceMeters,
-    required this.elevationGainMeters,
+    required this.ascentMeters,
     required this.pointCount,
     required this.createdAt,
+    required this.updatedAt,
     required this.preview,
+    this.description = '',
+    this.tags = const [],
+    this.descentMeters = 0,
     this.lastUsedAt,
-    this.imported = true,
+    this.source = RouteSource.builder,
+    this.privacy = RoutePrivacy.private,
+    this.shareToken,
     this.shape = RouteShape.pointToPoint,
+    this.preferences = const RoutePreferences(),
+    this.syncStatus = SyncStatus.local,
   });
 
   final String id;
   final String name;
-  final String fileName;
+  final String description;
+  final List<String> tags;
   final double distanceMeters;
-  final double elevationGainMeters;
+  final double ascentMeters;
+  final double descentMeters;
   final int pointCount;
   final DateTime createdAt;
+  final DateTime updatedAt;
   final DateTime? lastUsedAt;
-  final bool imported;
+  final RouteSource source;
+  final RoutePrivacy privacy;
+  final String? shareToken;
   final RouteShape shape;
+  final RoutePreferences preferences;
+  final SyncStatus syncStatus;
 
-  /// A heavily simplified polyline used to paint map previews on cards.
+  /// Mocno uproszczona linia do miniatur na kartach.
   final List<GeoPoint> preview;
 
-  RouteSummary copyWith({String? name, DateTime? lastUsedAt}) => RouteSummary(
+  bool get isImported => source == RouteSource.imported;
+  bool get isShared => privacy != RoutePrivacy.private && shareToken != null;
+
+  RouteSummary copyWith({
+    String? name,
+    String? description,
+    List<String>? tags,
+    DateTime? lastUsedAt,
+    DateTime? updatedAt,
+    RoutePrivacy? privacy,
+    String? shareToken,
+    SyncStatus? syncStatus,
+  }) => RouteSummary(
     id: id,
     name: name ?? this.name,
-    fileName: fileName,
+    description: description ?? this.description,
+    tags: tags ?? this.tags,
     distanceMeters: distanceMeters,
-    elevationGainMeters: elevationGainMeters,
+    ascentMeters: ascentMeters,
+    descentMeters: descentMeters,
     pointCount: pointCount,
     createdAt: createdAt,
-    preview: preview,
+    updatedAt: updatedAt ?? this.updatedAt,
     lastUsedAt: lastUsedAt ?? this.lastUsedAt,
-    imported: imported,
+    preview: preview,
+    source: source,
+    privacy: privacy ?? this.privacy,
+    shareToken: shareToken ?? this.shareToken,
     shape: shape,
-  );
-
-  Map<String, dynamic> toJson() => {
-    'id': id,
-    'name': name,
-    'file_name': fileName,
-    'distance_m': distanceMeters,
-    'elevation_gain_m': elevationGainMeters,
-    'point_count': pointCount,
-    'created_at': createdAt.toIso8601String(),
-    'last_used_at': lastUsedAt?.toIso8601String(),
-    'imported': imported,
-    'shape': shape.name,
-    'preview': [
-      for (final p in preview) [p.lat, p.lon],
-    ],
-  };
-
-  factory RouteSummary.fromJson(Map<String, dynamic> json) => RouteSummary(
-    id: json['id'] as String,
-    name: json['name'] as String? ?? 'Route',
-    fileName: json['file_name'] as String? ?? '',
-    distanceMeters: (json['distance_m'] as num?)?.toDouble() ?? 0,
-    elevationGainMeters: (json['elevation_gain_m'] as num?)?.toDouble() ?? 0,
-    pointCount: (json['point_count'] as num?)?.toInt() ?? 0,
-    createdAt:
-        DateTime.tryParse(json['created_at'] as String? ?? '') ??
-        DateTime.now(),
-    lastUsedAt: DateTime.tryParse(json['last_used_at'] as String? ?? ''),
-    imported: json['imported'] as bool? ?? true,
-    shape:
-        RouteShape.values
-            .where((value) => value.name == json['shape'])
-            .firstOrNull ??
-        RouteShape.pointToPoint,
-    preview: [
-      for (final entry in (json['preview'] as List<dynamic>? ?? const []))
-        if (entry is List && entry.length >= 2)
-          GeoPoint(
-            lat: (entry[0] as num).toDouble(),
-            lon: (entry[1] as num).toDouble(),
-          ),
-    ],
+    preferences: preferences,
+    syncStatus: syncStatus ?? this.syncStatus,
   );
 }
 
-/// A full route: geometry plus the metadata needed to navigate it.
+/// Pełna trasa: geometria, punkty użytkownika i preferencje trasowania.
 class RideRoute {
   RideRoute({
     required this.id,
     required this.name,
     required this.points,
-    this.fileName = '',
-    this.imported = true,
+    this.description = '',
+    this.tags = const [],
+    this.waypoints = const [],
+    this.preferences = const RoutePreferences(),
+    this.privacy = RoutePrivacy.private,
+    this.source = RouteSource.builder,
+    this.shareToken,
     DateTime? createdAt,
+    DateTime? updatedAt,
+    this.lastUsedAt,
+    this.syncStatus = SyncStatus.local,
   }) : createdAt = createdAt ?? DateTime.now(),
+       updatedAt = updatedAt ?? DateTime.now(),
        cumulativeMeters = cumulativeDistances(points);
 
   final String id;
   final String name;
+  final String description;
+  final List<String> tags;
   final List<GeoPoint> points;
-  final String fileName;
-  final bool imported;
+  final List<RouteWaypoint> waypoints;
+  final RoutePreferences preferences;
+  final RoutePrivacy privacy;
+  final RouteSource source;
+  final String? shareToken;
   final DateTime createdAt;
+  final DateTime updatedAt;
+  final DateTime? lastUsedAt;
+  final SyncStatus syncStatus;
   final List<double> cumulativeMeters;
+
+  RouteAnalysis? _analysis;
+
+  /// Analiza trasy liczona raz i zapamiętana.
+  ///
+  /// Wykrywanie podjazdów na 100-kilometrowej trasie to zauważalna praca —
+  /// nie ma prawa dziać się w `build()` przy każdej klatce.
+  RouteAnalysis get analysis => _analysis ??= RouteAnalyzer.analyze(points);
 
   double get distanceMeters =>
       cumulativeMeters.isEmpty ? 0 : cumulativeMeters.last;
 
-  double get elevationGainMeters {
-    final accumulator = ElevationAccumulator();
-    for (final point in points) {
-      accumulator.add(point.elevation);
-    }
-    return accumulator.gainMeters;
-  }
+  double get ascentMeters => analysis.ascentMeters;
+  double get descentMeters => analysis.descentMeters;
+  List<Climb> get climbs => analysis.climbs;
+
+  bool get isImported => source == RouteSource.imported;
 
   GeoPoint get start =>
-      points.isEmpty ? const GeoPoint(lat: 52.52, lon: 13.405) : points.first;
+      points.isEmpty ? const GeoPoint(lat: 52.23, lon: 21.01) : points.first;
+
+  GeoPoint get finish => points.isEmpty ? start : points.last;
 
   GeoPoint get center =>
-      GeoBounds.of(points)?.center ?? const GeoPoint(lat: 52.52, lon: 13.405);
+      GeoBounds.of(points)?.center ?? const GeoPoint(lat: 52.23, lon: 21.01);
 
   RouteShape get shape {
     if (points.length < 4) return RouteShape.pointToPoint;
@@ -150,23 +177,57 @@ class RideRoute {
     return RouteShape.pointToPoint;
   }
 
+  Duration estimatedDuration() =>
+      analysis.estimatedDuration(assumedSpeedKmh: preferences.assumedSpeedKmh);
+
+  RideRoute copyWith({
+    String? name,
+    String? description,
+    List<String>? tags,
+    List<GeoPoint>? points,
+    List<RouteWaypoint>? waypoints,
+    RoutePreferences? preferences,
+    RoutePrivacy? privacy,
+    RouteSource? source,
+    String? shareToken,
+    DateTime? updatedAt,
+    DateTime? lastUsedAt,
+    SyncStatus? syncStatus,
+  }) => RideRoute(
+    id: id,
+    name: name ?? this.name,
+    description: description ?? this.description,
+    tags: tags ?? this.tags,
+    points: points ?? this.points,
+    waypoints: waypoints ?? this.waypoints,
+    preferences: preferences ?? this.preferences,
+    privacy: privacy ?? this.privacy,
+    source: source ?? this.source,
+    shareToken: shareToken ?? this.shareToken,
+    createdAt: createdAt,
+    updatedAt: updatedAt ?? DateTime.now(),
+    lastUsedAt: lastUsedAt ?? this.lastUsedAt,
+    syncStatus: syncStatus ?? this.syncStatus,
+  );
+
   RouteSummary toSummary() => RouteSummary(
     id: id,
     name: name,
-    fileName: fileName,
+    description: description,
+    tags: tags,
     distanceMeters: distanceMeters,
-    elevationGainMeters: elevationGainMeters,
+    ascentMeters: ascentMeters,
+    descentMeters: descentMeters,
     pointCount: points.length,
     createdAt: createdAt,
+    updatedAt: updatedAt,
+    lastUsedAt: lastUsedAt,
     preview: samplePolyline(simplifyPolyline(points, 25), 120),
-    imported: imported,
+    source: source,
+    privacy: privacy,
+    shareToken: shareToken,
     shape: shape,
+    preferences: preferences,
+    syncStatus: syncStatus,
   );
-}
-
-extension _FirstOrNull<T> on Iterable<T> {
-  T? get firstOrNull {
-    final iterator = this.iterator;
-    return iterator.moveNext() ? iterator.current : null;
-  }
 }

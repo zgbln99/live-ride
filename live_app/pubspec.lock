@@ -17,6 +17,22 @@ packages:
       url: "https://pub.dev"
     source: hosted
     version: "2.13.1"
+  battery_plus:
+    dependency: "direct main"
+    description:
+      name: battery_plus
+      sha256: "3853aa1e18ea1d15493dd1d3edac05770b4b95c1e691fb85934c5fd3b1ac0fcc"
+      url: "https://pub.dev"
+    source: hosted
+    version: "7.1.1"
+  battery_plus_platform_interface:
+    dependency: transitive
+    description:
+      name: battery_plus_platform_interface
+      sha256: e8342c0f32de4b1dfd0223114b6785e48e579bfc398da9471c9179b907fa4910
+      url: "https://pub.dev"
+    source: hosted
+    version: "2.0.1"
   bluetooth_low_energy:
     dependency: "direct main"
     description:
@@ -81,6 +97,14 @@ packages:
       url: "https://pub.dev"
     source: hosted
     version: "2.1.2"
+  carp_serializable:
+    dependency: transitive
+    description:
+      name: carp_serializable
+      sha256: f039f8ea22e9437aef13fe7e9743c3761c76d401288dcb702eadd273c3e4dcef
+      url: "https://pub.dev"
+    source: hosted
+    version: "2.0.1"
   characters:
     dependency: transitive
     description:
@@ -121,6 +145,22 @@ packages:
       url: "https://pub.dev"
     source: hosted
     version: "1.19.1"
+  connectivity_plus:
+    dependency: "direct main"
+    description:
+      name: connectivity_plus
+      sha256: "762c99f890ca8bf87f7337236f99edd42793843bc6c3631da294a76653a54bd0"
+      url: "https://pub.dev"
+    source: hosted
+    version: "7.3.1"
+  connectivity_plus_platform_interface:
+    dependency: transitive
+    description:
+      name: connectivity_plus_platform_interface
+      sha256: "3c09627c536d22fd24691a905cdd8b14520de69da52c7a97499c8be5284a32ed"
+      url: "https://pub.dev"
+    source: hosted
+    version: "2.1.0"
   cookie_jar:
     dependency: "direct main"
     description:
@@ -169,6 +209,22 @@ packages:
       url: "https://pub.dev"
     source: hosted
     version: "0.3.0"
+  device_info_plus:
+    dependency: transitive
+    description:
+      name: device_info_plus
+      sha256: b4fed1b2835da9d670d7bed7db79ae2a94b0f5ad6312268158a9b5479abbacdd
+      url: "https://pub.dev"
+    source: hosted
+    version: "12.4.0"
+  device_info_plus_platform_interface:
+    dependency: transitive
+    description:
+      name: device_info_plus_platform_interface
+      sha256: e1ea89119e34903dca74b883d0dd78eb762814f97fb6c76f35e9ff74d261a18f
+      url: "https://pub.dev"
+    source: hosted
+    version: "7.0.3"
   dio:
     dependency: "direct main"
     description:
@@ -259,6 +315,14 @@ packages:
     description: flutter
     source: sdk
     version: "0.0.0"
+  flutter_tts:
+    dependency: "direct main"
+    description:
+      name: flutter_tts
+      sha256: ce5eb209b40e95f2f4a1397116c87ab2fcdff32257d04ed7a764e75894c03775
+      url: "https://pub.dev"
+    source: hosted
+    version: "4.2.5"
   flutter_web_auth_2:
     dependency: "direct main"
     description:
@@ -368,6 +432,14 @@ packages:
       url: "https://pub.dev"
     source: hosted
     version: "0.2.8"
+  health:
+    dependency: "direct main"
+    description:
+      name: health
+      sha256: "2d9e119f3a1d281139f93149b41032b9f80b759960875bc784c5a25dd3c17524"
+      url: "https://pub.dev"
+    source: hosted
+    version: "13.3.1"
   hooks:
     dependency: transitive
     description:
@@ -400,6 +472,14 @@ packages:
       url: "https://pub.dev"
     source: hosted
     version: "4.1.2"
+  intl:
+    dependency: transitive
+    description:
+      name: intl
+      sha256: "1ca20c894b1717686a2319b8548763d812bc0aabdac580420a44c5178c57a867"
+      url: "https://pub.dev"
+    source: hosted
+    version: "0.20.3"
   jni:
     dependency: transitive
     description:
@@ -568,6 +648,14 @@ packages:
       url: "https://pub.dev"
     source: hosted
     version: "0.19.3"
+  nm:
+    dependency: transitive
+    description:
+      name: nm
+      sha256: "2c9aae4127bdc8993206464fcc063611e0e36e72018696cd9631023a31b24254"
+      url: "https://pub.dev"
+    source: hosted
+    version: "0.5.0"
   objective_c:
     dependency: transitive
     description:
@@ -601,7 +689,7 @@ packages:
     source: hosted
     version: "3.2.1"
   path:
-    dependency: transitive
+    dependency: "direct main"
     description:
       name: path
       sha256: "75cca69d1490965be98c73ceaea117e8a04dd21217b37b292c9ddbec0d955bc5"
@@ -736,6 +824,22 @@ packages:
       url: "https://pub.dev"
     source: hosted
     version: "1.6.0"
+  qr:
+    dependency: transitive
+    description:
+      name: qr
+      sha256: "5a1d2586170e172b8a8c8470bbbffd5eb0cd38a66c0d77155ea138d3af3a4445"
+      url: "https://pub.dev"
+    source: hosted
+    version: "3.0.2"
+  qr_flutter:
+    dependency: "direct main"
+    description:
+      name: qr_flutter
+      sha256: "5095f0fc6e3f71d08adef8feccc8cea4f12eec18a2e31c2e8d82cb6019f4b097"
+      url: "https://pub.dev"
+    source: hosted
+    version: "4.1.0"
   record_use:
     dependency: transitive
     description:
@@ -744,6 +848,78 @@ packages:
       url: "https://pub.dev"
     source: hosted
     version: "1.1.1"
+  screen_brightness:
+    dependency: "direct main"
+    description:
+      name: screen_brightness
+      sha256: e0edf92c08889e8f493cde291e7c687db2b4a1471f2371c074070b75d7c7d79b
+      url: "https://pub.dev"
+    source: hosted
+    version: "2.1.11"
+  screen_brightness_android:
+    dependency: transitive
+    description:
+      name: screen_brightness_android
+      sha256: "2008ad8e9527cc968f7a4de1ec58b476d495b3c612a149dbd6550c4f046da147"
+      url: "https://pub.dev"
+    source: hosted
+    version: "2.1.6"
+  screen_brightness_ios:
+    dependency: transitive
+    description:
+      name: screen_brightness_ios
+      sha256: "352d355e8523a186ba1e494b74218e5ca96e51975a0630b8ed89fbb7ff609762"
+      url: "https://pub.dev"
+    source: hosted
+    version: "2.1.4"
+  screen_brightness_macos:
+    dependency: transitive
+    description:
+      name: screen_brightness_macos
+      sha256: b0957237b842d846a84363b69f229b339a8f91faced55041e245b2ebff7b0142
+      url: "https://pub.dev"
+    source: hosted
+    version: "2.1.4"
+  screen_brightness_ohos:
+    dependency: transitive
+    description:
+      name: screen_brightness_ohos
+      sha256: "569a2c97909a50894b81487619eb7654f5358443a5af05f840c19261f49c0940"
+      url: "https://pub.dev"
+    source: hosted
+    version: "2.1.4"
+  screen_brightness_platform_interface:
+    dependency: transitive
+    description:
+      name: screen_brightness_platform_interface
+      sha256: "2de60c0ba569b898950029cc1f7e9dd72bda44a22beb5054aac331cb6fce2ff2"
+      url: "https://pub.dev"
+    source: hosted
+    version: "2.1.2"
+  screen_brightness_windows:
+    dependency: transitive
+    description:
+      name: screen_brightness_windows
+      sha256: "368b9c822e1671de81616e48150006e39eff2a434957e47ee638b09a32b2297c"
+      url: "https://pub.dev"
+    source: hosted
+    version: "2.1.2"
+  sensors_plus:
+    dependency: "direct main"
+    description:
+      name: sensors_plus
+      sha256: "31182c626623de79d3f7e1f9b43028f940821ee012c092f68f165fe55b867822"
+      url: "https://pub.dev"
+    source: hosted
+    version: "7.1.0"
+  sensors_plus_platform_interface:
+    dependency: transitive
+    description:
+      name: sensors_plus_platform_interface
+      sha256: "9e12a92569bf14ae04b2f086c3e087177a47e527b7666ae1bbe5f70f8450ab19"
+      url: "https://pub.dev"
+    source: hosted
+    version: "2.0.2"
   share_plus:
     dependency: "direct main"
     description:
@@ -773,6 +949,62 @@ packages:
       url: "https://pub.dev"
     source: hosted
     version: "1.10.2"
+  sqflite:
+    dependency: "direct main"
+    description:
+      name: sqflite
+      sha256: "54ad23e2a79c846b596b6c56cdd9c867ea58c288258402316b602f78df0cbfe0"
+      url: "https://pub.dev"
+    source: hosted
+    version: "2.4.4"
+  sqflite_android:
+    dependency: transitive
+    description:
+      name: sqflite_android
+      sha256: "805b27c6fa10d8883253795e644818fbd5c87ce665459db84fbe71326cbb5421"
+      url: "https://pub.dev"
+    source: hosted
+    version: "2.4.4"
+  sqflite_common:
+    dependency: transitive
+    description:
+      name: sqflite_common
+      sha256: "077e38e82c099534146a2fb31b608c2a3a4489a0f21d9af6b2f5c87b566a1ea0"
+      url: "https://pub.dev"
+    source: hosted
+    version: "2.5.13"
+  sqflite_common_ffi:
+    dependency: "direct dev"
+    description:
+      name: sqflite_common_ffi
+      sha256: "4ec920a01788641fa1c9922e757c108427e7f8634cce3ce8a1073d573060f4a3"
+      url: "https://pub.dev"
+    source: hosted
+    version: "2.4.3"
+  sqflite_darwin:
+    dependency: transitive
+    description:
+      name: sqflite_darwin
+      sha256: dbdda396f975f74d611ffd3e6fb280ee3ee4cd2319b89278533f427e0140cf0b
+      url: "https://pub.dev"
+    source: hosted
+    version: "2.4.4"
+  sqflite_platform_interface:
+    dependency: transitive
+    description:
+      name: sqflite_platform_interface
+      sha256: c9177b2f3150ed0647b90a94307c28452fe0a5401863044216aed83addd6c7c5
+      url: "https://pub.dev"
+    source: hosted
+    version: "2.4.2"
+  sqlite3:
+    dependency: transitive
+    description:
+      name: sqlite3
+      sha256: fa3fd961e83b2dca8890a7b1014ab1226831d2b5908067c0ab7f385ffb655caf
+      url: "https://pub.dev"
+    source: hosted
+    version: "3.6.0"
   stack_trace:
     dependency: transitive
     description:
@@ -797,6 +1029,14 @@ packages:
       url: "https://pub.dev"
     source: hosted
     version: "1.4.1"
+  synchronized:
+    dependency: transitive
+    description:
+      name: synchronized
+      sha256: "397b146f97613b83d84bdccb439bc8d0f3aebb6c1d14a9641e6f24201c490b2d"
+      url: "https://pub.dev"
+    source: hosted
+    version: "3.4.2"
   term_glyph:
     dependency: transitive
     description:
@@ -837,6 +1077,14 @@ packages:
       url: "https://pub.dev"
     source: hosted
     version: "2.3.1"
+  upower:
+    dependency: transitive
+    description:
+      name: upower
+      sha256: cf042403154751180affa1d15614db7fa50234bc2373cd21c3db666c38543ebf
+      url: "https://pub.dev"
+    source: hosted
+    version: "0.7.0"
   url_launcher:
     dependency: transitive
     description:
@@ -957,6 +1205,14 @@ packages:
       url: "https://pub.dev"
     source: hosted
     version: "5.15.0"
+  win32_registry:
+    dependency: transitive
+    description:
+      name: win32_registry
+      sha256: "6f1b564492d0147b330dd794fee8f512cec4977957f310f9951b5f9d83618dae"
+      url: "https://pub.dev"
+    source: hosted
+    version: "2.1.0"
   window_to_front:
     dependency: transitive
     description:

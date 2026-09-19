@@ -306,7 +306,7 @@ class _RideTabState extends State<RideTab> {
               Text(
                 '${Fmt.distance(route.distanceMeters, metric: metric)} '
                 '${Fmt.distanceUnit(metric: metric)} · '
-                '${Fmt.elevation(route.elevationGainMeters, metric: metric)} '
+                '${Fmt.elevation(route.ascentMeters, metric: metric)} '
                 '${Fmt.elevationUnit(metric: metric)}',
                 style: LR.body.copyWith(fontSize: 12.5),
               ),

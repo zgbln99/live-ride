@@ -175,7 +175,7 @@ class _RoutesTabState extends State<RoutesTab> {
                       runSpacing: 6,
                       children: [
                         _tag(route.shape.label),
-                        if (route.imported) _tag('IMPORTED', accent: true),
+                        _tag(route.source.label, accent: route.isImported),
                         _tag(
                           route.lastUsedAt == null
                               ? 'ADDED ${Fmt.date(route.createdAt)}'
@@ -206,7 +206,7 @@ class _RoutesTabState extends State<RoutesTab> {
                 child: LrStat(
                   label: 'Ascent',
                   value: Fmt.elevation(
-                    route.elevationGainMeters,
+                    route.ascentMeters,
                     metric: metric,
                   ),
                   unit: Fmt.elevationUnit(metric: metric),

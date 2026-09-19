@@ -460,6 +460,90 @@ class GpxService {
     return buffer.toString();
   }
 
+  /// Zapisuje przejazd jako TCX.
+  ///
+  /// GPX opisuje ślad, a TCX trening: ma tętno, kadencję, moc i podsumowanie
+  /// okrążenia, więc to jego oczekuje Garmin Connect i większość serwisów
+  /// treningowych.
+  String encodeTcx(RecordedRide ride) {
+    final buffer = StringBuffer()
+      ..writeln('<?xml version="1.0" encoding="UTF-8"?>')
+      ..writeln(
+        '<TrainingCenterDatabase '
+        'xmlns="http://www.garmin.com/xmlschemas/TrainingCenterDatabase/v2" '
+        'xmlns:ns3="http://www.garmin.com/xmlschemas/ActivityExtension/v2">',
+      )
+      ..writeln('  <Activities>')
+      ..writeln('    <Activity Sport="Biking">')
+      ..writeln('      <Id>${ride.startedAt.toUtc().toIso8601String()}</Id>')
+      ..writeln('      <Lap StartTime="${ride.startedAt.toUtc().toIso8601String()}">')
+      ..writeln('        <TotalTimeSeconds>${ride.elapsedSeconds}</TotalTimeSeconds>')
+      ..writeln('        <DistanceMeters>${ride.distanceMeters.toStringAsFixed(1)}</DistanceMeters>')
+      ..writeln('        <MaximumSpeed>${(ride.maxSpeedKmh / 3.6).toStringAsFixed(3)}</MaximumSpeed>');
+    if (ride.calories != null) {
+      buffer.writeln('        <Calories>${ride.calories}</Calories>');
+    }
+    if (ride.averageHeartRate != null) {
+      buffer
+        ..writeln('        <AverageHeartRateBpm><Value>'
+            '${ride.averageHeartRate}</Value></AverageHeartRateBpm>')
+        ..writeln('        <MaximumHeartRateBpm><Value>'
+            '${ride.maxHeartRate ?? ride.averageHeartRate}</Value>'
+            '</MaximumHeartRateBpm>');
+    }
+    buffer
+      ..writeln('        <Intensity>Active</Intensity>')
+      ..writeln('        <TriggerMethod>Manual</TriggerMethod>')
+      ..writeln('        <Track>');
+
+    for (final point in ride.points) {
+      buffer
+        ..writeln('          <Trackpoint>')
+        ..writeln('            <Time>${point.recordedAt.toUtc().toIso8601String()}</Time>')
+        ..writeln('            <Position>')
+        ..writeln('              <LatitudeDegrees>${point.lat.toStringAsFixed(7)}</LatitudeDegrees>')
+        ..writeln('              <LongitudeDegrees>${point.lon.toStringAsFixed(7)}</LongitudeDegrees>')
+        ..writeln('            </Position>');
+      if (point.altitude != null && point.altitude!.isFinite) {
+        buffer.writeln(
+          '            <AltitudeMeters>${point.altitude!.toStringAsFixed(1)}</AltitudeMeters>',
+        );
+      }
+      buffer.writeln(
+        '            <DistanceMeters>${point.distanceMeters.toStringAsFixed(1)}</DistanceMeters>',
+      );
+      if (point.heartRate != null && point.heartRate! > 0) {
+        buffer.writeln(
+          '            <HeartRateBpm><Value>${point.heartRate}</Value></HeartRateBpm>',
+        );
+      }
+      if (point.cadence != null && point.cadence! > 0) {
+        buffer.writeln('            <Cadence>${point.cadence}</Cadence>');
+      }
+      if (point.power != null && point.power! > 0) {
+        buffer
+          ..writeln('            <Extensions>')
+          ..writeln('              <ns3:TPX>')
+          ..writeln('                <ns3:Watts>${point.power}</ns3:Watts>')
+          ..writeln('              </ns3:TPX>')
+          ..writeln('            </Extensions>');
+      }
+      buffer.writeln('          </Trackpoint>');
+    }
+
+    buffer
+      ..writeln('        </Track>')
+      ..writeln('      </Lap>')
+      ..writeln('      <Creator xsi:type="Device_t" '
+          'xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance">')
+      ..writeln('        <Name>Live Ride</Name>')
+      ..writeln('      </Creator>')
+      ..writeln('    </Activity>')
+      ..writeln('  </Activities>')
+      ..writeln('</TrainingCenterDatabase>');
+    return buffer.toString();
+  }
+
   String _escape(String value) => value
       .replaceAll('&', '&amp;')
       .replaceAll('<', '&lt;')

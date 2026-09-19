@@ -124,7 +124,7 @@ class _RouteDetailScreenState extends State<RouteDetailScreen> {
                     const SizedBox(height: 4),
                     Text(
                       '${_summary.shape.label} · '
-                      '${_summary.imported ? 'Imported GPX' : 'Created in Live Ride'} · '
+                      '${_summary.source.label} · '
                       '${Fmt.date(_summary.createdAt)}',
                       style: LR.body.copyWith(fontSize: 12.5),
                     ),
@@ -146,7 +146,7 @@ class _RouteDetailScreenState extends State<RouteDetailScreen> {
                           child: LrStat(
                             label: 'Ascent',
                             value: Fmt.elevation(
-                              _summary.elevationGainMeters,
+                              _summary.ascentMeters,
                               metric: metric,
                             ),
                             unit: Fmt.elevationUnit(metric: metric),
@@ -234,9 +234,9 @@ class _RouteDetailScreenState extends State<RouteDetailScreen> {
   }
 
   Future<void> _share() async {
-    final path = await AppServices.of(context).routes.filePath(_summary);
+    final file = await AppServices.of(context).routes.exportGpx(_summary);
     await SharePlus.instance.share(
-      ShareParams(files: [XFile(path)], subject: _summary.name),
+      ShareParams(files: [XFile(file.path)], subject: _summary.name),
     );
   }
 
