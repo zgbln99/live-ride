@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:io';
 
 import 'package:bluetooth_low_energy/bluetooth_low_energy.dart';
 import 'package:wanderer/heart_rate/ble_heart_rate_parser.dart';
@@ -12,11 +13,18 @@ class BleHeartRateDevice {
     required this.id,
     required this.name,
     required this.rssi,
+    required this.isLikelyHeartRateSensor,
   });
 
   final String id;
   final String name;
   final int rssi;
+
+  /// True when the advertisement already proves this is a heart-rate sensor,
+  /// or its name strongly identifies a WHOOP device. Devices without this
+  /// flag are still shown as a fallback because some peripherals expose the
+  /// Heart Rate Service only after connecting and omit 0x180D from advertising.
+  final bool isLikelyHeartRateSensor;
 }
 
 /// Generic Bluetooth SIG Heart Rate Service listener.
@@ -56,13 +64,25 @@ class BleHeartRateSource implements HeartRateSource {
 
   Future<void> startScan() async {
     _ensureAlive();
-    final authorized = await _central.authorize();
-    if (!authorized) {
-      throw StateError('Bluetooth permission was not granted');
+
+    // bluetooth_low_energy's explicit authorize() is primarily the Android
+    // runtime-permission path. On iOS CoreBluetooth presents its own system
+    // authorization prompt when scanning. Treating authorize()==false as a
+    // hard failure on iOS can prevent the scan before CoreBluetooth has a
+    // chance to request access.
+    if (Platform.isAndroid) {
+      final authorized = await _central.authorize();
+      if (!authorized) {
+        throw StateError(
+          'Bluetooth permission is disabled. Allow Nearby devices for Live Ride.',
+        );
+      }
     }
 
     _devices.clear();
     _peripherals.clear();
+    _devicesController.add(const []);
+
     _connectionSub ??= _central.connectionStateChanged.listen((event) {
       if (event.peripheral == _connectedPeripheral &&
           event.state == ConnectionState.disconnected) {
@@ -71,25 +91,46 @@ class BleHeartRateSource implements HeartRateSource {
         _latestBpm = null;
       }
     });
+
     await _discoverySub?.cancel();
     _discoverySub = _central.discovered.listen((event) {
       final id = event.peripheral.uuid.toString();
+      final advertisedName = event.advertisement.name?.trim();
+      final name = advertisedName?.isNotEmpty == true
+          ? advertisedName!
+          : 'Bluetooth device';
+      final advertisesHeartRate = event.advertisement.serviceUUIDs.contains(
+        UUID.short(_heartRateServiceUuid),
+      );
+      final looksLikeWhoop = name.toLowerCase().contains('whoop');
+
       _peripherals[id] = event.peripheral;
       _devices[id] = BleHeartRateDevice(
         id: id,
-        name: event.advertisement.name?.trim().isNotEmpty == true
-            ? event.advertisement.name!.trim()
-            : 'Heart rate sensor',
+        name: name,
         rssi: event.rssi,
+        isLikelyHeartRateSensor: advertisesHeartRate || looksLikeWhoop,
       );
-      final sorted = _devices.values.toList()
-        ..sort((a, b) => b.rssi.compareTo(a.rssi));
-      _devicesController.add(List.unmodifiable(sorted));
+      _emitSortedDevices();
     });
 
-    await _central.startDiscovery(
-      serviceUUIDs: [UUID.short(_heartRateServiceUuid)],
-    );
+    // Do NOT filter the scan by 0x180D here. WHOOP and some other sensors can
+    // expose Heart Rate Service after connection without putting 0x180D in
+    // every advertising packet. A CoreBluetooth service filter would make
+    // those devices invisible. connect() remains strict and verifies the
+    // actual GATT service + measurement characteristic before accepting one.
+    await _central.startDiscovery();
+  }
+
+  void _emitSortedDevices() {
+    final sorted = _devices.values.toList()
+      ..sort((a, b) {
+        if (a.isLikelyHeartRateSensor != b.isLikelyHeartRateSensor) {
+          return a.isLikelyHeartRateSensor ? -1 : 1;
+        }
+        return b.rssi.compareTo(a.rssi);
+      });
+    _devicesController.add(List.unmodifiable(sorted));
   }
 
   Future<void> stopScan() async {
@@ -106,54 +147,66 @@ class BleHeartRateSource implements HeartRateSource {
     _ensureAlive();
     final peripheral = _peripherals[deviceId];
     if (peripheral == null) {
-      throw StateError('Heart-rate sensor is no longer in the scan results');
+      throw StateError('Sensor disappeared. Scan again and keep it close.');
     }
 
     await stopScan();
     await disconnect();
-    await _central.connect(peripheral);
 
-    final services = await _central.discoverGATT(peripheral);
-    GATTCharacteristic? measurement;
-    for (final service in services) {
-      if (service.uuid != UUID.short(_heartRateServiceUuid)) continue;
-      for (final characteristic in service.characteristics) {
-        if (characteristic.uuid == UUID.short(_heartRateMeasurementUuid)) {
-          measurement = characteristic;
-          break;
+    try {
+      await _central.connect(peripheral);
+
+      final services = await _central.discoverGATT(peripheral);
+      GATTCharacteristic? measurement;
+      for (final service in services) {
+        if (service.uuid != UUID.short(_heartRateServiceUuid)) continue;
+        for (final characteristic in service.characteristics) {
+          if (characteristic.uuid == UUID.short(_heartRateMeasurementUuid)) {
+            measurement = characteristic;
+            break;
+          }
         }
       }
-    }
-    if (measurement == null) {
-      await _central.disconnect(peripheral);
-      throw StateError('Device does not expose Heart Rate Measurement (0x2A37)');
-    }
-
-    _connectedPeripheral = peripheral;
-    _measurementCharacteristic = measurement;
-    await _notifySub?.cancel();
-    _notifySub = _central.characteristicNotified.listen((event) {
-      if (event.peripheral != _connectedPeripheral ||
-          event.characteristic.uuid != UUID.short(_heartRateMeasurementUuid)) {
-        return;
+      if (measurement == null) {
+        throw StateError(
+          'No live heart-rate service found. In WHOOP, enable HR Broadcast and scan again.',
+        );
       }
+
+      _connectedPeripheral = peripheral;
+      _measurementCharacteristic = measurement;
+      await _notifySub?.cancel();
+      _notifySub = _central.characteristicNotified.listen((event) {
+        if (event.peripheral != _connectedPeripheral ||
+            event.characteristic.uuid != UUID.short(_heartRateMeasurementUuid)) {
+          return;
+        }
+        try {
+          final parsed = parseBleHeartRateMeasurement(event.value);
+          if (parsed <= 0 || parsed > 260) return;
+          _latestBpm = parsed;
+          _bpmController.add(parsed);
+        } on FormatException {
+          // Ignore malformed radio packets; the next notification replaces it.
+        }
+      });
+
+      await _central.setCharacteristicNotifyState(
+        peripheral,
+        measurement,
+        state: true,
+      );
+    } catch (_) {
+      _connectedPeripheral = null;
+      _measurementCharacteristic = null;
+      _latestBpm = null;
       try {
-        final parsed = parseBleHeartRateMeasurement(event.value);
-        // Reject obviously corrupt notifications but don't enforce an athlete-
-        // specific max HR. The server has its own broad safety bound as well.
-        if (parsed <= 0 || parsed > 260) return;
-        _latestBpm = parsed;
-        _bpmController.add(parsed);
-      } on FormatException {
-        // Ignore malformed radio packets; the next notification will replace it.
+        await _central.disconnect(peripheral);
+      } catch (_) {
+        // Best-effort cleanup of a failed connection attempt.
       }
-    });
-
-    await _central.setCharacteristicNotifyState(
-      peripheral,
-      measurement,
-      state: true,
-    );
+      rethrow;
+    }
   }
 
   Future<void> disconnect() async {
