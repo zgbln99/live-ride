@@ -8,6 +8,7 @@ import '../../core/formatters.dart';
 import '../../core/lr_theme.dart';
 import '../../i18n/strings.dart';
 import '../../models/integration.dart';
+import '../../models/rider_profile.dart';
 import '../../models/ride_alert.dart';
 import '../../services/app_services.dart';
 import '../../services/spotify_service.dart';
@@ -168,18 +169,20 @@ class _ProfileTabState extends State<ProfileTab> {
                   SwitchListTile(
                     secondary: const Icon(Icons.pause_circle_outline),
                     title: Text(S.autoPauseTitle),
-                    subtitle: Text(
-                      profile.autoPause
-                          ? '${S.autoPauseHint} '
-                                '(<${profile.autoPauseSpeedKmh.round()} km/h, '
-                                '${profile.autoPauseDelaySeconds} s)'
-                          : S.autoPauseHint,
-                    ),
+                    // Bez liczb: „próg 0,7 km/h" nic nie mówi komuś, kto
+                    // chce tylko wiedzieć, czy postój na światłach wlicza
+                    // się do czasu jazdy. Progi są w zaawansowanych.
+                    subtitle: Text(S.autoPauseHint),
                     value: profile.autoPause,
                     onChanged: (value) => profileService.update(
                       profile.copyWith(autoPause: value),
                     ),
                   ),
+                  if (profile.autoPause)
+                    _AutoPauseAdvanced(
+                      profile: profile,
+                      onChanged: profileService.update,
+                    ),
                   const Divider(height: 1),
                   SwitchListTile(
                     secondary: const Icon(Icons.straighten),
@@ -536,5 +539,119 @@ class _ProfileTabState extends State<ProfileTab> {
     await services.api.logout();
     unawaited(services.heartRate.disconnect());
     widget.onLogout();
+  }
+}
+
+/// Progi auto-pauzy, schowane przed kimś, kto ich nie szuka.
+///
+/// Rozwijane, a nie osobny ekran: to dwie liczby, a nie dział ustawień —
+/// i domyślnie zwinięte, bo rowerzysta ma tu do podjęcia jedną decyzję,
+/// włączone albo wyłączone.
+class _AutoPauseAdvanced extends StatelessWidget {
+  const _AutoPauseAdvanced({required this.profile, required this.onChanged});
+
+  final RiderProfile profile;
+  final ValueChanged<RiderProfile> onChanged;
+
+  bool get _isDefault =>
+      profile.autoPauseSpeedKmh == RiderProfile.defaultAutoPauseSpeedKmh &&
+      profile.autoPauseDelaySeconds ==
+          RiderProfile.defaultAutoPauseDelaySeconds;
+
+  @override
+  Widget build(BuildContext context) {
+    return ExpansionTile(
+      leading: const SizedBox(width: 24),
+      title: Text(S.advancedSettings, style: LR.fieldLabel),
+      childrenPadding: const EdgeInsets.fromLTRB(20, 0, 20, 12),
+      children: [
+        Text(S.autoPauseAdvancedExplainer, style: LR.body),
+        const SizedBox(height: 12),
+        _Slider(
+          label: S.autoPauseThreshold,
+          value: profile.autoPauseSpeedKmh,
+          min: 0.3,
+          max: 3.0,
+          divisions: 27,
+          format: (value) => '${value.toStringAsFixed(1)} km/h',
+          onChanged: (value) => onChanged(
+            profile.copyWith(
+              autoPauseSpeedKmh: double.parse(value.toStringAsFixed(1)),
+            ),
+          ),
+        ),
+        _Slider(
+          label: S.autoPauseDelay,
+          value: profile.autoPauseDelaySeconds.toDouble(),
+          min: 2,
+          max: 15,
+          divisions: 13,
+          format: (value) => '${value.round()} s',
+          onChanged: (value) => onChanged(
+            profile.copyWith(autoPauseDelaySeconds: value.round()),
+          ),
+        ),
+        Align(
+          alignment: Alignment.centerRight,
+          child: TextButton(
+            onPressed: _isDefault
+                ? null
+                : () => onChanged(
+                    profile.copyWith(
+                      autoPauseSpeedKmh:
+                          RiderProfile.defaultAutoPauseSpeedKmh,
+                      autoPauseDelaySeconds:
+                          RiderProfile.defaultAutoPauseDelaySeconds,
+                    ),
+                  ),
+            child: Text(S.restoreDefaults),
+          ),
+        ),
+      ],
+    );
+  }
+}
+
+class _Slider extends StatelessWidget {
+  const _Slider({
+    required this.label,
+    required this.value,
+    required this.min,
+    required this.max,
+    required this.divisions,
+    required this.format,
+    required this.onChanged,
+  });
+
+  final String label;
+  final double value;
+  final double min;
+  final double max;
+  final int divisions;
+  final String Function(double) format;
+  final ValueChanged<double> onChanged;
+
+  @override
+  Widget build(BuildContext context) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Row(
+          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+          children: [
+            Text(label, style: LR.body),
+            Text(format(value), style: LR.fieldValue(15)),
+          ],
+        ),
+        Slider(
+          value: value.clamp(min, max),
+          min: min,
+          max: max,
+          divisions: divisions,
+          label: format(value),
+          onChanged: onChanged,
+        ),
+      ],
+    );
   }
 }

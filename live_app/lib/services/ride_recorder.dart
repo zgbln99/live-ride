@@ -18,6 +18,8 @@ import 'location_service.dart';
 import 'profile_service.dart';
 import 'ride_storage_service.dart';
 import 'alert_controller.dart';
+import 'auto_pause_detector.dart';
+import 'ride_clock.dart';
 import 'alert_engine.dart';
 import 'climb_tracker.dart';
 import 'garage_service.dart';
@@ -81,6 +83,12 @@ class RideRecorder extends ChangeNotifier {
 
   /// Gdzie zawodnik jest względem podjazdów na trasie.
   final ClimbTracker climbs = ClimbTracker();
+
+  /// Rozstrzyga, czy zawodnik faktycznie stoi.
+  AutoPauseDetector _autoPause = AutoPauseDetector();
+
+  @visibleForTesting
+  AutoPauseDetector get autoPauseDetector => _autoPause;
   final LiveSessionController live;
   final WeatherService weather;
   final ProfileService profile;
@@ -99,9 +107,9 @@ class RideRecorder extends ChangeNotifier {
   RideState _state = RideState.idle;
   RideMetrics _metrics = RideMetrics.empty;
   GeoPoint? _position;
-  DateTime? _startedAt;
-  DateTime? _pausedAt;
-  Duration _pausedTotal = Duration.zero;
+  /// Cały podział czasu na jazdę i postoje — razem z zasadą, że ręcznej
+  /// pauzy nie zdejmuje nikt poza rowerzystą.
+  final RideClock _clock = RideClock();
   RideRoute? _route;
   NavigationPlan? _plan;
   NavigationProgress? _progress;
@@ -111,7 +119,7 @@ class RideRecorder extends ChangeNotifier {
   RideState get state => _state;
   RideMetrics get metrics => _metrics;
   GeoPoint? get position => _position;
-  DateTime? get startedAt => _startedAt;
+  DateTime? get startedAt => _clock.startedAt;
   RideRoute? get route => _route;
   NavigationPlan? get plan => _plan;
   NavigationProgress? get progress => _progress;
@@ -126,15 +134,27 @@ class RideRecorder extends ChangeNotifier {
   /// The recorded track so far, for drawing on the map.
   List<GeoPoint> get track => [for (final point in _points) point.geo];
 
-  Duration get elapsed {
-    final started = _startedAt;
-    if (started == null) return Duration.zero;
-    final paused = _pausedAt == null
-        ? _pausedTotal
-        : _pausedTotal + DateTime.now().difference(_pausedAt!);
-    final total = DateTime.now().difference(started) - paused;
-    return total.isNegative ? Duration.zero : total;
-  }
+  /// Czas od startu przejazdu, niezależnie od postojów.
+  ///
+  /// To jest ELAPSED w rozumieniu licznika rowerowego: 13:00 → 15:00 daje
+  /// 2:00:00, choćby połowa tego poszła na kawę.
+  Duration get elapsed => _clock.elapsed;
+
+  /// Czas, przez który licznik chodził — bez pauz automatycznych i ręcznych.
+  ///
+  /// To zatrzymuje auto-pauza i to napędza kroki treningu. Nie mylić z czasem
+  /// w ruchu: postój krótszy niż próg auto-pauzy wlicza się tutaj, a do czasu
+  /// w ruchu nie.
+  Duration get recordingTime => _clock.recording;
+
+  /// Łączny czas pauz, licząc trwającą.
+  Duration get pausedTotal => _clock.paused;
+
+  /// Czas spędzony w pauzie automatycznej.
+  Duration get autoPausedTotal => _clock.autoPaused;
+
+  /// Czas spędzony w pauzie wciśniętej ręcznie.
+  Duration get manualPausedTotal => _clock.manualPaused;
 
   /// Starts recording. Throws [LocationUnavailable] if the rider cannot be
   /// located; everything else is reported through [error].
@@ -159,14 +179,11 @@ class RideRecorder extends ChangeNotifier {
     _plan = plan;
     climbs.attach(route);
     _progress = null;
-    _pausedTotal = Duration.zero;
-    _pausedAt = null;
-    _autoPaused = false;
-    _slowSince = null;
+    _clock.start();
+    _autoPause = _buildAutoPauseDetector();
     _rawSpeedKmh = null;
     _lastRawSample = null;
     alerts.reset();
-    _startedAt = DateTime.now();
     _state = RideState.recording;
     _metrics = _accumulator.build(
       elapsed: Duration.zero,
@@ -201,7 +218,7 @@ class RideRecorder extends ChangeNotifier {
     unawaited(
       liveActivity.start(
         riderName: profile.riderName,
-        title: _defaultRideName(_startedAt!),
+        title: _defaultRideName(_clock.startedAt!),
         navigating: plan != null,
       ),
     );
@@ -247,35 +264,42 @@ class RideRecorder extends ChangeNotifier {
   }
 
   /// Czy licznik stoi dlatego, że zawodnik stanął — a nie dlatego, że sam
-  /// nacisnął pauzę. Ręczna pauza nigdy nie wznawia się sama.
-  bool _autoPaused = false;
-  DateTime? _slowSince;
+  /// nacisnął pauzę.
+  bool get isAutoPaused => _state == RideState.paused && _clock.isAutoPaused;
 
-  bool get isAutoPaused => _autoPaused;
+  /// Czy zawodnik zatrzymał licznik własnym palcem.
+  ///
+  /// Dwa rodzaje pauzy to dwa różne stany, nie jeden z flagą: ręczna czeka na
+  /// decyzję człowieka, automatyczna na ruch roweru. Mieszanie ich znaczyłoby,
+  /// że licznik rusza sam po tym, jak ktoś świadomie go zatrzymał.
+  bool get isManuallyPaused =>
+      _state == RideState.paused && _clock.isManuallyPaused;
 
   void pause() {
     if (_state != RideState.recording) return;
-    _autoPaused = false;
-    _pauseInternal();
+    // Ręczna pauza wyłącza wykrywanie postoju do czasu wznowienia — inaczej
+    // pierwszy ruch po niej wyglądałby dla detektora jak koniec postoju.
+    _autoPause.reset();
+    _pauseInternal(automatic: false);
   }
 
-  void _pauseInternal() {
+  void _pauseInternal({required bool automatic}) {
+    if (!_clock.pause(automatic: automatic)) return;
     _state = RideState.paused;
-    _pausedAt = DateTime.now();
     _accumulator.breakContinuity();
     _publish();
   }
 
-  void resume() {
-    _autoPaused = false;
+  void resume() => _resumeInternal(automatic: false);
+
+  void _resumeInternal({required bool automatic}) {
     if (_state != RideState.paused) return;
-    final pausedAt = _pausedAt;
-    if (pausedAt != null) {
-      _pausedTotal += DateTime.now().difference(pausedAt);
-    }
-    _pausedAt = null;
+    // Detektor nie ma prawa zdjąć pauzy, którą wcisnął rowerzysta; zegar
+    // sam tego pilnuje i wtedy nic się nie dzieje.
+    if (!_clock.resume(automatic: automatic)) return;
     _state = RideState.recording;
     _accumulator.breakContinuity();
+    _autoPause.reset();
     _publish();
   }
 
@@ -297,10 +321,15 @@ class RideRecorder extends ChangeNotifier {
     _ticker = null;
     unawaited(liveActivity.end());
 
-    final started = _startedAt ?? DateTime.now();
+    final started = _clock.startedAt ?? DateTime.now();
     final finalElapsed = elapsed;
+    final finalPaused = pausedTotal;
+    final finalAutoPaused = autoPausedTotal;
+    final finalManualPaused = manualPausedTotal;
     final finalMetrics = _accumulator.build(
       elapsed: finalElapsed,
+      recording: recordingTime,
+      paused: finalPaused,
       pointCount: _points.length,
       hasFix: _position != null,
     );
@@ -316,6 +345,8 @@ class RideRecorder extends ChangeNotifier {
         endedAt: DateTime.now(),
         elapsedSeconds: finalElapsed.inSeconds,
         movingSeconds: finalMetrics.movingTime.inSeconds,
+        autoPausedSeconds: finalAutoPaused.inSeconds,
+        manualPausedSeconds: finalManualPaused.inSeconds,
         distanceMeters: finalMetrics.distanceMeters,
         elevationGainMeters: finalMetrics.elevationGainMeters,
         elevationLossMeters: finalMetrics.elevationLossMeters,
@@ -361,9 +392,8 @@ class RideRecorder extends ChangeNotifier {
 
     _state = RideState.idle;
     _metrics = finalMetrics;
-    _startedAt = null;
-    _pausedAt = null;
-    _pausedTotal = Duration.zero;
+    _clock.reset();
+    _autoPause.reset();
     _route = null;
     _plan = null;
     _progress = null;
@@ -385,9 +415,8 @@ class RideRecorder extends ChangeNotifier {
     _points.clear();
     _state = RideState.idle;
     _metrics = RideMetrics.empty;
-    _startedAt = null;
-    _pausedAt = null;
-    _pausedTotal = Duration.zero;
+    _clock.reset();
+    _autoPause.reset();
     _route = null;
     _plan = null;
     _progress = null;
@@ -428,6 +457,11 @@ class RideRecorder extends ChangeNotifier {
     _trackRawSpeed(sample);
     _position = sample.point;
     _error = null;
+
+    // Detektor dostaje każdy fix, także na pauzie: to z nich rozpoznaje, że
+    // zawodnik ruszył. Decyzja może przełączyć stan, więc idzie przed
+    // gałęzią pauzy.
+    _feedAutoPause(sample);
 
     if (_state == RideState.paused) {
       _publish();
@@ -476,7 +510,10 @@ class RideRecorder extends ChangeNotifier {
 
   /// Porównanie z wirtualnym rywalem albo null, gdy żadnego nie ma.
   PaceComparison? get paceComparison =>
-      pace.compare(riderMeters: _accumulator.distanceMeters, elapsed: elapsed);
+      pace.compare(
+        riderMeters: _accumulator.distanceMeters,
+        elapsed: recordingTime,
+      );
 
   void _updateClimb(GeoPoint point) {
     if (_route == null) return;
@@ -494,8 +531,9 @@ class RideRecorder extends ChangeNotifier {
   /// świadomie zatrzymany licznik. Widz, który widzi tylko „stoi", nie wie,
   /// czy czekać, czy jechać na spotkanie.
   String get _liveState {
-    if (_state == RideState.paused) return _autoPaused ? 'stopped' : 'paused';
-    if (_autoPaused) return 'stopped';
+    if (_state == RideState.paused) {
+      return _clock.isAutoPaused ? 'stopped' : 'paused';
+    }
     return 'riding';
   }
 
@@ -542,39 +580,64 @@ class RideRecorder extends ChangeNotifier {
 
   /// Zatrzymuje i wznawia licznik na postoju.
   ///
-  /// Próg i opóźnienie są w profilu, bo „stoję" znaczy co innego na światłach
-  /// w mieście i co innego na podjeździe, gdzie 3 km/h to wciąż jazda.
+  /// Sama decyzja siedzi w [AutoPauseDetector] — tutaj zostaje tylko
+  /// podłączenie jej do licznika. Dzięki temu „czy on stoi" da się sprawdzić
+  /// testem na ciągu pozycji, a nie dopiero na drodze.
   void _evaluateAutoPause() {
+    if (!profile.profile.autoPause) return;
+
+    // Ręczna pauza nie jest przedmiotem żadnej automatyki: zawodnik zatrzymał
+    // licznik świadomie i tylko on go wznowi.
+    if (isManuallyPaused) return;
+    if (_state != RideState.recording && !_clock.isAutoPaused) return;
+
+    final action = _autoPause.tick(DateTime.now());
+    _applyAutoPause(action);
+  }
+
+  /// Buduje detektor postoju na progach z profilu.
+  ///
+  /// Składany na starcie przejazdu, a nie raz na życie licznika, żeby zmiana
+  /// w ustawieniach zaawansowanych obowiązywała od następnej jazdy, a nie po
+  /// restarcie aplikacji.
+  AutoPauseDetector _buildAutoPauseDetector() {
     final settings = profile.profile;
-    if (!settings.autoPause) return;
-    if (_position == null) return;
+    return AutoPauseDetector(
+      stationaryGpsKmh: settings.autoPauseSpeedKmh,
+      pauseAfter: Duration(seconds: settings.autoPauseDelaySeconds),
+    );
+  }
 
-    final now = DateTime.now();
+  /// Podaje detektorowi świeży fix i wykonuje jego decyzję.
+  void _feedAutoPause(RideSample sample) {
+    if (!profile.profile.autoPause) return;
+    if (isManuallyPaused) return;
+    if (_state != RideState.recording && !_clock.isAutoPaused) return;
 
-    if (_state == RideState.recording) {
-      final speed = _accumulator.speedKmh;
-      if (speed >= settings.autoPauseSpeedKmh) {
-        _slowSince = null;
-        return;
-      }
-      final since = _slowSince ??= now;
-      if (now.difference(since).inSeconds >= settings.autoPauseDelaySeconds) {
-        _slowSince = null;
-        _autoPaused = true;
-        _pauseInternal();
-      }
-      return;
-    }
+    final snapshot = sensors.snapshot;
+    final action = _autoPause.update(
+      AutoPauseSample(
+        at: sample.timestamp,
+        point: sample.point,
+        gpsSpeedKmh: sample.speedMps == null ? null : sample.speedMps! * 3.6,
+        accuracyMeters: sample.accuracyMeters,
+        sensorSpeedKmh: snapshot.speedKmh,
+        sensorAt: snapshot.at,
+      ),
+      recording: _state == RideState.recording,
+    );
+    _applyAutoPause(action);
+  }
 
-    if (_state == RideState.paused && _autoPaused) {
-      // Ruszenie wznawia od razu: czekanie na potwierdzenie zabrałoby
-      // zawodnikowi pierwsze metry po każdych światłach. Margines nad progiem
-      // to histereza — bez niej drgania GPS na postoju mrugałyby licznikiem.
-      final speed = _rawSpeedKmh ?? 0;
-      if (speed >= settings.autoPauseSpeedKmh + 1) {
-        _autoPaused = false;
-        resume();
-      }
+  void _applyAutoPause(AutoPauseAction action) {
+    switch (action) {
+      case AutoPauseAction.pause:
+        if (_state != RideState.recording) return;
+        _pauseInternal(automatic: true);
+      case AutoPauseAction.resume:
+        _resumeInternal(automatic: true);
+      case AutoPauseAction.none:
+        break;
     }
   }
 
@@ -584,7 +647,9 @@ class RideRecorder extends ChangeNotifier {
     if (!workoutRunner.isRunning) return;
     final snapshot = sensors.snapshot;
     workoutRunner.update(
-      elapsed: elapsed,
+      // Krok treningu odmierza czas pracy, nie czas na trasie: postój na
+      // światłach nie ma prawa przesunąć interwału.
+      elapsed: recordingTime,
       distanceMeters: _accumulator.distanceMeters,
       powerWatts: snapshot.powerWatts,
       heartRate: _metrics.heartRate,
@@ -640,7 +705,7 @@ class RideRecorder extends ChangeNotifier {
     alerts.feed(
       AlertContext(
         now: DateTime.now(),
-        elapsed: elapsed,
+        elapsed: recordingTime,
         distanceMeters: _accumulator.distanceMeters,
         metric: profile.profile.metricUnits,
         heartRate: _metrics.heartRate,
@@ -661,6 +726,8 @@ class RideRecorder extends ChangeNotifier {
   void _publish() {
     _metrics = _accumulator.build(
       elapsed: elapsed,
+      recording: recordingTime,
+      paused: pausedTotal,
       pointCount: _points.length,
       hasFix: _position != null,
     );
@@ -668,6 +735,7 @@ class RideRecorder extends ChangeNotifier {
       liveActivity.update(
         metrics: _metrics,
         paused: _state == RideState.paused,
+        automaticPause: isAutoPaused,
         live: live.isActive,
         metric: profile.profile.metricUnits,
         progress: _progress,

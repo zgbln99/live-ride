@@ -310,8 +310,7 @@ class Strings {
   String get needsCadenceSensor => 'wymaga czujnika kadencji';
   String get needsHeartRateStrap => 'wymaga paska na klatę';
   String get autoPauseTitle => 'Automatyczna pauza';
-  String get autoPauseHint =>
-      'Licznik zatrzymuje się na postoju i rusza, gdy ruszysz.';
+  String get autoPauseHint => 'Zatrzymuje czas jazdy, gdy faktycznie stoisz.';
 
   // -------------------------------------------------------------- treningi
   String get workouts => 'Treningi';
@@ -607,6 +606,24 @@ class Strings {
   String get middayRide => 'Południowa jazda';
   String get afternoonRide => 'Popołudniowa jazda';
   String get eveningRide => 'Wieczorna jazda';
+
+  // ------------------------------------------------------------ auto-pauza
+  //
+  // Dwa rodzaje pauzy mają dwie różne nazwy, bo znaczą co innego: przy
+  // automatycznej wystarczy ruszyć, przy ręcznej trzeba nacisnąć przycisk.
+  String get autoPauseBannerTitle => 'AUTOMATYCZNA PAUZA';
+  String get autoPauseShort => 'AUTO PAUZA';
+  String get autoPauseBannerHint => 'Rusz, aby wznowić';
+  String get manualPauseTitle => 'PAUZA';
+  String get manualPauseShort => 'PAUZA';
+  String get advancedSettings => 'Ustawienia zaawansowane';
+  String get autoPauseAdvancedExplainer =>
+      'Domyślne wartości są dobrane tak, żeby bardzo wolny podjazd nie '
+      'wyglądał jak postój. Zmieniaj je tylko, jeśli wiesz, po co.';
+  String get pausedTime => 'Pauza';
+  String get autoPauseThreshold => 'Próg postoju';
+  String get autoPauseDelay => 'Czas potwierdzenia';
+  String get restoreDefaults => 'PRZYWRÓĆ DOMYŚLNE';
 
   // ---------------------------------------------------------------- LIVE
   String get liveTracking => 'Transmisja LIVE';

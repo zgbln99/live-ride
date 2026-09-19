@@ -47,6 +47,55 @@ void main() {
       expect(restored.fields.length, 6);
     });
 
+    group('strojenie auto-pauzy', () {
+      test('stary profil traci agresywny próg 3 km/h', () {
+        // Tak wyglądał zapisany profil, zanim auto-pauza nauczyła się
+        // odróżniać podjazd od postoju. Nikt tych liczb nie mógł wtedy
+        // zmienić, więc zostawienie ich to zostawienie usterki.
+        final restored = RiderProfile.fromJson({
+          'display_name': 'Ada',
+          'auto_pause': true,
+          'auto_pause_speed': 3.0,
+          'auto_pause_delay': 5,
+        });
+        expect(
+          restored.autoPauseSpeedKmh,
+          RiderProfile.defaultAutoPauseSpeedKmh,
+        );
+        expect(
+          restored.autoPauseDelaySeconds,
+          RiderProfile.defaultAutoPauseDelaySeconds,
+        );
+        // Sama auto-pauza zostaje włączona: migracja stroi, nie wyłącza.
+        expect(restored.autoPause, isTrue);
+        expect(restored.displayName, 'Ada');
+      });
+
+      test('wyłączona auto-pauza zostaje wyłączona', () {
+        final restored = RiderProfile.fromJson({
+          'auto_pause': false,
+          'auto_pause_speed': 3.0,
+        });
+        expect(restored.autoPause, isFalse);
+      });
+
+      test('własne progi z nowej wersji przeżywają zapis', () {
+        const profile = RiderProfile(
+          autoPauseSpeedKmh: 1.4,
+          autoPauseDelaySeconds: 8,
+        );
+        final restored = RiderProfile.fromJson(profile.toJson());
+        expect(restored.autoPauseSpeedKmh, 1.4);
+        expect(restored.autoPauseDelaySeconds, 8);
+      });
+
+      test('migracja przechodzi tylko raz', () {
+        final once = RiderProfile.fromJson({'auto_pause_speed': 3.0});
+        final tuned = once.copyWith(autoPauseSpeedKmh: 2.5);
+        expect(RiderProfile.fromJson(tuned.toJson()).autoPauseSpeedKmh, 2.5);
+      });
+    });
+
     test('pads the field list to match the layout', () {
       const profile = RiderProfile(
         layout: RideFieldLayout.eight,

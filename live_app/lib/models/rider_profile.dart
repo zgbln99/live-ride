@@ -15,8 +15,9 @@ class RiderProfile {
     this.weatherEnabled = true,
     this.autoLive = false,
     this.autoPause = true,
-    this.autoPauseSpeedKmh = 3.0,
-    this.autoPauseDelaySeconds = 5,
+    this.autoPauseSpeedKmh = defaultAutoPauseSpeedKmh,
+    this.autoPauseDelaySeconds = defaultAutoPauseDelaySeconds,
+    this.autoPauseTuning = autoPauseTuningVersion,
     this.bio = '',
     this.location = '',
     this.avatarPath = '',
@@ -48,11 +49,31 @@ class RiderProfile {
   final bool autoPause;
 
   /// Poniżej tej prędkości zawodnik liczy się jako stojący.
+  ///
+  /// To nie jest „wolna jazda": 0,7 km/h to szum dopplerowski stojącego
+  /// odbiornika. Jazda pod górę z prędkością 2 km/h to nadal jazda.
   final double autoPauseSpeedKmh;
 
   /// Ile sekund postoju, zanim licznik się zatrzyma. Zero sekund robiłoby
   /// pauzę na każdym hamowaniu przed zakrętem.
   final int autoPauseDelaySeconds;
+
+  /// Wersja strojenia auto-pauzy, która zapisała te dwie liczby powyżej.
+  ///
+  /// Pierwsza wersja uznawała za postój wszystko poniżej 3 km/h, więc
+  /// zatrzymywała licznik na podjeździe. Nikt tych wartości nie mógł wtedy
+  /// zmienić — nie było na to ekranu — więc przy wczytaniu starszego profilu
+  /// nadpisujemy je nowymi, zamiast zostawiać usterkę na koncie.
+  final int autoPauseTuning;
+
+  /// Próg „stoję" — ten sam, z którym jeździ [AutoPauseDetector].
+  static const double defaultAutoPauseSpeedKmh = 0.7;
+
+  /// Ile sekund bezruchu przed zatrzymaniem licznika.
+  static const int defaultAutoPauseDelaySeconds = 3;
+
+  /// Podbijaj przy każdej zmianie domyślnego strojenia auto-pauzy.
+  static const int autoPauseTuningVersion = 2;
 
   /// Krótki opis pokazywany na profilu i w widoku LIVE.
   final String bio;
@@ -148,6 +169,7 @@ class RiderProfile {
     bool? autoPause,
     double? autoPauseSpeedKmh,
     int? autoPauseDelaySeconds,
+    int? autoPauseTuning,
     String? bio,
     String? location,
     String? avatarPath,
@@ -171,6 +193,7 @@ class RiderProfile {
     autoPause: autoPause ?? this.autoPause,
     autoPauseSpeedKmh: autoPauseSpeedKmh ?? this.autoPauseSpeedKmh,
     autoPauseDelaySeconds: autoPauseDelaySeconds ?? this.autoPauseDelaySeconds,
+    autoPauseTuning: autoPauseTuning ?? this.autoPauseTuning,
     bio: bio ?? this.bio,
     location: location ?? this.location,
     avatarPath: avatarPath ?? this.avatarPath,
@@ -200,6 +223,7 @@ class RiderProfile {
     'auto_pause': autoPause,
     'auto_pause_speed': autoPauseSpeedKmh,
     'auto_pause_delay': autoPauseDelaySeconds,
+    'auto_pause_tuning': autoPauseTuning,
     'bio': bio,
     'location': location,
     'avatar_path': avatarPath,
@@ -225,6 +249,7 @@ class RiderProfile {
         .whereType<RideDataField>()
         .toList();
     final layoutName = json['layout'] as String?;
+    final tuning = (json['auto_pause_tuning'] as num?)?.toInt() ?? 1;
     return RiderProfile(
       displayName: json['display_name'] as String? ?? '',
       username: json['username'] as String? ?? '',
@@ -234,8 +259,15 @@ class RiderProfile {
       weatherEnabled: json['weather_enabled'] as bool? ?? true,
       autoLive: json['auto_live'] as bool? ?? false,
       autoPause: json['auto_pause'] as bool? ?? true,
-      autoPauseSpeedKmh: (json['auto_pause_speed'] as num?)?.toDouble() ?? 3.0,
-      autoPauseDelaySeconds: (json['auto_pause_delay'] as num?)?.toInt() ?? 5,
+      autoPauseSpeedKmh: tuning < autoPauseTuningVersion
+          ? defaultAutoPauseSpeedKmh
+          : (json['auto_pause_speed'] as num?)?.toDouble() ??
+                defaultAutoPauseSpeedKmh,
+      autoPauseDelaySeconds: tuning < autoPauseTuningVersion
+          ? defaultAutoPauseDelaySeconds
+          : (json['auto_pause_delay'] as num?)?.toInt() ??
+                defaultAutoPauseDelaySeconds,
+      autoPauseTuning: autoPauseTuningVersion,
       bio: json['bio'] as String? ?? '',
       location: json['location'] as String? ?? '',
       avatarPath: json['avatar_path'] as String? ?? '',
