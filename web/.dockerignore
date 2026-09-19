@@ -5,5 +5,7 @@
 !package.json
 !src
 !static
+!vite-plugins
+!vite-plugins/**
 !tsconfig.json
 !cron.sh
