@@ -5,7 +5,7 @@
 	<key>CFBundleDevelopmentRegion</key>
 	<string>$(DEVELOPMENT_LANGUAGE)</string>
 	<key>CFBundleDisplayName</key>
-	<string>Wanderer</string>
+	<string>Live Ride</string>
 	<key>CFBundleExecutable</key>
 	<string>$(EXECUTABLE_NAME)</string>
 	<key>CFBundleIdentifier</key>
@@ -24,8 +24,7 @@
 	<dict>
 		<key>NSExtensionAttributes</key>
 		<dict>
-			<!-- Accept a single file attachment; no web pages / plain text /
-			     images, so Wanderer only appears for shareable documents. -->
+			<!-- Accept a single file attachment so Live Ride appears for route files. -->
 			<key>NSExtensionActivationRule</key>
 			<dict>
 				<key>NSExtensionActivationSupportsFileWithMaxCount</key>
