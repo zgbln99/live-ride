@@ -696,6 +696,36 @@ class Strings {
   String get shareEverything => 'UDOSTĘPNIJ WSZYSTKO';
   String get noHeartRateSensor => 'Brak podłączonego pomiaru tętna.';
   String get noPowerSensor => 'Brak podłączonego miernika mocy.';
+
+  // --- prywatność lokalizacji -------------------------------------------
+  String get locationPrivacy => 'LOKALIZACJA PUBLICZNA';
+  String get locationDelay => 'Opóźnienie pozycji';
+  String get locationDelayNone => 'Natychmiast';
+  String get locationCoarse => 'Pozycja przybliżona';
+  String get locationCoarseHint =>
+      'Zaokrąglona do około stu metrów. Zapis przejazdu zostaje dokładny.';
+  String get hideStart => 'Ukryj okolicę startu';
+  String get hideFinish => 'Ukryj okolicę mety';
+  String get hideNone => 'Nie ukrywaj';
+  String get locationDelayHint =>
+      'Dotyczy wyłącznie obserwujących. Licznik i zapis jazdy działają bez zmian.';
+
+  // --- diagnostyka LIVE --------------------------------------------------
+  String get liveDiagnostics => 'DIAGNOSTYKA LIVE';
+  String get diagnosticsSubtitle =>
+      'Co serwer naprawdę wie o tej jeździe — a nie co wysłał telefon.';
+  String get diagnosticsServer => 'Serwer';
+  String get diagnosticsRoute => 'Trasa';
+  String get diagnosticsNav => 'Nawigacja';
+  String get diagnosticsViewers => 'Ogląda teraz';
+  String get diagnosticsUnreachable =>
+      'Serwer nie odpowiada. Jazda nagrywa się dalej — to łączność, nie licznik.';
+  String get diagnosticsNoRoute =>
+      'Serwer nie ma trasy tej jazdy. Publiczna strona pokaże sam znacznik.';
+  String get diagnosticsHidden => 'Wyłączone w prywatności';
+  String get diagnosticsMissing => 'Brak';
+  String get diagnosticsRefresh => 'ODŚWIEŻ';
+  String get diagnosticsNoSession => 'LIVE nie jest uruchomione.';
   String get shareTheLink => 'UDOSTĘPNIJ LINK';
   String get endLive => 'ZAKOŃCZ LIVE';
   String get rider => 'Zawodnik';

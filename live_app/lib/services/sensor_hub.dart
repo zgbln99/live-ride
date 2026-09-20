@@ -189,6 +189,22 @@ class SensorHub extends ChangeNotifier {
   List<SensorDevice> get connected =>
       List.unmodifiable(_connections.values.map((entry) => entry.device));
 
+  /// Pierwszy połączony sensor, który umie daną wielkość.
+  ///
+  /// Publiczna strona i diagnostyka pytają nie tylko „ile", ale „skąd" i „jak
+  /// dawno". Bez tego „moc 242 W" z miernika, który odpadł trzy minuty temu,
+  /// wygląda dokładnie tak samo jak pomiar sprzed sekundy.
+  SensorDevice? deviceWith(bool Function(SensorCapabilities) test) {
+    for (final entry in _connections.values) {
+      if (test(entry.device.capabilities)) return entry.device;
+    }
+    return null;
+  }
+
+  SensorDevice? get powerDevice => deviceWith((c) => c.power);
+  SensorDevice? get cadenceDevice => deviceWith((c) => c.cadence);
+  SensorDevice? get speedDevice => deviceWith((c) => c.speed);
+
   bool isConnectedTo(String id) => _connections.containsKey(id);
 
   // -------------------------------------------------------------- lifecycle

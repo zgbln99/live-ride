@@ -657,6 +657,12 @@ class RideRecorder extends ChangeNotifier {
       gradientPercent: _metrics.gradientPercent,
       nav: _navTelemetry(),
       climb: _climbTelemetry(),
+      // Dystans z czujnika koła celowo nie jedzie: licznik go nie prowadzi
+      // osobno, a wysłanie dystansu GPS pod tą nazwą byłoby zmyśleniem
+      // drugiego pomiaru.
+      sensorSpeedKmh: sensors.snapshot.speedKmh,
+      freshness: _freshnessTelemetry(position),
+      averages: _averagesTelemetry(),
       force: force,
     );
     final failed = !ok;
@@ -711,6 +717,34 @@ class RideRecorder extends ChangeNotifier {
       'category': climb.category.shortLabel,
     };
   }
+
+  /// Wiek każdej danej w sekundach, liczony w chwili wysyłki.
+  ///
+  /// Jeden znacznik na całą próbkę kłamał: GPS potrafi nadawać co sekundę,
+  /// gdy pas HR odpadł cztery minuty wcześniej, a publiczna strona pokazywała
+  /// tamto tętno jako bieżące. Ujemna wartość znaczy „nie mam tej danej
+  /// wcale" i serwer czyści wtedy znacznik zamiast zapisywać zero.
+  Map<String, double> _freshnessTelemetry(Position position) {
+    final now = DateTime.now();
+    final freshness = live.sensorFreshness(now: now);
+    freshness['gps_age_seconds'] =
+        now.difference(position.timestamp).inMilliseconds / 1000.0;
+    freshness['nav_age_seconds'] = _progress == null ? -1 : 0;
+    return freshness;
+  }
+
+  /// Średnie i maksima z licznika, żeby publiczna strona nie liczyła ich
+  /// drugi raz z gorszych danych.
+  ///
+  /// Zero znaczy „nie mam" wyłącznie dlatego, że żadna z tych wielkości nie
+  /// przyjmuje zera jako pomiaru: tętno zerowe to brak pasa, nie odpoczynek.
+  Map<String, int> _averagesTelemetry() => {
+    'avg_heart_rate_bpm': _metrics.averageHeartRate ?? 0,
+    'max_heart_rate_bpm': _metrics.maxHeartRate ?? 0,
+    'avg_power_watts': _metrics.power?.average ?? 0,
+    'max_power_watts': _metrics.power?.maximum ?? 0,
+    'avg_cadence_rpm': _metrics.averageCadenceRpm?.round() ?? 0,
+  };
 
   void _onSensors() {
     if (_state != RideState.recording) return;

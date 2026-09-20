@@ -9,6 +9,10 @@ class LivePrivacy {
     this.shareHeartRate = false,
     this.sharePower = false,
     this.shareBattery = false,
+    this.locationDelaySeconds = 0,
+    this.locationCoarse = false,
+    this.hideStartMeters = 0,
+    this.hideFinishMeters = 0,
   });
 
   final bool sharePosition;
@@ -19,6 +23,29 @@ class LivePrivacy {
   /// Poziom baterii telefonu. Pytanie „czy on zaraz zniknie" jest sensowne,
   /// ale to też informacja o zawodniku, więc włącza się ją świadomie.
   final bool shareBattery;
+
+  /// O ile sekund publiczna pozycja ma być opóźniona.
+  ///
+  /// Dotyczy WYŁĄCZNIE tego, co widzi obserwujący. Nagranie przejazdu, ślad
+  /// zapisany w telefonie i statystyki są nietknięte — opóźnienie nie jest
+  /// funkcją licznika, tylko funkcją transmisji.
+  final int locationDelaySeconds;
+
+  /// Czy publiczna pozycja ma być zaokrąglona do kratki zamiast do punktu.
+  final bool locationCoarse;
+
+  /// Promień wokół miejsca startu, z którego nie wychodzi żadna pozycja.
+  final int hideStartMeters;
+
+  /// To samo wokół mety zaplanowanej trasy.
+  final int hideFinishMeters;
+
+  /// Czy jakiekolwiek ograniczenie lokalizacji jest włączone.
+  bool get limitsLocation =>
+      locationDelaySeconds > 0 ||
+      locationCoarse ||
+      hideStartMeters > 0 ||
+      hideFinishMeters > 0;
 
   /// Czy obserwujący zobaczy cokolwiek poza nazwą.
   bool get sharesAnything =>
@@ -34,12 +61,20 @@ class LivePrivacy {
     bool? shareHeartRate,
     bool? sharePower,
     bool? shareBattery,
+    int? locationDelaySeconds,
+    bool? locationCoarse,
+    int? hideStartMeters,
+    int? hideFinishMeters,
   }) => LivePrivacy(
     sharePosition: sharePosition ?? this.sharePosition,
     shareSpeed: shareSpeed ?? this.shareSpeed,
     shareHeartRate: shareHeartRate ?? this.shareHeartRate,
     sharePower: sharePower ?? this.sharePower,
     shareBattery: shareBattery ?? this.shareBattery,
+    locationDelaySeconds: locationDelaySeconds ?? this.locationDelaySeconds,
+    locationCoarse: locationCoarse ?? this.locationCoarse,
+    hideStartMeters: hideStartMeters ?? this.hideStartMeters,
+    hideFinishMeters: hideFinishMeters ?? this.hideFinishMeters,
   );
 
   Map<String, dynamic> toJson() => {
@@ -48,6 +83,10 @@ class LivePrivacy {
     'share_heart_rate': shareHeartRate,
     'share_power': sharePower,
     'share_battery': shareBattery,
+    'location_delay_seconds': locationDelaySeconds,
+    'location_coarse': locationCoarse,
+    'hide_start_m': hideStartMeters,
+    'hide_finish_m': hideFinishMeters,
   };
 
   factory LivePrivacy.fromJson(Map<String, dynamic> json) => LivePrivacy(
@@ -56,8 +95,21 @@ class LivePrivacy {
     shareHeartRate: json['share_heart_rate'] as bool? ?? false,
     sharePower: json['share_power'] as bool? ?? false,
     shareBattery: json['share_battery'] as bool? ?? false,
+    locationDelaySeconds: (json['location_delay_seconds'] as num?)?.toInt() ?? 0,
+    locationCoarse: json['location_coarse'] as bool? ?? false,
+    hideStartMeters: (json['hide_start_m'] as num?)?.toInt() ?? 0,
+    hideFinishMeters: (json['hide_finish_m'] as num?)?.toInt() ?? 0,
   );
 }
+
+/// Dozwolone opóźnienia publicznej lokalizacji.
+///
+/// Skończona lista zamiast suwaka: „17 sekund" nie znaczy nic więcej niż
+/// „15 sekund", a wybór z czterech pozycji da się zrobić w rękawiczkach.
+const List<int> liveLocationDelayChoices = [0, 15, 30, 60];
+
+/// Dozwolone promienie ukrycia startu i mety.
+const List<int> liveHideRadiusChoices = [0, 300, 500, 1000];
 
 /// Kto może otworzyć publiczny link do jazdy.
 enum LiveShareVisibility {

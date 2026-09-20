@@ -336,5 +336,101 @@ void main() {
       expect(point['auto_paused_seconds'], 130);
       expect(point['manual_paused_seconds'], 45);
     });
+
+    test('nawigacja i podjazd jadą razem z pozycją', () async {
+      final adapter = _RecordingAdapter(
+        '{"id":"s1","participant_id":"p1","share_token":"tok","join_token":"J"}',
+      );
+      final live = _controller(_api(adapter));
+      await live.create();
+      await pumpEventQueue();
+
+      await live.pushPosition(
+        fix(),
+        distanceMeters: 12140,
+        elapsedSeconds: 1710,
+        gradientPercent: 8.2,
+        nav: const {
+          'instruction': 'Skręć w lewo w Burgenlandstraße',
+          'street': 'Burgenlandstraße',
+          'maneuver_type': 15,
+          'distance_m': 310.0,
+          'remaining_m': 17800.0,
+          'eta_seconds': 2760,
+          'off_route': false,
+          'off_route_m': 0.0,
+        },
+        climb: const {
+          'index': 2,
+          'total': 5,
+          'done_m': 1300.0,
+          'length_m': 2400.0,
+          'gain_m': 152.0,
+          'avg_gradient': 6.3,
+          'category': '3',
+        },
+        force: true,
+      );
+
+      final point = lastPoint(adapter);
+      expect(point['elapsed_seconds'], 1710);
+      expect(point['gradient_percent'], 8.2);
+      // Instrukcja jedzie GOTOWA i po polsku. Strona jej nie składa ani nie
+      // tłumaczy, więc obserwujący czyta dokładnie to samo zdanie, które
+      // rowerzysta ma przed oczami.
+      expect(
+        (point['nav'] as Map)['instruction'],
+        'Skręć w lewo w Burgenlandstraße',
+      );
+      expect((point['nav'] as Map)['distance_m'], 310.0);
+      expect((point['climb'] as Map)['index'], 2);
+      expect((point['climb'] as Map)['total'], 5);
+    });
+
+    test('numer próbki rośnie i nigdy się nie powtarza', () async {
+      final adapter = _RecordingAdapter(
+        '{"id":"s1","participant_id":"p1","share_token":"tok","join_token":"J"}',
+      );
+      final live = _controller(_api(adapter));
+      await live.create();
+      await pumpEventQueue();
+
+      await live.pushPosition(fix(), distanceMeters: 0, force: true);
+      final first = lastPoint(adapter)['seq'] as int;
+      await live.pushPosition(fix(), distanceMeters: 10, force: true);
+      final second = lastPoint(adapter)['seq'] as int;
+
+      expect(second, greaterThan(first));
+    });
+
+    test('bez zgody na pozycję nawigacja nie opuszcza telefonu', () async {
+      final adapter = _RecordingAdapter(
+        '{"id":"s1","participant_id":"p1","share_token":"tok","join_token":"J"}',
+      );
+      final live = _controller(_api(adapter));
+      await live.create();
+      await pumpEventQueue();
+      await live.updatePrivacy(
+        const LivePrivacy(sharePosition: false, shareSpeed: true),
+      );
+      await pumpEventQueue();
+
+      await live.pushPosition(
+        fix(),
+        distanceMeters: 500,
+        gradientPercent: 7.4,
+        nav: const {'instruction': 'Skręć w lewo w Cichą', 'distance_m': 90.0},
+        climb: const {'length_m': 800.0, 'gain_m': 60.0, 'avg_gradient': 7.5},
+        force: true,
+      );
+
+      final point = lastPoint(adapter);
+      // „Za 90 m w lewo w Cichą" samo w sobie mówi, gdzie ktoś jest. Filtr
+      // po stronie serwera i tak by to wyciął, ale dana, której zawodnik nie
+      // udostępnia, nie ma powodu w ogóle opuszczać telefonu.
+      expect(point['nav'], isNull);
+      expect(point['climb'], isNull);
+      expect(point['gradient_percent'], 0);
+    });
   });
 }

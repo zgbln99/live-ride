@@ -40,6 +40,14 @@ func LiveRideSetPrivacy(e *core.RequestEvent) error {
 		ShareHeartRate *bool `json:"share_heart_rate"`
 		SharePower     *bool `json:"share_power"`
 		ShareBattery   *bool `json:"share_battery"`
+
+		// Trzy osobne decyzje o lokalizacji. Każda z nich wykonana
+		// w przeglądarce byłaby warta tyle, co komentarz w kodzie — dane
+		// i tak poleciałyby po sieci.
+		LocationDelaySeconds *int  `json:"location_delay_seconds"`
+		LocationCoarse       *bool `json:"location_coarse"`
+		HideStartM           *int  `json:"hide_start_m"`
+		HideFinishM          *int  `json:"hide_finish_m"`
 	}
 	if err := e.BindBody(&data); err != nil {
 		return apis.NewBadRequestError("Failed to read request data", err)
@@ -61,6 +69,18 @@ func LiveRideSetPrivacy(e *core.RequestEvent) error {
 	}
 	if data.ShareBattery != nil {
 		participant.Set("share_battery", *data.ShareBattery)
+	}
+	if data.LocationDelaySeconds != nil {
+		participant.Set("location_delay_seconds", liveRideClampInt(*data.LocationDelaySeconds, 0, 900))
+	}
+	if data.LocationCoarse != nil {
+		participant.Set("location_coarse", *data.LocationCoarse)
+	}
+	if data.HideStartM != nil {
+		participant.Set("hide_start_m", liveRideClampInt(*data.HideStartM, 0, 5000))
+	}
+	if data.HideFinishM != nil {
+		participant.Set("hide_finish_m", liveRideClampInt(*data.HideFinishM, 0, 5000))
 	}
 
 	if err := e.App.Save(participant); err != nil {
@@ -232,4 +252,19 @@ func LiveRideMessages(e *core.RequestEvent) error {
 	}
 
 	return e.JSON(http.StatusOK, map[string]any{"messages": items})
+}
+
+// liveRideClampInt trzyma wartość z telefonu w zakresie, który ma sens.
+//
+// Nie chodzi o nieufność wobec własnej aplikacji, tylko o to, że promień
+// ukrycia liczony w setkach kilometrów wyciąłby całą jazdę i wyglądałby
+// jak zepsuty serwer.
+func liveRideClampInt(value, low, high int) int {
+	if value < low {
+		return low
+	}
+	if value > high {
+		return high
+	}
+	return value
 }

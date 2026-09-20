@@ -10,6 +10,7 @@ import '../services/app_services.dart';
 import '../widgets/lr_common.dart';
 import '../widgets/share_sheet.dart';
 import 'group_ride_sheet.dart';
+import 'live_diagnostics_sheet.dart';
 
 /// Start, join, share or end a LIVE session.
 ///
@@ -109,6 +110,8 @@ class _LiveSheetState extends State<_LiveSheet> {
       const SizedBox(height: 16),
       _privacySection(live),
       const SizedBox(height: 14),
+      _locationSection(live),
+      const SizedBox(height: 14),
       _visibilityPicker(),
       const SizedBox(height: 10),
       _expiryPicker(),
@@ -137,6 +140,12 @@ class _LiveSheetState extends State<_LiveSheet> {
         icon: const Icon(Icons.autorenew, size: 18),
         label: Text(S.newLinkAction),
         onPressed: _busy ? null : _rotate,
+      ),
+      const SizedBox(height: 10),
+      OutlinedButton.icon(
+        icon: const Icon(Icons.monitor_heart_outlined, size: 18),
+        label: Text(S.liveDiagnostics),
+        onPressed: () => showLiveDiagnosticsSheet(context, widget.services),
       ),
       const SizedBox(height: 18),
       OutlinedButton.icon(
@@ -340,6 +349,93 @@ class _LiveSheetState extends State<_LiveSheet> {
       ],
     );
   }
+
+  /// Ograniczenia lokalizacji — trzy decyzje, wszystkie egzekwowane przez
+  /// serwer.
+  ///
+  /// Każda z nich zrobiona w przeglądarce byłaby warta tyle, co komentarz
+  /// w kodzie: dane i tak poleciałyby po sieci, a „ukrycie" polegałoby na
+  /// tym, że widz ich nie kliknie. Tutaj są tylko przełączniki — decyzję
+  /// wykonuje publiczne API, które po prostu nie zna odpowiedzi.
+  Widget _locationSection(LiveSessionController live) {
+    final privacy = live.privacy;
+    if (!privacy.sharePosition) return const SizedBox.shrink();
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(S.locationPrivacy, style: LR.fieldLabel),
+        const SizedBox(height: 6),
+        _choiceRow(
+          label: S.locationDelay,
+          values: liveLocationDelayChoices,
+          selected: privacy.locationDelaySeconds,
+          labelFor: (value) => value == 0 ? S.locationDelayNone : '$value s',
+          onSelected: (value) => live.updatePrivacy(
+            privacy.copyWith(locationDelaySeconds: value),
+          ),
+        ),
+        Padding(
+          padding: const EdgeInsets.only(top: 2, bottom: 6),
+          child: Text(
+            S.locationDelayHint,
+            style: LR.body.copyWith(fontSize: 11.5, height: 1.35),
+          ),
+        ),
+        _choiceRow(
+          label: S.hideStart,
+          values: liveHideRadiusChoices,
+          selected: privacy.hideStartMeters,
+          labelFor: (value) => value == 0 ? S.hideNone : '$value m',
+          onSelected: (value) =>
+              live.updatePrivacy(privacy.copyWith(hideStartMeters: value)),
+        ),
+        const SizedBox(height: 6),
+        _choiceRow(
+          label: S.hideFinish,
+          values: liveHideRadiusChoices,
+          selected: privacy.hideFinishMeters,
+          labelFor: (value) => value == 0 ? S.hideNone : '$value m',
+          onSelected: (value) =>
+              live.updatePrivacy(privacy.copyWith(hideFinishMeters: value)),
+        ),
+        _privacyTile(
+          S.locationCoarse,
+          privacy.locationCoarse,
+          (value) =>
+              live.updatePrivacy(privacy.copyWith(locationCoarse: value)),
+          hint: S.locationCoarseHint,
+        ),
+      ],
+    );
+  }
+
+  /// Wiersz wyboru z kilku wartości. Cztery pozycje da się trafić
+  /// w rękawiczkach; suwak od zera do minuty nie.
+  Widget _choiceRow({
+    required String label,
+    required List<int> values,
+    required int selected,
+    required String Function(int) labelFor,
+    required ValueChanged<int> onSelected,
+  }) => Column(
+    crossAxisAlignment: CrossAxisAlignment.start,
+    children: [
+      Text(label, style: LR.body.copyWith(color: LR.ink, fontSize: 14)),
+      const SizedBox(height: 4),
+      Wrap(
+        spacing: 6,
+        children: [
+          for (final value in values)
+            ChoiceChip(
+              label: Text(labelFor(value)),
+              selected: selected == value,
+              onSelected: (_) => onSelected(value),
+            ),
+        ],
+      ),
+    ],
+  );
 
   Widget _privacyTile(
     String title,

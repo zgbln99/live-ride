@@ -46,6 +46,14 @@ class LiveSessionController extends ChangeNotifier {
   LiveSession? _session;
   DateTime? _lastSentAt;
   DateTime? _lastAcceptedAt;
+
+  /// Numer kolejnej próbki w tej sesji.
+  ///
+  /// Rośnie i nigdy nie maleje. Serwer odrzuca próbki o numerze nie wyższym
+  /// niż ostatnio przyjęty, więc paczka, która przyszła z opóźnieniem po
+  /// wyjeździe z tunelu, uzupełni ślad, ale nie przestawi tego, gdzie
+  /// zawodnik jest teraz.
+  int _sequence = 0;
   bool _lastPushFailed = false;
   String? _title;
   LivePrivacy _privacy = const LivePrivacy();
@@ -275,6 +283,7 @@ class LiveSessionController extends ChangeNotifier {
     _lastSentAt = null;
     _lastAcceptedAt = null;
     _lastPushFailed = false;
+    _sequence = 0;
     _messages = const [];
     _messagesFetchedAt = null;
     notifyListeners();
@@ -299,6 +308,7 @@ class LiveSessionController extends ChangeNotifier {
     _lastSentAt = null;
     _lastAcceptedAt = null;
     _lastPushFailed = false;
+    _sequence = 0;
     _isGroup = true;
     _messages = const [];
     _messagesFetchedAt = null;
@@ -315,6 +325,7 @@ class LiveSessionController extends ChangeNotifier {
     _lastSentAt = null;
     _lastAcceptedAt = null;
     _lastPushFailed = false;
+    _sequence = 0;
     _messages = const [];
     _messagesFetchedAt = null;
     _meetup = null;
@@ -360,6 +371,17 @@ class LiveSessionController extends ChangeNotifier {
 
     /// Aktualny podjazd liczony tym samym ClimbPro, co na kierownicy.
     Map<String, dynamic>? climb,
+
+    /// Prędkość i dystans z czujnika koła, gdy jest podpięty.
+    double? sensorSpeedKmh,
+    double? sensorDistanceMeters,
+
+    /// Wiek każdej danej w sekundach. Ujemny znaczy „nie mam jej wcale"
+    /// i serwer czyści wtedy znacznik, zamiast zapisywać fałszywą świeżość.
+    Map<String, double>? freshness,
+
+    /// Średnie i maksima z licznika.
+    Map<String, int>? averages,
 
     /// Pomija odczekanie między próbkami.
     ///
@@ -426,6 +448,16 @@ class LiveSessionController extends ChangeNotifier {
         'gradient_percent': _privacy.sharePosition ? gradientPercent : 0,
         'nav': _privacy.sharePosition ? nav : null,
         'climb': _privacy.sharePosition ? climb : null,
+        // Numer rosnący w obrębie sesji. Bez niego paczka, która przyszła
+        // z opóźnieniem po wyjeździe z tunelu, cofałaby zawodnika na
+        // publicznej stronie o tyle, ile trwał tunel.
+        'seq': ++_sequence,
+        if (_privacy.shareSpeed) 'sensor_speed_kmh': ?sensorSpeedKmh,
+        if (_privacy.shareSpeed) 'sensor_distance_m': ?sensorDistanceMeters,
+        'sources': _sourcesJson(),
+        'batteries': _batteriesJson(batteryPercent),
+        'freshness': ?freshness,
+        'averages': ?averages,
       });
       _lastAcceptedAt = now;
       _lastPushFailed = false;
@@ -440,4 +472,49 @@ class LiveSessionController extends ChangeNotifier {
     if (!value.isFinite) return min;
     return value.clamp(min, max);
   }
+
+  /// Skąd pochodzi która dana.
+  ///
+  /// Pole, którego zawodnik nie udostępnia, nie dostaje nawet nazwy źródła:
+  /// „WHOOP" mówi o nim tyle samo co odczyt tętna, którego zabronił.
+  Map<String, String> _sourcesJson() => {
+    'heart_rate': _privacy.shareHeartRate ? (heartRate?.sourceLabel ?? '') : '',
+    'power': _privacy.sharePower ? (_sensors?.powerDevice?.name ?? '') : '',
+    'cadence': _privacy.sharePower ? (_sensors?.cadenceDevice?.name ?? '') : '',
+    'speed': _privacy.shareSpeed ? (_sensors?.speedDevice?.name ?? '') : '',
+  };
+
+  /// Baterie telefonu i czujników.
+  ///
+  /// Jedna liczba nie wystarczy: telefon na 61% i pas HR na 4% to dwie różne
+  /// wiadomości, a druga z góry tłumaczy, dlaczego za kwadrans zniknie tętno.
+  Map<String, int> _batteriesJson(int phonePercent) {
+    if (!_privacy.shareBattery) return const {};
+    return {
+      'phone': phonePercent,
+      if (_privacy.shareHeartRate)
+        'heart_rate': heartRate?.batteryPercent ?? 0,
+      if (_privacy.sharePower)
+        'power': _sensors?.powerDevice?.batteryPercent ?? 0,
+      if (_privacy.sharePower)
+        'cadence': _sensors?.cadenceDevice?.batteryPercent ?? 0,
+      if (_privacy.shareSpeed) 'speed': _sensors?.speedDevice?.batteryPercent ?? 0,
+    };
+  }
+
+  /// Wiek danych z czujników w sekundach, liczony w telefonie.
+  ///
+  /// Ujemna wartość znaczy „nie mam tej danej wcale" i serwer czyści wtedy
+  /// znacznik. Zero znaczyłoby „przyszła w tej sekundzie" — a to zupełnie co
+  /// innego niż brak czujnika.
+  Map<String, double> sensorFreshness({required DateTime now}) {
+    double age(DateTime? at) =>
+        at == null ? -1 : now.difference(at).inMilliseconds / 1000.0;
+    return {
+      'hr_age_seconds': age(heartRate?.lastSampleAt),
+      'power_age_seconds': age(_sensors?.powerDevice?.lastValueAt),
+      'cadence_age_seconds': age(_sensors?.cadenceDevice?.lastValueAt),
+    };
+  }
+
 }

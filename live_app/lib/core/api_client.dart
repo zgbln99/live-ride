@@ -380,7 +380,7 @@ class ApiClient {
         '/live-rides/$sessionId/route',
         data: {
           if (detach) 'detach': true,
-          if (route != null) 'route': route,
+          'route': ?route,
           if (routeClientId != null && routeClientId.isNotEmpty)
             'route_client_id': routeClientId,
         },
@@ -398,6 +398,25 @@ class ApiClient {
     Map<String, dynamic> privacy,
   ) async {
     await dio.post('/live-rides/$sessionId/privacy', data: privacy);
+  }
+
+  /// Co serwer NAPRAWDĘ wie o tej jeździe.
+  ///
+  /// Aplikacja zna własne czujniki, ale nie zna stanu po drugiej stronie —
+  /// a różnica między „wysłałem" a „przyjęto" to dokładnie ta klasa usterek,
+  /// przez którą publiczna strona bywała pusta mimo działającego licznika.
+  /// Null, gdy serwer jest nieosiągalny; ekran mówi wtedy wprost, że to
+  /// łączność, a nie jazda.
+  Future<Map<String, dynamic>?> liveDiagnostics(String sessionId) async {
+    try {
+      final response = await dio.get<dynamic>(
+        '/live-rides/$sessionId/diagnostics',
+      );
+      final data = response.data;
+      return data is Map ? Map<String, dynamic>.from(data) : null;
+    } on DioException {
+      return null;
+    }
   }
 
   Future<void> setLiveMeetup(

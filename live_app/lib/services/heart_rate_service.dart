@@ -126,6 +126,19 @@ class HeartRateService extends ChangeNotifier {
   String? get lastError => _lastError;
   String? get connectedId => _connected?.uuid.toString();
   String? get connectedName => _connectedName;
+
+  /// Krótka nazwa źródła tętna dla telemetrii i diagnostyki.
+  ///
+  /// „HR 143" z opaski WHOOP i „HR 143" z pasa na klatę to nie ta sama
+  /// wiarygodność, a z samej liczby nie da się ich odróżnić. WHOOP dostaje
+  /// własną etykietę, bo to jedyne urządzenie, które wymaga włączenia
+  /// nadawania w cudzej aplikacji — i jedyne, przy którym „brak tętna"
+  /// najczęściej znaczy „zapomniałeś tego zrobić".
+  String get sourceLabel {
+    final name = _connectedName?.trim() ?? '';
+    if (name.isEmpty) return '';
+    return name.toLowerCase().contains('whoop') ? 'WHOOP' : name;
+  }
   String? get rememberedId => _rememberedId;
   String? get rememberedName => _rememberedName;
   List<int> get history => List.unmodifiable(_history);
