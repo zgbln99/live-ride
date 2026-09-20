@@ -16,6 +16,8 @@ import 'garage_service.dart';
 import 'health_service.dart';
 import 'geocoding_service.dart';
 import 'gpx_service.dart';
+import 'apple_watch_service.dart';
+import 'heart_rate_router.dart';
 import 'heart_rate_service.dart';
 import 'live_activity_service.dart';
 import 'live_service.dart';
@@ -67,6 +69,8 @@ class AppServices {
     required this.weather,
     required this.routeWeather,
     required this.heartRate,
+    required this.heartRateRouter,
+    required this.watch,
     required this.sensors,
     required this.alerts,
     required this.race,
@@ -98,9 +102,14 @@ class AppServices {
     final profile = ProfileService();
     final heartRate = HeartRateService(central: bluetooth);
     final settings = SettingsDao(db);
+    final watch = AppleWatchService();
+    // Jeden arbiter dla wszystkich źródeł tętna. Bez niego pas i zegarek
+    // dopisywałyby do licznika dwie różne wartości tego samego pomiaru.
+    final heartRateRouter = HeartRateRouter(ble: heartRate, watch: watch);
     final sensors = SensorHub(
       central: bluetooth,
       heartRate: heartRate,
+      heartRateRouter: heartRateRouter,
       settings: settings,
     );
     final alerts = AlertController(settings: settings);
@@ -154,6 +163,8 @@ class AppServices {
       weather: weather,
       routeWeather: RouteWeatherService(),
       heartRate: heartRate,
+      heartRateRouter: heartRateRouter,
+      watch: watch,
       sensors: sensors,
       alerts: alerts,
       race: race,
@@ -170,6 +181,7 @@ class AppServices {
         location: location,
         storage: rides,
         heartRate: heartRate,
+        heartRateRouter: heartRateRouter,
         sensors: sensors,
         alerts: alerts,
         garage: garage,
@@ -235,6 +247,12 @@ class AppServices {
   /// Prognoza wzdłuż trasy — używana przez briefing, nie przez komputer jazdy.
   final RouteWeatherService routeWeather;
   final HeartRateService heartRate;
+
+  /// Arbiter źródeł tętna: pas, WHOOP, zegarek.
+  final HeartRateRouter heartRateRouter;
+
+  /// Tętno na żywo z Apple Watch, gdy zegarek ma Live Ride.
+  final AppleWatchService watch;
 
   /// Sensory rowerowe: kadencja, prędkość, moc, trenażer.
   final SensorHub sensors;

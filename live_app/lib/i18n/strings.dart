@@ -512,6 +512,61 @@ class Strings {
       'czyta i nic nie wysyła sam z siebie.';
   String get healthAutoExport => 'Zapisuj przejazdy automatycznie';
   String get healthGrant => 'Udziel zgody';
+
+  // --- Apple Health: co dokładnie czytamy i zapisujemy ------------------
+  //
+  // Wymieniamy to wprost, bo okno zgody iOS pokazuje listę raz i znika.
+  // Ekran, na którym widać ją zawsze, jest jedynym miejscem, gdzie da się
+  // sprawdzić, co aplikacja naprawdę robi z danymi zdrowotnymi.
+  String get healthReadSection => 'ODCZYT';
+  String get healthWriteSection => 'ZAPIS';
+  String get healthReadToggle => 'Pozwól czytać z Apple Health';
+  String get healthReadHint =>
+      'Tętno, tętno spoczynkowe, masa ciała, treningi i dystans rowerowy. '
+      'Dane zostają na telefonie — nic nie jedzie na serwer.';
+  String get healthAdvancedToggle => 'Dane dodatkowe (HRV)';
+  String get healthAdvancedHint =>
+      'Tylko jeśli chcesz. Do jazdy nie są potrzebne.';
+  String get healthPartial => 'Część danych nie działa';
+  String get healthReadHeartRate => 'Tętno';
+  String get healthReadResting => 'Tętno spoczynkowe';
+  String get healthReadWeight => 'Masa ciała';
+  String get healthReadWorkouts => 'Treningi';
+  String get healthReadDistance => 'Dystans rowerowy';
+  String get healthReadEnergy => 'Energia';
+  String get healthWriteWorkout => 'Trening rowerowy';
+  String get healthWriteDistance => 'Dystans';
+  String get healthWriteEnergy => 'Energia';
+  String get healthWriteRoute => 'Trasa GPS treningu';
+  String get healthStateWorking => 'działa';
+  String get healthStateRequested => 'brak danych do sprawdzenia';
+  String get healthStateDenied => 'odmowa';
+  String get healthStateNotRequested => 'niepytane';
+  String get healthReadUnknownHint =>
+      'iOS nie mówi aplikacjom, czy wolno im czytać — sprawdzamy to próbą '
+      'odczytu. „Brak danych do sprawdzenia" znaczy, że zgoda może być, '
+      'ale w Health nic takiego nie ma.';
+  String healthWeightSuggestion(String kilograms, String when) =>
+      'Użyć $kilograms kg z Apple Health? (pomiar $when)';
+  String get healthUseWeight => 'UŻYJ';
+  String get healthKeepWeight => 'ZOSTAW';
+
+  // --- Apple Watch -------------------------------------------------------
+  String get watchTitle => 'Apple Watch';
+  String get watchLiveHeartRate => 'Tętno na żywo';
+  String get watchReady => 'Gotowy';
+  String get watchStreaming => 'Nadaje tętno';
+  String get watchNotPaired => 'Brak sparowanego zegarka';
+  String get watchNotInstalled => 'Brak Live Ride na zegarku';
+  String get watchUnknown => 'Nie sprawdzono';
+  String get watchHint =>
+      'Tętno na żywo wymaga aplikacji Live Ride na zegarku. Apple Health '
+      'sam w sobie daje tylko pomiary historyczne, nie bieżące.';
+
+  // --- źródło tętna ------------------------------------------------------
+  String get heartRateSourceTitle => 'ŹRÓDŁO TĘTNA';
+  String get heartRateSourceAuto => 'Automatycznie';
+  String get heartRateNoSource => 'Brak podłączonego pomiaru tętna.';
   String get healthReady => 'Gotowe do zapisu';
   String get healthDenied => 'Brak zgody na zapis';
   String get healthNotInstalled =>

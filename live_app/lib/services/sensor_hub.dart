@@ -7,6 +7,7 @@ import 'package:flutter/foundation.dart';
 import '../data/settings_dao.dart';
 import '../models/sensor_device.dart';
 import 'ble_parsers.dart';
+import 'heart_rate_router.dart';
 import 'heart_rate_service.dart';
 
 /// Odczyt ze wszystkich podłączonych sensorów w jednym miejscu.
@@ -122,11 +123,19 @@ class SensorHub extends ChangeNotifier {
   SensorHub({
     CentralManager? central,
     required HeartRateService heartRate,
+    HeartRateRouter? heartRateRouter,
     SettingsDao? settings,
   }) : _central = central ?? CentralManager(),
        _heartRate = heartRate,
+       _router = heartRateRouter,
        _settings = settings {
-    _heartRate.addListener(_onHeartRate);
+    // Gdy jest arbiter źródeł, to ON mówi, jakie jest tętno. Słuchanie obu
+    // naraz dawałoby dwie różne wartości w tej samej migawce.
+    if (_router != null) {
+      _router.addListener(_onHeartRate);
+    } else {
+      _heartRate.addListener(_onHeartRate);
+    }
   }
 
   static const String settingsKey = 'sensor_sources';
@@ -142,6 +151,7 @@ class SensorHub extends ChangeNotifier {
 
   final CentralManager _central;
   final HeartRateService _heartRate;
+  final HeartRateRouter? _router;
   final SettingsDao? _settings;
 
   final Map<String, SensorDevice> _discovered = {};
@@ -604,8 +614,15 @@ class SensorHub extends ChangeNotifier {
     return changed;
   }
 
+  /// Skąd pochodzi tętno w migawce. Puste, gdy nikt go nie nadaje.
+  String get heartRateSource =>
+      _router?.sourceLabel ?? _heartRate.sourceLabel;
+
+  /// Kiedy przyszedł ostatni odczyt tętna.
+  DateTime? get heartRateAt => _router?.lastSampleAt ?? _heartRate.lastSampleAt;
+
   void _onHeartRate() {
-    final bpm = _heartRate.latestBpm;
+    final bpm = _router?.latestBpm ?? _heartRate.latestBpm;
     if (bpm == _snapshot.heartRateBpm) return;
     _snapshot = _snapshot.copyWith(heartRateBpm: bpm, at: DateTime.now());
     notifyListeners();
@@ -657,7 +674,7 @@ class SensorHub extends ChangeNotifier {
       (entry) => entry.device.capabilities.speed,
     );
     _snapshot = SensorSnapshot(
-      heartRateBpm: _heartRate.latestBpm,
+      heartRateBpm: _router?.latestBpm ?? _heartRate.latestBpm,
       powerWatts: hasPower ? _snapshot.powerWatts : null,
       pedalBalancePercent: hasPower ? _snapshot.pedalBalancePercent : null,
       cadenceRpm: hasCadence ? _snapshot.cadenceRpm : null,
@@ -706,6 +723,7 @@ class SensorHub extends ChangeNotifier {
 
   @override
   Future<void> dispose() async {
+    _router?.removeListener(_onHeartRate);
     _heartRate.removeListener(_onHeartRate);
     for (final timer in _retryTimers.values) {
       timer.cancel();

@@ -232,6 +232,38 @@ void main() {
         expect(ruby, contains(name), reason: '\$name nie wchodzi do targetu');
       }
     });
+
+    test('każdy plik zegarka trafia do targetu watchOS', () {
+      final bootstrap = File('bootstrap.sh').readAsStringSync();
+      final ruby = File(
+        'ios_native/scripts/add_watch_target.rb',
+      ).readAsStringSync();
+
+      for (final file in Directory('ios_native/Watch').listSync()) {
+        final name = file.uri.pathSegments.last;
+        expect(bootstrap, contains(name), reason: '\$name nie jest kopiowany');
+        expect(ruby, contains(name), reason: '\$name nie wchodzi do targetu');
+      }
+      expect(bootstrap, contains('add_watch_target.rb'));
+    });
+
+    test('uprawnienia HealthKit trafiają do projektu', () {
+      // Bez pliku uprawnień KAŻDE wywołanie HealthKit jest odrzucane na
+      // prawdziwym telefonie — niezależnie od Info.plist i od tego, co
+      // zawodnik kliknął w oknie zgody. `flutter create` go nie tworzy.
+      final bootstrap = File('bootstrap.sh').readAsStringSync();
+      expect(bootstrap, contains('Runner.entitlements'));
+      expect(bootstrap, contains('CODE_SIGN_ENTITLEMENTS'));
+
+      final entitlements = File(
+        'ios_native/Runner/Runner.entitlements',
+      ).readAsStringSync();
+      expect(entitlements, contains('com.apple.developer.healthkit'));
+
+      // Deklaracja z Info.plist musi mówić prawdę o tym, co czytamy.
+      expect(bootstrap, contains('NSHealthShareUsageDescription'));
+      expect(bootstrap, isNot(contains('does not read health data')));
+    });
   });
 
   test('the recorder, not a screen, owns the activity lifecycle', () {

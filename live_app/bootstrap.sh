@@ -8,9 +8,13 @@ trap 'rm -rf "$TMP" lib.restored test.restored' EXIT
 # The Lock Screen Live Activity needs an extra Xcode target. Skip it with
 # --no-live-activity if you want the plainest possible project.
 LIVE_ACTIVITY=1
+# Tętno na żywo z Apple Watch wymaga własnego targetu watchOS. Pomiń go, gdy
+# budujesz najprostszy możliwy projekt albo nie masz zegarka.
+WATCH=1
 for arg in "$@"; do
   case "$arg" in
     --no-live-activity) LIVE_ACTIVITY=0 ;;
+    --no-watch) WATCH=0 ;;
     *) echo "Unknown option: $arg" >&2; exit 2 ;;
   esac
 done
@@ -51,7 +55,7 @@ cp "$TMP/analysis_options.yaml" analysis_options.yaml
 
 python3 <<'PY'
 from pathlib import Path
-import plistlib, re
+import plistlib, re, shutil
 
 plist_path = Path('ios/Runner/Info.plist')
 with plist_path.open('rb') as f:
@@ -62,12 +66,13 @@ p['NSLocationWhenInUseUsageDescription'] = 'Live Ride uses your location for cyc
 p['NSLocationAlwaysAndWhenInUseUsageDescription'] = 'Live Ride uses your location in the background so navigation and LIVE tracking continue with the screen locked.'
 p['NSBluetoothAlwaysUsageDescription'] = 'Live Ride uses Bluetooth to receive live heart rate from WHOOP and other heart-rate sensors.'
 p['NSHealthUpdateUsageDescription'] = (
-    'Live Ride saves finished rides to Apple Health as cycling workouts, '
-    'only when you ask it to.'
+    'Live Ride saves finished rides to Apple Health as cycling workouts '
+    'with distance, energy and the GPS route, only when you ask it to.'
 )
 p['NSHealthShareUsageDescription'] = (
-    'Live Ride does not read health data; this entry is required by iOS '
-    'whenever an app links HealthKit.'
+    'Live Ride reads your heart rate, resting heart rate, body mass and '
+    'cycling workouts from Apple Health to show them on the ride computer '
+    'and to work out your ride statistics. It never leaves your phone.'
 )
 p['NSMotionUsageDescription'] = (
     'Live Ride uses motion data to keep speed and distance accurate and to '
@@ -113,15 +118,37 @@ p['LSApplicationQueriesSchemes'] = sorted(
 with plist_path.open('wb') as f:
     plistlib.dump(p, f)
 
+# HealthKit potrzebuje pliku uprawnień, którego `flutter create` nie robi.
+# Bez niego wywołania HealthKit są odrzucane na prawdziwym telefonie mimo
+# poprawnego Info.plist i mimo zaakceptowanego okna zgody.
+shutil.copy('ios_native/Runner/Runner.entitlements',
+            'ios/Runner/Runner.entitlements')
+
 pbx = Path('ios/Runner.xcodeproj/project.pbxproj')
+APP_ID = 'pl.marekpiatak.liveride'
 lines = []
 for line in pbx.read_text().splitlines():
     if 'PRODUCT_BUNDLE_IDENTIFIER =' in line:
         indent = line[:len(line) - len(line.lstrip())]
+        value = line.split('=', 1)[1].strip().rstrip(';').strip('"')
         if 'RunnerTests' in line:
-            line = f'{indent}PRODUCT_BUNDLE_IDENTIFIER = pl.marekpiatak.liveride.RunnerTests;'
+            line = f'{indent}PRODUCT_BUNDLE_IDENTIFIER = {APP_ID}.RunnerTests;'
+        elif value.startswith(f'{APP_ID}.'):
+            # Identyfikator rozszerzenia albo zegarka, nadany przez skrypty
+            # dokładające te targety. Spłaszczenie go tutaj zrobiłoby z widżetu
+            # drugą kopię aplikacji o tym samym identyfikatorze — i Xcode
+            # odmówiłby podpisania obu.
+            pass
         else:
-            line = f'{indent}PRODUCT_BUNDLE_IDENTIFIER = pl.marekpiatak.liveride;'
+            line = f'{indent}PRODUCT_BUNDLE_IDENTIFIER = {APP_ID};'
+            # Każda konfiguracja Runnera dostaje ścieżkę do uprawnień.
+            # Wpis testów pomijamy: cel testowy nie podpisuje się HealthKitem.
+            lines.append(line)
+            line = f'{indent}CODE_SIGN_ENTITLEMENTS = Runner/Runner.entitlements;'
+    # Uruchomiony drugi raz bootstrap nie może dołożyć drugiej takiej linii.
+    if 'CODE_SIGN_ENTITLEMENTS = Runner/Runner.entitlements;' in line and lines \
+            and lines[-1].strip() == line.strip():
+        continue
     lines.append(line)
 pbx.write_text('\n'.join(lines) + '\n')
 
@@ -182,8 +209,6 @@ if 'flutter_web_auth_2.CallbackActivity' not in text:
 manifest.write_text(text)
 
 # --- native iOS sources -------------------------------------------------
-import shutil
-
 native = Path('ios_native')
 if native.exists():
     Path('ios/LiveRideWidgets').mkdir(parents=True, exist_ok=True)
@@ -201,6 +226,15 @@ if native.exists():
     # aplikacja tworzy aktywność i to ona ją aktualizuje.
     shutil.copy(native / 'Runner' / 'LiveRideActivityUpdater.swift',
                 Path('ios/Runner/LiveRideActivityUpdater.swift'))
+    # Most do zegarka należy do aplikacji i istnieje nawet wtedy, gdy target
+    # watchOS nie powstał — wtedy po prostu odpowiada „brak zegarka".
+    shutil.copy(native / 'Runner' / 'LiveRideWatchBridge.swift',
+                Path('ios/Runner/LiveRideWatchBridge.swift'))
+    if (native / 'Watch').exists():
+        Path('ios/LiveRideWatch').mkdir(parents=True, exist_ok=True)
+        for name in ['LiveRideWatchApp.swift', 'WatchWorkoutSession.swift',
+                     'Info.plist', 'LiveRideWatch.entitlements']:
+            shutil.copy(native / 'Watch' / name, Path('ios/LiveRideWatch') / name)
 
 # --- register the bridge in AppDelegate ---------------------------------
 delegate_path = Path('ios/Runner/AppDelegate.swift')
@@ -214,7 +248,9 @@ if 'LiveRideActivityBridge' not in delegate:
     delegate = re.sub(
         r'(@objc class AppDelegate: [^\n]*\{\n)',
         r'\1  /// Live Ride: keeps the Lock Screen activity channel alive.\n'
-        r'  private var liveActivityBridge: LiveRideActivityBridge?\n\n',
+        r'  private var liveActivityBridge: LiveRideActivityBridge?\n'
+        r'  /// Live Ride: keeps the Apple Watch heart-rate channel alive.\n'
+        r'  private var watchBridge: LiveRideWatchBridge?\n\n',
         delegate,
         count=1,
     )
@@ -230,6 +266,9 @@ if 'LiveRideActivityBridge' not in delegate:
             '      liveActivityBridge = LiveRideActivityBridge.register(\n'
             '        with: registrar.messenger()\n'
             '      )\n'
+            '      watchBridge = LiveRideWatchBridge.register(\n'
+            '        with: registrar.messenger()\n'
+            '      )\n'
             '    }',
         )
     else:
@@ -241,11 +280,24 @@ if 'LiveRideActivityBridge' not in delegate:
             '      liveActivityBridge = LiveRideActivityBridge.register(\n'
             '        with: controller.binaryMessenger\n'
             '      )\n'
+            '      watchBridge = LiveRideWatchBridge.register(\n'
+            '        with: controller.binaryMessenger\n'
+            '      )\n'
             '    }\n'
             '    return started',
         )
     delegate_path.write_text(delegate)
 PY
+
+if [ "$WATCH" = "1" ]; then
+  if ruby -e 'require "xcodeproj"' >/dev/null 2>&1; then
+    ruby ios_native/scripts/add_watch_target.rb ios pl.marekpiatak.liveride
+  else
+    echo
+    echo "WARNING: the 'xcodeproj' gem is missing, so the Apple Watch target"
+    echo "was not added. Live heart rate from the watch needs it."
+  fi
+fi
 
 if [ "$LIVE_ACTIVITY" = "1" ]; then
   if ruby -e 'require "xcodeproj"' >/dev/null 2>&1; then
@@ -269,6 +321,10 @@ echo "            wake lock, Live Activities, liveride:// callback for Spotify."
 if [ "$LIVE_ACTIVITY" = "1" ]; then
   echo "Widget extension: pl.marekpiatak.liveride.LiveRideWidgets (iOS 16.2+)"
 fi
+if [ "$WATCH" = "1" ]; then
+  echo "Watch app: pl.marekpiatak.liveride.watchkitapp (watchOS 9+)"
+fi
+echo "HealthKit: Runner/Runner.entitlements (read + write)"
 echo "Next: open ios/Runner.xcworkspace, choose your Personal Team for BOTH"
 echo "      targets, then flutter run --release"
 if [ "$LIVE_ACTIVITY" = "1" ]; then

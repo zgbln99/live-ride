@@ -11,6 +11,7 @@ import '../models/navigation_plan.dart';
 import '../models/ride_metrics.dart';
 import '../models/ride_record.dart';
 import '../models/ride_route.dart';
+import 'heart_rate_router.dart';
 import 'heart_rate_service.dart';
 import 'live_activity_service.dart';
 import 'live_service.dart';
@@ -54,6 +55,7 @@ class RideRecorder extends ChangeNotifier {
     required this.location,
     required this.storage,
     required this.heartRate,
+    this.heartRateRouter,
     required this.sensors,
     required this.alerts,
     required this.garage,
@@ -74,6 +76,10 @@ class RideRecorder extends ChangeNotifier {
   final LocationService location;
   final RideStorageService storage;
   final HeartRateService heartRate;
+
+  /// Arbiter źródeł tętna. Null w starszych wywołaniach i w testach, które
+  /// podają sam pas.
+  final HeartRateRouter? heartRateRouter;
   final SensorHub sensors;
   final AlertController alerts;
   final GarageService garage;
@@ -209,10 +215,12 @@ class RideRecorder extends ChangeNotifier {
     );
     notifyListeners();
 
-    _heartRateSub = heartRate.bpm.listen((bpm) {
+    // Arbiter źródeł, gdy jest: inaczej pas i zegarek dopisywałyby do
+    // licznika dwie różne wartości tego samego tętna.
+    _heartRateSub = (heartRateRouter?.bpm ?? heartRate.bpm).listen((bpm) {
       _accumulator.addHeartRate(bpm);
     });
-    final currentBpm = heartRate.latestBpm;
+    final currentBpm = heartRateRouter?.latestBpm ?? heartRate.latestBpm;
     if (currentBpm != null) _accumulator.addHeartRate(currentBpm);
 
     // Kadencja i moc idą prosto z sensorów do akumulatora — rejestrator jest
@@ -404,6 +412,10 @@ class RideRecorder extends ChangeNotifier {
       // Próby na segmentach zapisują się razem z przejazdem, żeby rekord
       // i przejazd, w którym padł, zawsze wskazywały na siebie nawzajem.
       await segments.storeRuns(segments.matcher.finished, rideId: ride.id);
+      // Apple Health razem z trasą GPS — ale tylko wtedy, gdy zawodnik
+      // włączył automatyczny zapis. Dane zdrowotne nie wychodzą z telefonu
+      // z własnej inicjatywy.
+      unawaited(health.exportIfEnabled(ride, track: ride.points.map((p) => p.geo).toList()));
     }
 
     // Tryb wyścigu nie ma prawa przeżyć przejazdu i zostawić telefonu

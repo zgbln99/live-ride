@@ -89,7 +89,11 @@ runner_group = project.main_group['Runner'] || project.main_group
 [
   ['RideActivityAttributes.swift', File.join(ios_dir, 'Runner', 'RideActivityAttributes.swift')],
   ['LiveRideActivityBridge.swift', File.join(ios_dir, 'Runner', 'LiveRideActivityBridge.swift')],
-  ['LiveRideActivityUpdater.swift', File.join(ios_dir, 'Runner', 'LiveRideActivityUpdater.swift')]
+  ['LiveRideActivityUpdater.swift', File.join(ios_dir, 'Runner', 'LiveRideActivityUpdater.swift')],
+  # Most do zegarka należy do aplikacji niezależnie od tego, czy target
+  # watchOS w ogóle powstał: AppDelegate odwołuje się do niego zawsze, więc
+  # pominięty tutaj psułby build przy `bootstrap.sh --no-watch`.
+  ['LiveRideWatchBridge.swift', File.join(ios_dir, 'Runner', 'LiveRideWatchBridge.swift')]
 ].each do |name, path|
   abort "Missing #{path}" unless File.exist?(path)
   already = runner.source_build_phase.files.any? do |file|

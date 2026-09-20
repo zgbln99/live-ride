@@ -1,0 +1,29 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+	<!--
+	  Bez tego wpisu KAŻDE wywołanie HealthKit kończy się odmową na
+	  prawdziwym telefonie, niezależnie od tego, co jest w Info.plist i co
+	  odpowie okno zgody. To była pierwsza przyczyna, dla której integracja
+	  z Apple Health „nie działała": projekt iOS powstaje z `flutter create`,
+	  a ten nie tworzy żadnego pliku uprawnień.
+	-->
+	<key>com.apple.developer.healthkit</key>
+	<true/>
+	<!--
+	  Puste, a nie brakujące: pusta tablica znaczy „zwykły HealthKit, bez
+	  danych klinicznych". Dopisanie tu czegokolwiek uruchamia osobną ścieżkę
+	  przeglądu w App Store, której ta aplikacja nie potrzebuje.
+	-->
+	<key>com.apple.developer.healthkit.access</key>
+	<array/>
+	<!--
+	  Zegarek nadaje tętno do telefonu przez WatchConnectivity, a nie przez
+	  HealthKit, ale sesja treningowa na zegarku i tak wymaga tej grupy
+	  uprawnień po stronie aplikacji towarzyszącej.
+	-->
+	<key>com.apple.developer.healthkit.background-delivery</key>
+	<true/>
+</dict>
+</plist>

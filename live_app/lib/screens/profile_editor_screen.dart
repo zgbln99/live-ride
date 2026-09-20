@@ -1,9 +1,13 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 
+import '../core/formatters.dart';
 import '../core/lr_theme.dart';
 import '../i18n/strings.dart';
 import '../models/rider_profile.dart';
 import '../services/app_services.dart';
+import '../services/health_service.dart';
 import '../widgets/lr_common.dart';
 
 /// Dane zawodnika: kim jest i czym da się liczyć strefy.
@@ -68,6 +72,62 @@ class _ProfileEditorScreenState extends State<ProfileEditorScreen> {
     super.dispose();
   }
 
+  /// Masa ciała z Apple Health — jako PROPOZYCJA.
+  ///
+  /// Waga wchodzi do W/kg i do szacunku kalorii, więc różnica dwudziestu
+  /// kilogramów przestawia wszystkie te liczby. Podmiana po cichu znaczyłaby,
+  /// że zawodnik pewnego dnia widzi inne wartości i nie wie dlaczego.
+  HealthSuggestion? _weightSuggestion;
+
+  @override
+  void initState() {
+    super.initState();
+    unawaited(_loadWeightSuggestion());
+  }
+
+  Future<void> _loadWeightSuggestion() async {
+    final suggestion = await _services.health.latestBodyMass();
+    if (!mounted || suggestion == null) return;
+    final current = _profile.weightKg;
+    // Nie zawracamy głowy propozycją, która i tak jest tą samą liczbą.
+    if (current != null && (current - suggestion.kilograms).abs() < 0.3) return;
+    setState(() => _weightSuggestion = suggestion);
+  }
+
+  Widget _healthWeightCard(HealthSuggestion suggestion) => LrPanel(
+    child: Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        Text(
+          S.healthWeightSuggestion(
+            suggestion.kilograms.toStringAsFixed(1).replaceAll('.', ','),
+            Fmt.date(suggestion.measuredAt),
+          ),
+          style: LR.body.copyWith(fontSize: 12.5, height: 1.4),
+        ),
+        const SizedBox(height: 8),
+        Row(
+          children: [
+            Expanded(
+              child: FilledButton(
+                onPressed: () => setState(() {
+                  _weight.text = suggestion.kilograms.toStringAsFixed(1);
+                  _weightSuggestion = null;
+                }),
+                child: Text(S.healthUseWeight),
+              ),
+            ),
+            const SizedBox(width: 10),
+            TextButton(
+              onPressed: () => setState(() => _weightSuggestion = null),
+              child: Text(S.healthKeepWeight),
+            ),
+          ],
+        ),
+      ],
+    ),
+  );
+
   Future<void> _save() async {
     double? number(TextEditingController controller) =>
         double.tryParse(controller.text.trim().replaceAll(',', '.'));
@@ -131,6 +191,10 @@ class _ProfileEditorScreenState extends State<ProfileEditorScreen> {
             padding: const EdgeInsets.only(bottom: 8),
           ),
           Text(S.physiologyHint, style: LR.body.copyWith(fontSize: 12.5)),
+          if (_weightSuggestion != null) ...[
+            const SizedBox(height: 10),
+            _healthWeightCard(_weightSuggestion!),
+          ],
           const SizedBox(height: 12),
           Row(
             children: [

@@ -422,7 +422,9 @@ class LiveSessionController extends ChangeNotifier {
         // Prywatność rozstrzyga serwer przy wydawaniu migawki, ale pola,
         // których zawodnik nie udostępnia, w ogóle nie opuszczają telefonu.
         'heart_rate_bpm': _privacy.shareHeartRate
-            ? (heartRate?.latestBpm ?? 0)
+            // Z arbitra, nie z samego pasa: zegarek jest równie prawdziwym
+            // źródłem i ma trafiać na publiczną stronę tak samo.
+            ? (_sensors?.snapshot.heartRateBpm ?? heartRate?.latestBpm ?? 0)
             : 0,
         'cadence_rpm': _privacy.sharePower
             ? (_sensors?.snapshot.cadenceRpm?.round() ?? 0)
@@ -473,12 +475,22 @@ class LiveSessionController extends ChangeNotifier {
     return value.clamp(min, max);
   }
 
+  /// Nazwa źródła tętna — z arbitra, gdy jest, inaczej z samego pasa.
+  ///
+  /// Arbiter wie o zegarku, pas nie. Bez tego „Apple Watch" nigdy nie
+  /// dotarłoby na publiczną stronę, mimo że to z niego szło tętno.
+  String get _heartRateSource =>
+      _sensors?.heartRateSource ?? heartRate?.sourceLabel ?? '';
+
+  DateTime? get _heartRateAt =>
+      _sensors?.heartRateAt ?? heartRate?.lastSampleAt;
+
   /// Skąd pochodzi która dana.
   ///
   /// Pole, którego zawodnik nie udostępnia, nie dostaje nawet nazwy źródła:
   /// „WHOOP" mówi o nim tyle samo co odczyt tętna, którego zabronił.
   Map<String, String> _sourcesJson() => {
-    'heart_rate': _privacy.shareHeartRate ? (heartRate?.sourceLabel ?? '') : '',
+    'heart_rate': _privacy.shareHeartRate ? _heartRateSource : '',
     'power': _privacy.sharePower ? (_sensors?.powerDevice?.name ?? '') : '',
     'cadence': _privacy.sharePower ? (_sensors?.cadenceDevice?.name ?? '') : '',
     'speed': _privacy.shareSpeed ? (_sensors?.speedDevice?.name ?? '') : '',
@@ -511,7 +523,7 @@ class LiveSessionController extends ChangeNotifier {
     double age(DateTime? at) =>
         at == null ? -1 : now.difference(at).inMilliseconds / 1000.0;
     return {
-      'hr_age_seconds': age(heartRate?.lastSampleAt),
+      'hr_age_seconds': age(_heartRateAt),
       'power_age_seconds': age(_sensors?.powerDevice?.lastValueAt),
       'cadence_age_seconds': age(_sensors?.cadenceDevice?.lastValueAt),
     };

@@ -9,6 +9,9 @@ import '../i18n/strings.dart';
 import '../models/integration.dart';
 import '../models/ride_record.dart';
 import '../services/app_services.dart';
+import 'package:health/health.dart';
+
+import '../services/apple_watch_service.dart';
 import '../services/health_service.dart';
 import '../services/strava_service.dart';
 import '../widgets/lr_common.dart';
@@ -52,7 +55,11 @@ class _IntegrationsScreenState extends State<IntegrationsScreen> {
     final services = AppServices.of(context);
 
     return AnimatedBuilder(
-      animation: Listenable.merge([services.strava, services.health]),
+      animation: Listenable.merge([
+        services.strava,
+        services.health,
+        services.watch,
+      ]),
       builder: (context, _) => Scaffold(
         appBar: AppBar(title: Text(S.exportAndSync)),
         body: ListView(
@@ -97,6 +104,9 @@ class _IntegrationsScreenState extends State<IntegrationsScreen> {
               padding: const EdgeInsets.only(bottom: 8),
             ),
             _healthPanel(services.health),
+            const SizedBox(height: 18),
+            LrSectionHeader(title: S.watchTitle),
+            _watchPanel(services.watch),
             const SizedBox(height: 22),
 
             for (final provider in [
@@ -260,17 +270,101 @@ class _IntegrationsScreenState extends State<IntegrationsScreen> {
         Text(
           switch (health.status) {
             HealthStatus.ready => S.healthReady,
+            HealthStatus.partial => S.healthPartial,
             HealthStatus.denied => S.healthDenied,
             HealthStatus.notInstalled => S.healthNotInstalled,
             HealthStatus.unsupported => S.healthUnsupported,
             HealthStatus.unknown => S.checking,
           },
-          style: LR
-              .fieldValue(14)
-              .copyWith(color: health.isReady ? LR.go : LR.inkSoft),
+          style: LR.fieldValue(14).copyWith(
+            color: switch (health.status) {
+              HealthStatus.ready => LR.go,
+              HealthStatus.partial => LR.alert,
+              HealthStatus.denied => LR.alert,
+              _ => LR.inkSoft,
+            },
+          ),
         ),
-        if (health.status == HealthStatus.denied ||
-            health.status == HealthStatus.unknown) ...[
+        // Konkretny powód zamiast „nie udało się". Komunikat platformy jest
+        // jedyną rzeczą, która odróżnia brak zgody od braku HealthKitu na
+        // tym urządzeniu.
+        if (health.lastError != null && health.lastError!.isNotEmpty) ...[
+          const SizedBox(height: 4),
+          Text(
+            health.lastError!,
+            style: LR.body.copyWith(fontSize: 11.5, color: LR.alert),
+          ),
+        ],
+        if (health.status != HealthStatus.unsupported &&
+            health.status != HealthStatus.notInstalled) ...[
+          const SizedBox(height: 14),
+          Text(S.healthWriteSection, style: LR.fieldLabel),
+          const SizedBox(height: 4),
+          _healthLine(S.healthWriteWorkout, health.canWrite),
+          _healthLine(S.healthWriteDistance, health.canWrite),
+          _healthLine(S.healthWriteEnergy, health.canWrite),
+          // Trasa treningu wymaga JEDNEGO I DRUGIEGO: zapisu, bo ją
+          // dopisujemy, i odczytu, bo bez odczytania świeżo zapisanego
+          // treningu nie znamy jego identyfikatora, a HealthKit go wymaga.
+          _healthLine(
+            S.healthWriteRoute,
+            health.canWrite && health.readEnabled,
+          ),
+
+          const SizedBox(height: 14),
+          Text(S.healthReadSection, style: LR.fieldLabel),
+          SwitchListTile(
+            contentPadding: EdgeInsets.zero,
+            dense: true,
+            title: Text(
+              S.healthReadToggle,
+              style: LR.body.copyWith(color: LR.ink, fontSize: 14),
+            ),
+            subtitle: Text(
+              S.healthReadHint,
+              style: LR.body.copyWith(fontSize: 11.5),
+            ),
+            value: health.readEnabled,
+            onChanged: health.setReadEnabled,
+          ),
+          if (health.readEnabled) ...[
+            _healthReadLine(S.healthReadHeartRate, health, HealthDataType.HEART_RATE),
+            _healthReadLine(
+              S.healthReadResting,
+              health,
+              HealthDataType.RESTING_HEART_RATE,
+            ),
+            _healthReadLine(S.healthReadWeight, health, HealthDataType.WEIGHT),
+            _healthReadLine(S.healthReadWorkouts, health, HealthDataType.WORKOUT),
+            _healthReadLine(
+              S.healthReadDistance,
+              health,
+              HealthDataType.DISTANCE_CYCLING,
+            ),
+            Padding(
+              padding: const EdgeInsets.only(top: 6),
+              child: Text(
+                S.healthReadUnknownHint,
+                style: LR.body.copyWith(fontSize: 11, height: 1.35),
+              ),
+            ),
+            SwitchListTile(
+              contentPadding: EdgeInsets.zero,
+              dense: true,
+              title: Text(
+                S.healthAdvancedToggle,
+                style: LR.body.copyWith(color: LR.ink, fontSize: 14),
+              ),
+              subtitle: Text(
+                S.healthAdvancedHint,
+                style: LR.body.copyWith(fontSize: 11.5),
+              ),
+              value: health.advancedEnabled,
+              onChanged: health.setAdvancedEnabled,
+            ),
+          ],
+        ],
+        if (!health.canWrite && health.status != HealthStatus.unsupported) ...[
           const SizedBox(height: 10),
           FilledButton(
             onPressed: health.requestPermission,
@@ -290,6 +384,79 @@ class _IntegrationsScreenState extends State<IntegrationsScreen> {
             label: Text(S.healthTitle),
             onPressed: () => _exportToHealth(health),
           ),
+      ],
+    ),
+  );
+
+  /// Jedna pozycja listy: nazwa i czy działa.
+  Widget _healthLine(String label, bool ok, {String? detail}) => Padding(
+    padding: const EdgeInsets.symmetric(vertical: 2),
+    child: Row(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Icon(
+          ok ? Icons.check : Icons.remove,
+          size: 16,
+          color: ok ? LR.go : LR.muted,
+        ),
+        const SizedBox(width: 8),
+        Expanded(
+          child: Text(
+            detail == null ? label : '$label · $detail',
+            style: LR.body.copyWith(
+              fontSize: 13,
+              color: ok ? LR.ink : LR.inkSoft,
+            ),
+          ),
+        ),
+      ],
+    ),
+  );
+
+  /// To samo dla odczytu, gdzie „nie wiemy" jest osobnym, uczciwym stanem.
+  Widget _healthReadLine(
+    String label,
+    HealthService health,
+    HealthDataType type,
+  ) {
+    final state = health.readState(type);
+    return _healthLine(
+      label,
+      state == HealthReadState.working,
+      detail: switch (state) {
+        HealthReadState.working => S.healthStateWorking,
+        HealthReadState.requested => S.healthStateRequested,
+        HealthReadState.denied => S.healthStateDenied,
+        HealthReadState.notRequested => S.healthStateNotRequested,
+      },
+    );
+  }
+
+  /// Apple Watch to OSOBNA integracja, nie część Apple Health.
+  ///
+  /// Mylenie ich jest najczęstszym nieporozumieniem wokół tętna na iPhonie:
+  /// zgoda na Health nie sprawia, że zegarek zacznie nadawać na żywo, a
+  /// odczyt z HealthKit daje próbki sprzed dziesiątek sekund.
+  Widget _watchPanel(AppleWatchService watch) => LrPanel(
+    child: Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        Text(
+          S.watchHint,
+          style: LR.body.copyWith(fontSize: 12.5, height: 1.45),
+        ),
+        const SizedBox(height: 10),
+        _healthLine(
+          S.watchLiveHeartRate,
+          watch.state == WatchState.streaming,
+          detail: switch (watch.state) {
+            WatchState.streaming => S.watchStreaming,
+            WatchState.ready => S.watchReady,
+            WatchState.notPaired => S.watchNotPaired,
+            WatchState.notInstalled => S.watchNotInstalled,
+            WatchState.unknown => S.watchUnknown,
+          },
+        ),
       ],
     ),
   );
@@ -331,7 +498,12 @@ class _IntegrationsScreenState extends State<IntegrationsScreen> {
   Future<void> _exportToHealth(HealthService health) async {
     final ride = widget.ride;
     if (ride == null) return;
-    final written = await health.exportRide(ride);
+    // Trasa jedzie razem z treningiem: HealthKit umie ją przyjąć, a trening
+    // rowerowy bez śladu jest w Health tylko liczbą.
+    final written = await health.exportRide(
+      ride,
+      track: [for (final point in ride.points) point.geo],
+    );
     if (!mounted) return;
     showLrMessage(
       context,
