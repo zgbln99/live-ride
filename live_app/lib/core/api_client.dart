@@ -1,6 +1,7 @@
 import 'dart:convert';
 
 import 'package:cookie_jar/cookie_jar.dart';
+import 'package:meta/meta.dart';
 import 'package:dio/dio.dart';
 import 'package:dio_cookie_manager/dio_cookie_manager.dart';
 import 'package:path_provider/path_provider.dart';
@@ -63,10 +64,18 @@ class LiveSession {
 }
 
 class AccountIdentity {
-  const AccountIdentity({required this.username, required this.name});
+  const AccountIdentity({
+    required this.username,
+    required this.name,
+    this.email = '',
+  });
 
   final String username;
   final String name;
+  final String email;
+
+  /// Nazwa, którą da się pokazać: wyświetlana, a gdy jej nie ma — login.
+  String get label => name.trim().isNotEmpty ? name.trim() : username;
 }
 
 class ApiClient {
@@ -89,10 +98,16 @@ class ApiClient {
   void Function()? onSessionExpired;
 
   /// Ścieżki, na których 401 nie znaczy „sesja wygasła", tylko „złe hasło".
-  static const List<String> _publicPaths = [
+  ///
+  /// Bez tego nieudana próba logowania albo resetu hasła wyrzucałaby z
+  /// aplikacji kogoś, kto jest zalogowany na innym koncie.
+  @visibleForTesting
+  static const List<String> publicPaths = [
     '/auth/login',
     '/auth/register',
     '/auth/logout',
+    '/auth/reset',
+    '/user',
   ];
 
   Future<void> init() async {
@@ -115,7 +130,7 @@ class ApiClient {
           final status = error.response?.statusCode;
           final path = error.requestOptions.path;
           if ((status == 401 || status == 403) &&
-              !_publicPaths.any(path.startsWith)) {
+              !publicPaths.any(path.startsWith)) {
             onSessionExpired?.call();
           }
           handler.next(error);
@@ -131,25 +146,36 @@ class ApiClient {
     return cookies.any((cookie) => cookie.name == 'pb_auth');
   }
 
-  /// Signs in and returns whatever identity the server knows about the rider,
-  /// so the app never has to show a generic name.
-  Future<AccountIdentity> login(String username, String password) async {
+  /// Loguje i oddaje to, co serwer wie o rowerzyście, żeby aplikacja nigdy
+  /// nie musiała pokazywać nazwy zastępczej.
+  ///
+  /// [identity] to e-mail ALBO nazwa użytkownika — kolekcja `users` ma oba
+  /// pola w `identityFields`, więc rozstrzyga serwer, a nie zgadywanka po
+  /// znaku małpy w polu tekstowym.
+  Future<AccountIdentity> login(String identity, String password) async {
+    final trimmed = identity.trim();
     try {
       final response = await dio.post(
         '/auth/login',
-        data: {'username': username.trim(), 'password': password},
+        data: {'username': trimmed, 'password': password},
       );
-      return _identityFrom(response.data, fallbackUsername: username.trim());
+      return _identityFrom(response.data, fallbackUsername: trimmed);
     } on DioException catch (e) {
       throw ApiException(_describe(e, unauthorized: S.wrongCredentials));
     }
   }
 
-  Future<AccountIdentity> register(
-    String username,
-    String email,
-    String password,
-  ) async {
+  /// Zakłada konto i od razu loguje.
+  ///
+  /// [name] to nazwa wyświetlana — ta, którą znajomi widzą obok pozycji na
+  /// publicznej stronie LIVE. Bez niej zostałby login, a on bywa techniczny.
+  Future<AccountIdentity> register({
+    required String username,
+    required String email,
+    required String password,
+    String name = '',
+  }) async {
+    final trimmedName = name.trim();
     try {
       await dio.put(
         '/user',
@@ -158,12 +184,33 @@ class ApiClient {
           'email': email.trim(),
           'password': password,
           'passwordConfirm': password,
+          if (trimmedName.isNotEmpty) 'name': trimmedName,
         },
       );
     } on DioException catch (e) {
       throw ApiException(_describe(e, badRequest: S.usernameTaken));
     }
-    return login(username, password);
+    final identity = await login(username, password);
+    // Serwer zna nazwę i e-mail od tej chwili, ale gdyby odpowiedź logowania
+    // ich nie niosła, i tak wiemy, co właśnie wysłaliśmy.
+    return AccountIdentity(
+      username: identity.username,
+      name: identity.name.isNotEmpty ? identity.name : trimmedName,
+      email: identity.email.isNotEmpty ? identity.email : email.trim(),
+    );
+  }
+
+  /// Prosi serwer o wiadomość z instrukcjami resetu hasła.
+  ///
+  /// Nie ma tu rozgałęzienia na „konto istnieje" i „nie istnieje", bo serwer
+  /// celowo odpowiada tak samo na jedno i drugie: inaczej ten formularz byłby
+  /// sprawdzarką, czy dany adres jest u nas zarejestrowany.
+  Future<void> requestPasswordReset(String email) async {
+    try {
+      await dio.post('/auth/reset', data: {'email': email.trim()});
+    } on DioException catch (e) {
+      throw ApiException(_describe(e, badRequest: S.emailInvalid));
+    }
   }
 
   AccountIdentity _identityFrom(
@@ -176,6 +223,7 @@ class ApiClient {
         return AccountIdentity(
           username: (record['username'] as String? ?? fallbackUsername).trim(),
           name: (record['name'] as String? ?? '').trim(),
+          email: (record['email'] as String? ?? '').trim(),
         );
       }
     }

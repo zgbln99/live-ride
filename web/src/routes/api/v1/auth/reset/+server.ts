@@ -1,5 +1,5 @@
 import { handleError } from "$lib/util/api_util";
-import { error, json, type RequestEvent } from "@sveltejs/kit";
+import { json, type RequestEvent } from "@sveltejs/kit";
 import { z } from "zod";
 
 /**
@@ -30,17 +30,36 @@ import { z } from "zod";
  *       500:
  *         description: Internal Server Error
  */
+/**
+ * Ta trasa odpowiada tak samo na adres, który istnieje, i na taki, którego
+ * nie ma.
+ *
+ * Formularz resetu hasła jest otwarty dla każdego, więc różnica w odpowiedzi
+ * („nie znaleziono" kontra „wysłano") zamienia go w sprawdzarkę kont: mając
+ * listę adresów, da się nią odsiać te, które są u nas zarejestrowane. To samo
+ * dotyczy błędów po stronie poczty — awaria SMTP nie ma prawa powiedzieć
+ * pytającemu, że pod tym adresem ktoś jest.
+ *
+ * Dlatego jedyny 400, jaki stąd wychodzi, dotyczy pola, które nie jest
+ * adresem e-mail: to informacja o treści żądania, nie o zawartości bazy.
+ */
 export async function POST(event: RequestEvent) {
+    let email: string;
     try {
         const data = await event.request.json()
-        const safeData = z.object({
+        email = z.object({
             email: z.string().email()
-        }).parse(data)
-
-        const r = await event.locals.pb.collection('users').requestPasswordReset(safeData.email);
-        return json(r);
+        }).parse(data).email
     } catch (e: any) {
         return handleError(e);
     }
 
+    try {
+        await event.locals.pb.collection('users').requestPasswordReset(email);
+    } catch (e: any) {
+        // Celowo połknięte. Log zostaje po naszej stronie, odpowiedź nie.
+        console.warn('password reset request failed', e?.status ?? e);
+    }
+
+    return json({ success: true });
 }

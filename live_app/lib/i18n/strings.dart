@@ -65,8 +65,7 @@ class Strings {
   String get haveAccount => 'Mam już konto';
   String get createAccount => 'Załóż nowe konto';
   String get signOut => 'Wyloguj się';
-  String get sessionExpired =>
-      'Sesja wygasła. Zaloguj się ponownie, żeby wrócić do LIVE i synchronizacji.';
+  String get sessionExpired => 'Twoja sesja wygasła. Zaloguj się ponownie.';
   String get wrongCredentials => 'Błędna nazwa użytkownika lub hasło.';
   String get usernameTaken => 'Ta nazwa użytkownika lub e-mail są już zajęte.';
   String get notSignedIn => 'Nie jesteś zalogowany.';
@@ -74,6 +73,50 @@ class Strings {
   String get usernameRequired => 'Podaj nazwę użytkownika.';
   String get emailRequired => 'Podaj adres e-mail.';
   String get emailInvalid => 'To nie wygląda na adres e-mail.';
+
+  /// Pole logowania przyjmuje jedno i drugie, bo serwer przyjmuje jedno
+  /// i drugie. Etykieta mówi o tym wprost, żeby nikt nie odbijał się od
+  /// „błędnej nazwy użytkownika", wpisując własny adres.
+  String get identityLabel => 'E-mail lub nazwa użytkownika';
+  String get identityRequired => 'Podaj e-mail albo nazwę użytkownika.';
+  String get displayNameRequired => 'Podaj nazwę wyświetlaną.';
+  String get repeatPassword => 'Powtórz hasło';
+  String get passwordsDoNotMatch => 'Hasła nie są takie same.';
+  String get usernameTooShort =>
+      'Nazwa użytkownika musi mieć co najmniej 3 znaki.';
+  String get usernameInvalidChars =>
+      'Nazwa użytkownika może zawierać tylko litery, cyfry, kropkę '
+      'i podkreślnik.';
+  String get createAccountAction => 'UTWÓRZ KONTO';
+  String get forgotPassword => 'Nie pamiętasz hasła?';
+  String get resetPasswordTitle => 'Reset hasła';
+  String get resetPasswordIntro =>
+      'Podaj adres e-mail konta. Wyślemy na niego instrukcje.';
+  String get sendResetLink => 'WYŚLIJ INSTRUKCJE';
+  String get resetPasswordSent =>
+      'Jeśli konto z tym adresem istnieje, wysłaliśmy wiadomość '
+      'z instrukcjami.';
+  String get backToSignIn => 'Wróć do logowania';
+
+  // ------------------------------------------------------------- konto
+  String get accountSection => 'KONTO';
+  String get notSignedInTitle => 'Nie jesteś zalogowany';
+  String get signInToSync =>
+      'Zaloguj się, żeby synchronizować przejazdy i nadawać LIVE.';
+  String get syncStatusLabel => 'Synchronizacja';
+  String get syncAllDone => 'Wszystko zsynchronizowane';
+  String syncPending(int count) => count == 1
+      ? '1 przejazd czeka na wysłanie'
+      : '$count przejazdy/-ów czeka na wysłanie';
+  String get signOutTitle => 'Wylogować się?';
+  String get signOutKeepsData =>
+      'Przejazdy, mapy offline i pliki GPX zostają na tym telefonie.';
+  String signOutUnsynced(int count) => count == 1
+      ? '1 przejazd nie został jeszcze wysłany na serwer. Po wylogowaniu '
+            'zostanie na telefonie i poczeka na następne logowanie.'
+      : '$count przejazdów nie zostało jeszcze wysłanych na serwer. Po '
+            'wylogowaniu zostaną na telefonie i poczekają na następne '
+            'logowanie.';
 
   // ------------------------------------------------------- pulpit i listy
   String ridingAsTelemetry(String name, int seconds) =>

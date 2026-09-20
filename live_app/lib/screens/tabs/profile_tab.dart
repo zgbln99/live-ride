@@ -512,10 +512,61 @@ class _ProfileTabState extends State<ProfileTab> {
               ),
             ),
             const SizedBox(height: 24),
-            OutlinedButton.icon(
-              onPressed: () => _logout(context, services),
-              icon: const Icon(Icons.logout, size: 18),
-              label: Text(S.signOut),
+            LrSectionHeader(title: S.accountSection),
+            LrPanel(
+              padding: EdgeInsets.zero,
+              child: Column(
+                children: [
+                  ListTile(
+                    leading: const Icon(Icons.badge_outlined),
+                    title: Text(S.displayName),
+                    subtitle: Text(profileService.riderName),
+                  ),
+                  const Divider(height: 1),
+                  ListTile(
+                    leading: const Icon(Icons.alternate_email),
+                    title: Text(S.username),
+                    subtitle: Text(
+                      profile.username.isEmpty ? '—' : profile.username,
+                    ),
+                  ),
+                  const Divider(height: 1),
+                  ListTile(
+                    leading: const Icon(Icons.mail_outline),
+                    title: Text(S.email),
+                    subtitle: Text(
+                      profile.accountEmail.isEmpty ? '—' : profile.accountEmail,
+                    ),
+                  ),
+                  const Divider(height: 1),
+                  AnimatedBuilder(
+                    animation: services.sync,
+                    builder: (context, _) {
+                      final pending = services.sync.pendingCount;
+                      return ListTile(
+                        leading: Icon(
+                          pending == 0
+                              ? Icons.cloud_done_outlined
+                              : Icons.cloud_upload_outlined,
+                        ),
+                        title: Text(S.syncStatusLabel),
+                        subtitle: Text(
+                          pending == 0 ? S.syncAllDone : S.syncPending(pending),
+                        ),
+                      );
+                    },
+                  ),
+                  const Divider(height: 1),
+                  ListTile(
+                    leading: const Icon(Icons.logout, color: LR.alert),
+                    title: Text(
+                      S.signOut,
+                      style: const TextStyle(color: LR.alert),
+                    ),
+                    onTap: () => _logout(context, services),
+                  ),
+                ],
+              ),
             ),
             const SizedBox(height: 20),
             Center(
@@ -530,11 +581,51 @@ class _ProfileTabState extends State<ProfileTab> {
     );
   }
 
+  /// Wylogowanie kasuje sesję i nic poza nią.
+  ///
+  /// Przejazdy, pobrane mapy i pliki GPX zostają na telefonie. Niewysłane
+  /// przejazdy też: rowerzysta dostaje o nich ostrzeżenie, ale to ostrzeżenie,
+  /// a nie blokada — czasem trzeba się przelogować właśnie po to, żeby coś
+  /// wreszcie poszło na serwer.
   Future<void> _logout(BuildContext context, AppServices services) async {
     if (services.recorder.isActive) {
       showLrMessage(context, S.finishRideBeforeSignOut, error: true);
       return;
     }
+
+    await services.sync.refreshPending();
+    if (!context.mounted) return;
+    final pending = services.sync.pendingCount;
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        title: Text(S.signOutTitle),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            if (pending > 0) ...[
+              Text(S.signOutUnsynced(pending)),
+              const SizedBox(height: 12),
+            ],
+            Text(S.signOutKeepsData),
+          ],
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(dialogContext).pop(false),
+            child: Text(S.cancel),
+          ),
+          TextButton(
+            onPressed: () => Navigator.of(dialogContext).pop(true),
+            style: TextButton.styleFrom(foregroundColor: LR.alert),
+            child: Text(S.signOut),
+          ),
+        ],
+      ),
+    );
+    if (confirmed != true) return;
+
     if (services.live.isActive) await services.live.stop();
     await services.api.logout();
     unawaited(services.heartRate.disconnect());

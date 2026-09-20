@@ -9,6 +9,7 @@ class RiderProfile {
   const RiderProfile({
     this.displayName = '',
     this.username = '',
+    this.accountEmail = '',
     this.metricUnits = true,
     this.headingUp = true,
     this.keepScreenAwake = true,
@@ -39,6 +40,14 @@ class RiderProfile {
 
   final String displayName;
   final String username;
+
+  /// Adres e-mail konta, wyłącznie do pokazania w sekcji KONTO.
+  ///
+  /// Trzymany lokalnie, żeby ekran profilu nie musiał pytać serwera przy
+  /// każdym wejściu — i żeby po utracie zasięgu nadal było widać, na jakie
+  /// konto telefon jest zalogowany.
+  final String accountEmail;
+
   final bool metricUnits;
   final bool headingUp;
   final bool keepScreenAwake;
@@ -161,6 +170,7 @@ class RiderProfile {
   RiderProfile copyWith({
     String? displayName,
     String? username,
+    String? accountEmail,
     bool? metricUnits,
     bool? headingUp,
     bool? keepScreenAwake,
@@ -185,6 +195,7 @@ class RiderProfile {
   }) => RiderProfile(
     displayName: displayName ?? this.displayName,
     username: username ?? this.username,
+    accountEmail: accountEmail ?? this.accountEmail,
     metricUnits: metricUnits ?? this.metricUnits,
     headingUp: headingUp ?? this.headingUp,
     keepScreenAwake: keepScreenAwake ?? this.keepScreenAwake,
@@ -215,6 +226,7 @@ class RiderProfile {
   Map<String, dynamic> toJson() => {
     'display_name': displayName,
     'username': username,
+    'account_email': accountEmail,
     'metric_units': metricUnits,
     'heading_up': headingUp,
     'keep_screen_awake': keepScreenAwake,
@@ -253,6 +265,7 @@ class RiderProfile {
     return RiderProfile(
       displayName: json['display_name'] as String? ?? '',
       username: json['username'] as String? ?? '',
+      accountEmail: json['account_email'] as String? ?? '',
       metricUnits: json['metric_units'] as bool? ?? true,
       headingUp: json['heading_up'] as bool? ?? true,
       keepScreenAwake: json['keep_screen_awake'] as bool? ?? true,

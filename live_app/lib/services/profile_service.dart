@@ -53,13 +53,22 @@ class ProfileService extends ChangeNotifier {
   ///
   /// The account name only fills an empty display name: a rider who chose
   /// their own name in the app keeps it.
-  Future<void> adoptAccount({String? username, String? name}) async {
+  Future<void> adoptAccount({
+    String? username,
+    String? name,
+    String? email,
+  }) async {
     final resolvedUsername = (username ?? '').trim();
     final resolvedName = (name ?? '').trim();
+    final resolvedEmail = (email ?? '').trim();
     var next = _profile;
     var changed = false;
     if (resolvedUsername.isNotEmpty && resolvedUsername != next.username) {
       next = next.copyWith(username: resolvedUsername);
+      changed = true;
+    }
+    if (resolvedEmail.isNotEmpty && resolvedEmail != next.accountEmail) {
+      next = next.copyWith(accountEmail: resolvedEmail);
       changed = true;
     }
     if (next.displayName.trim().isEmpty) {

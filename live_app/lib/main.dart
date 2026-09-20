@@ -7,6 +7,7 @@ import 'i18n/strings.dart';
 import 'screens/home_shell.dart';
 import 'screens/login_screen.dart';
 import 'services/app_services.dart';
+import 'services/session_guard.dart';
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -37,43 +38,31 @@ class LiveRideApp extends StatefulWidget {
 
 class _LiveRideAppState extends State<LiveRideApp> {
   late bool _signedIn = widget.signedIn;
-  bool _sessionExpired = false;
+
+  /// Pilnuje, żeby wygasła sesja nie przerwała trwającego przejazdu.
+  late final SessionGuard _session = SessionGuard(
+    isRiding: () => widget.services.recorder.isActive,
+    signOut: () {
+      if (mounted) setState(() => _signedIn = false);
+    },
+  );
 
   @override
   void initState() {
     super.initState();
-    widget.services.api.onSessionExpired = _handleSessionExpired;
+    // Odrzucone żądanie kogoś, kto i tak nie jest zalogowany, nie ma czego
+    // unieważniać.
+    widget.services.api.onSessionExpired = () {
+      if (_signedIn) _session.onExpired();
+    };
+    widget.services.recorder.addListener(_session.onRideStateChanged);
   }
 
   @override
   void dispose() {
     widget.services.api.onSessionExpired = null;
+    widget.services.recorder.removeListener(_session.onRideStateChanged);
     super.dispose();
-  }
-
-  /// Sesja wygasła po stronie serwera.
-  ///
-  /// Jazda toczy się dalej: rejestrator, GPS i zapis lokalny nie mają z
-  /// kontem nic wspólnego. Wylogowanie w środku przejazdu skasowałoby
-  /// zawodnikowi trasę, której nie da się powtórzyć — więc ekran logowania
-  /// czeka, aż przejazd się skończy.
-  void _handleSessionExpired() {
-    if (!_signedIn || _sessionExpired) return;
-    if (widget.services.recorder.isActive) {
-      _sessionExpired = true;
-      widget.services.recorder.addListener(_signOutWhenRideEnds);
-      return;
-    }
-    setState(() {
-      _sessionExpired = true;
-      _signedIn = false;
-    });
-  }
-
-  void _signOutWhenRideEnds() {
-    if (widget.services.recorder.isActive) return;
-    widget.services.recorder.removeListener(_signOutWhenRideEnds);
-    if (mounted) setState(() => _signedIn = false);
   }
 
   @override
@@ -87,14 +76,14 @@ class _LiveRideAppState extends State<LiveRideApp> {
           ? HomeShell(
               onLogout: () => setState(() {
                 _signedIn = false;
-                _sessionExpired = false;
+                _session.reset();
               }),
             )
           : LoginScreen(
-              notice: _sessionExpired ? S.sessionExpired : null,
+              notice: _session.expired ? S.sessionExpired : null,
               onSignedIn: () => setState(() {
                 _signedIn = true;
-                _sessionExpired = false;
+                _session.reset();
               }),
             ),
     ),

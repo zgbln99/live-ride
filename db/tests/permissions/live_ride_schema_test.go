@@ -143,3 +143,36 @@ func TestLiveRideCollectionsHaveNoApiRules(t *testing.T) {
 		}
 	}
 }
+
+// Konto rowerzysty musi mieć nazwę wyświetlaną i przyjmować e-mail
+// oraz nazwę użytkownika jako login.
+//
+// Aplikacja czyta `record.name` z odpowiedzi logowania i pokazuje tę nazwę
+// znajomym na publicznej stronie LIVE. Bez pola nie ma nazwy, a rowerzysta
+// oglądałby siebie jako pusty napis obok własnej pozycji.
+//
+// Logowanie z dwóch pól nie jest kodem — to konfiguracja kolekcji. Gdyby
+// ktoś przyciął `identityFields` do samego e-maila, ekran logowania nadal
+// przyjmowałby nazwę użytkownika i po prostu odbijałby ją jako złe hasło.
+func TestUsersCollectionSupportsAccountScreen(t *testing.T) {
+	app := newRulesTestApp(t)
+
+	users, err := app.FindCollectionByNameOrId("users")
+	if err != nil {
+		t.Fatalf("brak kolekcji users: %v", err)
+	}
+
+	if users.Fields.GetByName("name") == nil {
+		t.Error("kolekcja users nie ma pola \"name\" (nazwa wyświetlana)")
+	}
+
+	identity := map[string]bool{}
+	for _, field := range users.PasswordAuth.IdentityFields {
+		identity[field] = true
+	}
+	for _, field := range []string{"email", "username"} {
+		if !identity[field] {
+			t.Errorf("logowanie nie przyjmuje pola %q jako tożsamości", field)
+		}
+	}
+}
