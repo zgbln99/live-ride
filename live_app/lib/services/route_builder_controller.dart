@@ -1,5 +1,7 @@
 import 'dart:async';
 
+import 'package:dio/dio.dart';
+
 import 'package:flutter/foundation.dart';
 
 import '../core/geo.dart';
@@ -9,8 +11,18 @@ import '../models/route/route_waypoint.dart';
 import 'routing_service.dart';
 
 /// Liczy trasę między waypointami.
+/// Liczy trasę przez punkty.
+///
+/// [CancelToken] jest częścią kontraktu, bo przeciąganie punktu po mapie
+/// unieważnia poprzednie zapytanie co kilkaset milisekund, a jedno zapytanie
+/// to w środku cała seria prób u routera. Bez anulowania nieaktualna seria
+/// biegnie do końca i zajmuje łącze, którego potrzebuje ta aktualna.
 typedef RouteSolver =
-    Future<RoutedPath> Function(List<RouteWaypoint>, RoutePreferences);
+    Future<RoutedPath> Function(
+      List<RouteWaypoint>,
+      RoutePreferences,
+      CancelToken,
+    );
 
 /// Przykleja narysowany szkic do dróg.
 typedef SketchSolver =
@@ -79,6 +91,15 @@ class RouteBuilderController extends ChangeNotifier {
   RoutePrivacy privacy = RoutePrivacy.private;
 
   Timer? _recomputeTimer;
+
+  /// Trwająca seria prób trasowania, do anulowania przy następnej zmianie.
+  CancelToken? _inFlight;
+
+  /// Czy kontroler został już zwolniony.
+  ///
+  /// Liczenie trasy jest asynchroniczne i potrafi wrócić po zamknięciu
+  /// ekranu; wtedy nie ma komu oddać wyniku ani kogo powiadomić.
+  bool _disposed = false;
   int _requestSerial = 0;
   bool _routing = false;
   String? _error;
@@ -411,22 +432,33 @@ class RouteBuilderController extends ChangeNotifier {
   }
 
   Future<void> _recompute() async {
+    if (_disposed) return;
     final serial = ++_requestSerial;
+    // Poprzednia seria prób przestała być potrzebna w chwili, w której
+    // powstała ta. Mówimy jej o tym, zamiast czekać, aż sama się skończy.
+    _inFlight?.cancel('nowe ułożenie punktów');
+    final cancelToken = CancelToken();
+    _inFlight = cancelToken;
+
     _routing = true;
     _error = null;
     notifyListeners();
     try {
-      final path = await _solver(_waypoints, _preferences);
-      if (serial != _requestSerial) return;
+      final path = await _solver(_waypoints, _preferences, cancelToken);
+      if (_disposed || serial != _requestSerial) return;
       _setPath(path);
     } on RoutingException catch (e) {
-      if (serial != _requestSerial) return;
+      if (_disposed || serial != _requestSerial) return;
       _error = e.message;
     } catch (_) {
-      if (serial != _requestSerial) return;
+      if (_disposed || serial != _requestSerial) return;
       _error = 'Nie udało się policzyć trasy.';
     } finally {
-      if (serial == _requestSerial) {
+      // Kreator zamknięty w trakcie liczenia: wynik wraca do nikogo.
+      // Bez tej bramki `notifyListeners` leciał na zwolnionym obiekcie —
+      // w debugu asercja, w wydaniu cichy wyjątek w tle.
+      if (!_disposed && serial == _requestSerial) {
+        _inFlight = null;
         _routing = false;
         notifyListeners();
       }
@@ -458,7 +490,11 @@ class RouteBuilderController extends ChangeNotifier {
 
   @override
   void dispose() {
+    _disposed = true;
     _recomputeTimer?.cancel();
+    // Zamknięty kreator nie ma komu oddać wyniku.
+    _inFlight?.cancel('kreator zamknięty');
+    _inFlight = null;
     super.dispose();
   }
 }

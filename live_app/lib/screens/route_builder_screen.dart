@@ -40,8 +40,11 @@ class _RouteBuilderScreenState extends State<RouteBuilderScreen> {
 
   late final AppServices _services = AppServices.of(context);
   late final RouteBuilderController _controller = RouteBuilderController(
-    solver: (waypoints, preferences) =>
-        _services.routing.route(waypoints: waypoints, preferences: preferences),
+    solver: (waypoints, preferences, cancelToken) => _services.routing.route(
+      waypoints: waypoints,
+      preferences: preferences,
+      cancelToken: cancelToken,
+    ),
     sketchSolver: (sketch, preferences) =>
         _services.routing.snapSketch(sketch: sketch, preferences: preferences),
     onDraftChanged: _scheduleDraftSave,

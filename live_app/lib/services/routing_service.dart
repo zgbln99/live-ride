@@ -9,10 +9,15 @@ import '../models/route/route_preferences.dart';
 import '../models/route/route_waypoint.dart';
 
 /// Błąd trasowania w formie, którą można pokazać użytkownikowi.
+///
+/// [waypointIndex] wskazuje punkt, przez który trasa nie przechodzi — po to,
+/// żeby kreator mógł go podświetlić zamiast kazać zgadywać, który z sześciu
+/// postawionych punktów jest nie tak.
 class RoutingException implements Exception {
-  const RoutingException(this.message);
+  const RoutingException(this.message, {this.waypointIndex});
 
   final String message;
+  final int? waypointIndex;
 
   @override
   String toString() => message;
@@ -26,6 +31,7 @@ class RoutedPath {
     required this.distanceMeters,
     required this.duration,
     this.mapMatched = true,
+    this.snappedWaypoints = const <int>[],
   });
 
   final List<GeoPoint> points;
@@ -35,6 +41,13 @@ class RoutedPath {
 
   /// Fałsz, gdy router zawiódł i jedziemy po linii prostej między punktami.
   final bool mapMatched;
+
+  /// Indeksy punktów, które trzeba było dosunąć do drogi.
+  ///
+  /// Kreator pokazuje to delikatnie, zamiast kazać przesuwać punkt ręcznie
+  /// o pięć metrów. Pusta lista znaczy „wszystkie punkty leżały tam, gdzie
+  /// je postawiono".
+  final List<int> snappedWaypoints;
 
   bool get isEmpty => points.length < 2;
 
@@ -63,15 +76,63 @@ class RoutingService {
 
   final Map<String, RoutedPath> _cache = {};
 
+  /// Promienie wyszukiwania, po kolei, dla kolejnych prób.
+  ///
+  /// Promień mówi Valhalli, jak daleko od podanej współrzędnej wolno jej
+  /// szukać drogi. Domyślnie szuka bardzo blisko, więc punkt postawiony
+  /// palcem dziesięć metrów obok ścieżki potrafi nie skorelować się z niczym
+  /// i cała trasa kończy się błędem — mimo że człowiek widzi na mapie, gdzie
+  /// chciał jechać.
+  ///
+  /// Sto metrów to granica. Powyżej niej „najbliższa droga" przestaje być tą,
+  /// którą użytkownik miał na myśli, i trasa zaczyna prowadzić gdzie indziej.
+  static const List<int> searchRadiiMeters = [0, 25, 50, 100];
+
+  /// Ile najwyżej odcinków składamy osobno, gdy całość nie przechodzi.
+  ///
+  /// Każdy odcinek to osobne żądanie; przy dużej liczbie punktów lepiej
+  /// powiedzieć, że się nie udało, niż zasypać router setką zapytań.
+  static const int maxSegmentedLegs = 24;
+
+  /// Od ilu metrów mówimy użytkownikowi, że punkt został dosunięty.
+  ///
+  /// Poniżej tego to korekta w granicach dokładności dotknięcia palcem —
+  /// informowanie o niej byłoby szumem, a nie informacją.
+  static const double reportSnapAboveMeters = 8;
+
   /// Liczy trasę przez podane waypointy.
   ///
-  /// Gdy router nie odpowie, zwraca prostą linię przez waypointy z
-  /// `mapMatched: false` — kreator ma nadal działać bez sieci, tylko
-  /// uczciwie mówi, że to jeszcze nie jest trasa po drogach.
+  /// Router potrafi odmówić z powodu, który nie jest winą użytkownika: punkt
+  /// postawiony kilkanaście metrów obok drogi, na parkingu, na moście albo
+  /// tuż za zamkniętym przejazdem. Pierwsza odpowiedź 400 nie jest więc
+  /// końcem, tylko początkiem — próbujemy po kolei coraz bardziej
+  /// wyrozumiałych sposobów, a błąd pokazujemy dopiero wtedy, gdy żaden nie
+  /// zadziałał.
+  ///
+  /// Kolejność jest celowa: od najwierniejszej intencji użytkownika do
+  /// najbardziej domyślnej.
+  ///
+  ///  1. dokładnie te punkty, które postawił,
+  ///  2. to samo z rosnącym promieniem szukania drogi (25, 50, 100 m),
+  ///  3. punkty dosunięte do najbliższej drogi ROWEROWEJ przez `/locate`,
+  ///  4. trasa liczona odcinkami A→B, B→C i sklejona,
+  ///  5. dopiero teraz błąd — ze wskazaniem, który punkt jest problemem.
+  ///
+  /// Czego tu nie ma i nie będzie: prostej linii udającej trasę i objazdu
+  /// drogą, na którą rower nie ma wstępu. „Zawsze znajdź trasę" znaczy
+  /// „wyczerpij bezpieczne możliwości", a nie „pokaż cokolwiek".
   Future<RoutedPath> route({
     required List<RouteWaypoint> waypoints,
     required RoutePreferences preferences,
     String language = 'pl-PL',
+
+    /// Przerywa całą serię prób, gdy wynik przestał być potrzebny.
+    ///
+    /// Ma znaczenie właśnie dlatego, że prób jest kilka: przeciąganie punktu
+    /// po mapie unieważnia poprzednie zapytanie co kilkaset milisekund, a bez
+    /// anulowania każde z nich dobijałoby router jeszcze przez dziesięć
+    /// kolejnych żądań, których wynik i tak nikogo już nie obchodzi.
+    CancelToken? cancelToken,
   }) async {
     final usable = waypoints.where((w) => w.point.isValid).toList();
     if (usable.length < 2) return RoutedPath.empty;
@@ -80,18 +141,108 @@ class RoutingService {
     final cached = _cache[key];
     if (cached != null) return cached;
 
+    final points = [for (final w in usable) w.point];
+    var offline = false;
+
+    // 1 i 2: te same punkty, coraz szersze szukanie drogi.
+    for (final radius in searchRadiiMeters) {
+      final attempt = await _attempt(
+        points,
+        preferences: preferences,
+        language: language,
+        radiusMeters: radius,
+        cancelToken: cancelToken,
+      );
+      if (attempt.path != null) return _remember(key, attempt.path!);
+      if (attempt.offline) {
+        offline = true;
+        break;
+      }
+    }
+
+    // Bez sieci nie ma sensu próbować dalej — każdy kolejny krok to też
+    // żądanie HTTP. Szkic zostaje szkicem i mówi to wprost.
+    if (offline) return _straightLine(usable);
+
+    // 3: dosuń punkty do najbliższej drogi rowerowej i spróbuj jeszcze raz.
+    //
+    // Warunkiem ponowienia jest JAKAKOLWIEK zmiana współrzędnych, a nie to,
+    // czy warto o niej powiedzieć użytkownikowi. Przesunięcie o pięć metrów
+    // bywa dokładnie tym, co odblokowuje trasę, a jednocześnie jest zbyt małe,
+    // żeby zawracać nim komuś głowę.
+    final snapped = await _snapToRoads(points, preferences, cancelToken);
+    if (snapped != null && snapped.changed) {
+      for (final radius in searchRadiiMeters) {
+        final attempt = await _attempt(
+          snapped.points,
+          preferences: preferences,
+          language: language,
+          radiusMeters: radius,
+          cancelToken: cancelToken,
+        );
+        if (attempt.path != null) {
+          return _remember(
+            key,
+            _withSnapped(attempt.path!, snapped.movedIndices),
+          );
+        }
+        if (attempt.offline) return _straightLine(usable);
+      }
+    }
+
+    // 4: odcinkami. Jeden trudny fragment nie ma prawa przekreślać całej
+    // trasy — reszta przechodzi bez zarzutu i to ją pokazujemy.
+    final base = snapped?.points ?? points;
+    final segmented = await _routeBySegments(
+      base,
+      preferences: preferences,
+      language: language,
+      cancelToken: cancelToken,
+    );
+    if (segmented != null) {
+      return _remember(
+        key,
+        _withSnapped(segmented, snapped?.movedIndices ?? const <int>[]),
+      );
+    }
+
+    // 5: naprawdę się nie da. Powiedz KTÓRY punkt i co z nim zrobić.
+    final culprit = await _firstUnreachable(
+      base,
+      preferences,
+      language,
+      cancelToken,
+    );
+    throw RoutingException(_failureMessage(culprit), waypointIndex: culprit);
+  }
+
+  /// Jedna próba policzenia całej trasy.
+  ///
+  /// Zwraca ścieżkę albo powód, dla którego jej nie ma. Rozróżnienie „router
+  /// odmówił" od „nie ma sieci" jest tu kluczowe: pierwsze warto ponawiać
+  /// inaczej, drugiego nie warto ponawiać wcale.
+  Future<_RouteAttempt> _attempt(
+    List<GeoPoint> points, {
+    required RoutePreferences preferences,
+    required String language,
+    required int radiusMeters,
+    CancelToken? cancelToken,
+  }) async {
     try {
       final response = await _api.dio.post<dynamic>(
         '/valhalla/route',
+        cancelToken: cancelToken,
         data: {
           'locations': [
-            for (var i = 0; i < usable.length; i++)
+            for (var i = 0; i < points.length; i++)
               {
-                'lat': usable[i].lat,
-                'lon': usable[i].lon,
-                // „break” każe Valhalli zatrzymać się w punkcie i pozwolić
-                // na zawrotkę; „through” przejeżdża przez punkt bez przerwy.
-                'type': i == 0 || i == usable.length - 1 ? 'break' : 'through',
+                'lat': points[i].lat,
+                'lon': points[i].lon,
+                // „break" każe Valhalli zatrzymać się w punkcie i pozwolić
+                // na zawrotkę; „through" przejeżdża przez punkt bez przerwy.
+                'type': i == 0 || i == points.length - 1 ? 'break' : 'through',
+                if (radiusMeters > 0) 'radius': radiusMeters,
+                if (radiusMeters > 0) 'search_cutoff': radiusMeters * 4,
               },
           ],
           'costing': 'bicycle',
@@ -102,20 +253,238 @@ class RoutingService {
       );
 
       final path = _parseRoute(response.data);
-      if (path.isEmpty) return _straightLine(usable);
-      _remember(key, path);
-      return path;
+      return path.isEmpty
+          ? const _RouteAttempt.rejected()
+          : _RouteAttempt.found(path);
     } on DioException catch (e) {
-      if (e.response?.statusCode == 400) {
-        throw const RoutingException(
-          'Router nie potrafi poprowadzić trasy przez te punkty. '
-          'Przesuń je bliżej drogi.',
+      // Anulowanie nie jest porażką routera i nie może uruchomić kolejnych
+      // prób — wynik przestał być komukolwiek potrzebny.
+      if (e.type == DioExceptionType.cancel) {
+        return const _RouteAttempt.offline();
+      }
+      final status = e.response?.statusCode;
+      // 400 to „nie umiem tędy poprowadzić" i jest zaproszeniem do kolejnej
+      // próby. Brak odpowiedzi to brak sieci i kończy sprawę.
+      if (status == null) return const _RouteAttempt.offline();
+      return const _RouteAttempt.rejected();
+    } catch (_) {
+      return const _RouteAttempt.rejected();
+    }
+  }
+
+  /// Dosuwa punkty do najbliższej drogi, na którą rower ma wstęp.
+  ///
+  /// Pyta o to Valhallę (`/locate`), a nie geometrię: „najbliższa linia na
+  /// mapie" bywa torem kolejowym, rzeką albo drogą z zakazem. Router wie,
+  /// które krawędzie są przejezdne dla wybranego profilu, i tylko takie
+  /// zwraca.
+  Future<_SnappedPoints?> _snapToRoads(
+    List<GeoPoint> points,
+    RoutePreferences preferences, [
+    CancelToken? cancelToken,
+  ]) async {
+    try {
+      final response = await _api.dio.post<dynamic>(
+        '/valhalla/locate',
+        cancelToken: cancelToken,
+        data: {
+          'locations': [
+            for (final point in points)
+              {
+                'lat': point.lat,
+                'lon': point.lon,
+                'radius': searchRadiiMeters.last,
+              },
+          ],
+          'costing': 'bicycle',
+          'costing_options': {'bicycle': preferences.toValhallaCosting()},
+          'verbose': false,
+        },
+      );
+
+      final data = response.data;
+      if (data is! List || data.length != points.length) return null;
+
+      final snapped = <GeoPoint>[];
+      final moved = <int>[];
+      var changed = false;
+      for (var i = 0; i < points.length; i++) {
+        final correlated = _correlatedPoint(data[i]);
+        if (correlated == null) {
+          snapped.add(points[i]);
+          continue;
+        }
+        snapped.add(correlated);
+        final distance = haversineMeters(points[i], correlated);
+        if (distance > 0.5) changed = true;
+        // Kilka metrów to normalna korekta i nie warto o niej wspominać.
+        // Kilkanaście to już informacja: punkt wylądował gdzie indziej.
+        if (distance > reportSnapAboveMeters) moved.add(i);
+      }
+      return _SnappedPoints(
+        points: snapped,
+        movedIndices: moved,
+        changed: changed,
+      );
+    } catch (_) {
+      return null;
+    }
+  }
+
+  /// Wyciąga skorelowaną pozycję z jednej odpowiedzi `/locate`.
+  static GeoPoint? _correlatedPoint(Object? entry) {
+    if (entry is! Map) return null;
+    // Valhalla podaje punkt przyklejenia osobno dla każdej krawędzi; bierzemy
+    // pierwszą, bo lista jest posortowana od najbliższej.
+    final edges = entry['edges'];
+    if (edges is List) {
+      for (final edge in edges) {
+        if (edge is! Map) continue;
+        final at = edge['correlated_lat'];
+        final on = edge['correlated_lon'];
+        if (at is num && on is num) {
+          final point = GeoPoint(lat: at.toDouble(), lon: on.toDouble());
+          if (point.isValid) return point;
+        }
+      }
+    }
+    final nodes = entry['nodes'];
+    if (nodes is List) {
+      for (final node in nodes) {
+        if (node is! Map) continue;
+        final at = node['lat'];
+        final on = node['lon'];
+        if (at is num && on is num) {
+          final point = GeoPoint(lat: at.toDouble(), lon: on.toDouble());
+          if (point.isValid) return point;
+        }
+      }
+    }
+    return null;
+  }
+
+  /// Liczy trasę odcinek po odcinku i skleja wynik.
+  ///
+  /// Valhalla potrafi odmówić całości z powodu jednego przejścia, a te same
+  /// punkty parami przechodzą bez problemu. Zwraca null, gdy choć jeden
+  /// odcinek naprawdę nie istnieje — sklejanie trasy z dziurą byłoby gorsze
+  /// niż uczciwy błąd.
+  Future<RoutedPath?> _routeBySegments(
+    List<GeoPoint> points, {
+    required RoutePreferences preferences,
+    required String language,
+    CancelToken? cancelToken,
+  }) async {
+    if (points.length < 3 || points.length - 1 > maxSegmentedLegs) return null;
+
+    final legs = <RoutedPath>[];
+    for (var i = 0; i < points.length - 1; i++) {
+      RoutedPath? leg;
+      for (final radius in searchRadiiMeters) {
+        final attempt = await _attempt(
+          [points[i], points[i + 1]],
+          preferences: preferences,
+          language: language,
+          radiusMeters: radius,
+          cancelToken: cancelToken,
+        );
+        if (attempt.offline) return null;
+        if (attempt.path != null) {
+          leg = attempt.path;
+          break;
+        }
+      }
+      if (leg == null) return null;
+      legs.add(leg);
+    }
+    return _join(legs);
+  }
+
+  /// Skleja odcinki w jedną trasę.
+  ///
+  /// Punkt styku należy do obu odcinków, więc z każdego kolejnego pomijamy
+  /// pierwszą współrzędną; bez tego w geometrii zostawałyby duplikaty, a
+  /// profil wysokości miałby pionowe schodki. Indeksy manewrów przesuwają
+  /// się o długość tego, co już sklejone.
+  static RoutedPath _join(List<RoutedPath> legs) {
+    final points = <GeoPoint>[];
+    final maneuvers = <NavManeuver>[];
+    var distance = 0.0;
+    var duration = Duration.zero;
+
+    for (final leg in legs) {
+      final offset = points.isEmpty ? 0 : points.length - 1;
+      points.addAll(points.isEmpty ? leg.points : leg.points.skip(1));
+      for (final maneuver in leg.maneuvers) {
+        maneuvers.add(
+          NavManeuver(
+            instruction: maneuver.instruction,
+            beginShapeIndex: maneuver.beginShapeIndex + offset,
+            endShapeIndex: maneuver.endShapeIndex + offset,
+            type: maneuver.type,
+            lengthKm: maneuver.lengthKm,
+            seconds: maneuver.seconds,
+            streetNames: maneuver.streetNames,
+            verbalPost: maneuver.verbalPost,
+            roundaboutExit: maneuver.roundaboutExit,
+          ),
         );
       }
-      return _straightLine(usable);
-    } catch (_) {
-      return _straightLine(usable);
+      distance += leg.distanceMeters;
+      duration += leg.duration;
     }
+
+    return RoutedPath(
+      points: points,
+      maneuvers: maneuvers,
+      distanceMeters: distance,
+      duration: duration,
+    );
+  }
+
+  /// Znajduje pierwszy punkt, z którego nie da się nigdzie dojechać.
+  ///
+  /// Sprawdza pary sąsiadów i zwraca indeks tego, który psuje odcinek.
+  /// Dzięki temu komunikat wskazuje konkretny punkt, a nie całą trasę.
+  Future<int?> _firstUnreachable(
+    List<GeoPoint> points,
+    RoutePreferences preferences,
+    String language,
+    CancelToken? cancelToken,
+  ) async {
+    for (var i = 0; i < points.length - 1; i++) {
+      final attempt = await _attempt(
+        [points[i], points[i + 1]],
+        preferences: preferences,
+        language: language,
+        radiusMeters: searchRadiiMeters.last,
+        cancelToken: cancelToken,
+      );
+      if (attempt.offline) return null;
+      if (attempt.path == null) return i + 1;
+    }
+    return null;
+  }
+
+  static String _failureMessage(int? waypointIndex) {
+    if (waypointIndex == null) {
+      return 'Nie udało się poprowadzić trasy rowerowej przez te punkty. '
+          'Spróbuj dodać punkt pośredni na drodze.';
+    }
+    return 'Do punktu ${waypointIndex + 1} nie prowadzi żadna droga '
+        'dla rowerów. Przesuń go albo dodaj punkt pośredni.';
+  }
+
+  static RoutedPath _withSnapped(RoutedPath path, List<int> moved) {
+    if (moved.isEmpty) return path;
+    return RoutedPath(
+      points: path.points,
+      maneuvers: path.maneuvers,
+      distanceMeters: path.distanceMeters,
+      duration: path.duration,
+      mapMatched: path.mapMatched,
+      snappedWaypoints: moved,
+    );
   }
 
   /// Przykleja narysowany szkic do dróg.
@@ -327,13 +696,18 @@ class RoutingService {
     return buffer.toString();
   }
 
-  void _remember(String key, RoutedPath path) {
+  /// Zapamiętuje trasę i oddaje ją dalej.
+  ///
+  /// Zwraca to, co dostała, żeby wołający mógł napisać `return _remember(...)`
+  /// zamiast dwóch linijek przy każdym z pięciu wyjść z łańcucha prób.
+  RoutedPath _remember(String key, RoutedPath path) {
     // Cache trzyma ostatnie kilkanaście wariantów, bo kreator liczy trasę
     // po każdym przesunięciu punktu i użytkownik często cofa zmianę.
     if (_cache.length > 24) {
       _cache.remove(_cache.keys.first);
     }
     _cache[key] = path;
+    return path;
   }
 }
 
@@ -411,4 +785,34 @@ double _powerOfTen(int exponent) {
     value *= 10;
   }
   return value;
+}
+
+/// Wynik jednej próby trasowania.
+///
+/// Trzy stany, nie dwa: znaleziona trasa, odmowa routera i brak sieci.
+/// Bez tego rozróżnienia nie da się zdecydować, czy próbować dalej.
+class _RouteAttempt {
+  const _RouteAttempt.found(this.path) : offline = false;
+  const _RouteAttempt.rejected() : path = null, offline = false;
+  const _RouteAttempt.offline() : path = null, offline = true;
+
+  final RoutedPath? path;
+  final bool offline;
+}
+
+/// Punkty po dosunięciu do dróg, z informacją, które się ruszyły.
+class _SnappedPoints {
+  const _SnappedPoints({
+    required this.points,
+    required this.movedIndices,
+    required this.changed,
+  });
+
+  final List<GeoPoint> points;
+
+  /// Punkty przesunięte na tyle, żeby powiedzieć o tym użytkownikowi.
+  final List<int> movedIndices;
+
+  /// Czy cokolwiek się w ogóle ruszyło — warunek ponowienia próby.
+  final bool changed;
 }

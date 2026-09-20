@@ -1,3 +1,4 @@
+import 'package:dio/dio.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:live_ride/core/geo.dart';
 import 'package:live_ride/models/route/route_preferences.dart';
@@ -10,6 +11,7 @@ import 'package:live_ride/services/routing_service.dart';
 Future<RoutedPath> fakeSolver(
   List<RouteWaypoint> waypoints,
   RoutePreferences preferences,
+  CancelToken cancelToken,
 ) async {
   final points = <GeoPoint>[];
   for (var i = 0; i < waypoints.length - 1; i++) {
@@ -370,7 +372,7 @@ void main() {
   group('błędy trasowania', () {
     test('pokazuje komunikat, gdy router odmawia', () async {
       final controller = RouteBuilderController(
-        solver: (_, _) async =>
+        solver: (_, _, _) async =>
             throw const RoutingException('Za daleko od drogi.'),
         sketchSolver: fakeSketchSolver,
         recomputeDelay: Duration.zero,
@@ -417,6 +419,96 @@ void _polylineRoundTrip() {
       // Sam JSON z parami liczb to ponad 20 znaków na punkt.
       expect(encoded.length, lessThan(points.length * 12));
       expect(decodeValhallaPolyline(encoded), hasLength(points.length));
+    });
+  });
+
+  group('przeliczanie w trakcie edycji', () {
+    test('nowa zmiana anuluje poprzednią serię prób', () async {
+      // Jedno „policz trasę" to w środku nawet kilkanaście żądań do routera.
+      // Przeciąganie punktu unieważnia je co kilkaset milisekund, więc bez
+      // anulowania nieaktualne serie biją się o łącze z tą aktualną.
+      final tokens = <CancelToken>[];
+      final controller = RouteBuilderController(
+        solver: (waypoints, preferences, cancelToken) async {
+          tokens.add(cancelToken);
+          await Future<void>.delayed(const Duration(milliseconds: 20));
+          return fakeSolver(waypoints, preferences, cancelToken);
+        },
+        sketchSolver: fakeSketchSolver,
+        recomputeDelay: Duration.zero,
+      );
+
+      controller.addWaypoint(warsaw);
+      controller.addWaypoint(radom);
+      await Future<void>.delayed(const Duration(milliseconds: 1));
+      controller.addWaypoint(lublin);
+      await Future<void>.delayed(const Duration(milliseconds: 60));
+
+      expect(tokens.length, greaterThanOrEqualTo(2));
+      expect(
+        tokens.first.isCancelled,
+        isTrue,
+        reason: 'pierwsza seria miała zostać przerwana',
+      );
+      expect(tokens.last.isCancelled, isFalse);
+
+      controller.dispose();
+    });
+
+    test('zamknięcie kreatora przerywa trwające liczenie', () async {
+      CancelToken? token;
+      final controller = RouteBuilderController(
+        solver: (waypoints, preferences, cancelToken) async {
+          token = cancelToken;
+          await Future<void>.delayed(const Duration(milliseconds: 50));
+          return fakeSolver(waypoints, preferences, cancelToken);
+        },
+        sketchSolver: fakeSketchSolver,
+        recomputeDelay: Duration.zero,
+      );
+      controller.addWaypoint(warsaw);
+      controller.addWaypoint(radom);
+      await Future<void>.delayed(const Duration(milliseconds: 1));
+
+      controller.dispose();
+      expect(token?.isCancelled, isTrue);
+    });
+
+    test('stara trasa zostaje na ekranie, dopóki nie ma nowej', () async {
+      // Czyszczenie geometrii na czas liczenia daje mrugnięcie pustą mapą
+      // przy każdym przesunięciu punktu.
+      // Router, który odpowiada z opóźnieniem — inaczej liczenie kończy się
+      // w tym samym mikrotasku i nie da się zajrzeć w jego środek.
+      final controller = RouteBuilderController(
+        solver: (waypoints, preferences, cancelToken) async {
+          await Future<void>.delayed(const Duration(milliseconds: 30));
+          return fakeSolver(waypoints, preferences, cancelToken);
+        },
+        sketchSolver: fakeSketchSolver,
+        recomputeDelay: Duration.zero,
+      );
+      addTearDown(controller.dispose);
+
+      controller.addWaypoint(warsaw);
+      controller.addWaypoint(radom);
+      await Future<void>.delayed(const Duration(milliseconds: 60));
+
+      final before = controller.path.points;
+      expect(before.length, greaterThan(1));
+
+      controller.addWaypoint(lublin);
+      // Liczenie rusza po odczekaniu, więc dajemy pętli zdarzeń tyknąć.
+      await Future<void>.delayed(const Duration(milliseconds: 5));
+
+      // W trakcie liczenia trasa nadal jest, a kreator uczciwie mówi, że
+      // pracuje. Czyszczenie geometrii dawałoby mrugnięcie pustą mapą przy
+      // każdym przesunięciu punktu.
+      expect(controller.isRouting, isTrue);
+      expect(controller.path.points, same(before));
+
+      await Future<void>.delayed(const Duration(milliseconds: 60));
+      expect(controller.isRouting, isFalse);
+      expect(controller.path.points, isNot(same(before)));
     });
   });
 }
