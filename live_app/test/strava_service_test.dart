@@ -2,6 +2,7 @@ import 'dart:io';
 
 import 'package:dio/dio.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:live_ride/core/api_client.dart';
 import 'package:live_ride/models/integration.dart';
 import 'package:live_ride/models/ride_record.dart';
 import 'package:live_ride/services/strava_service.dart';
@@ -278,6 +279,286 @@ void main() {
       final upload = await service.uploadRide(_ride(), file);
       expect(upload.state, UploadState.failed);
       expect(upload.error, contains('ogranicza'));
+    });
+  });
+
+  group('adres powrotny OAuth', () {
+    test('host odpowiada domenie, którą wpisuje się w ustawieniach Stravy', () {
+      // To jest cała przyczyna błędu z telefonu: Strava sprawdza DOMENĘ
+      // adresu powrotnego, a `liveride://strava-callback` ma jako domenę
+      // „strava-callback" — czegoś takiego nie da się tam wpisać.
+      final uri = Uri.parse(StravaService.redirectUri);
+      expect(uri.scheme, StravaService.callbackScheme);
+      expect(uri.host, StravaService.callbackHost);
+      expect(uri.path, StravaService.callbackPath);
+      // Domena musi wyglądać jak domena, a nie jak nazwa akcji.
+      expect(uri.host, contains('.'));
+    });
+
+    test('host bierze się z originu Live Ride, a nie z drugiego miejsca', () {
+      final origin = Uri.parse(ApiClient.serverOrigin);
+      expect(StravaService.callbackHost, origin.host);
+    });
+
+    test('logowanie idzie na mobilny punkt autoryzacji', () {
+      // Wersja webowa odrzuca własne schematy adresów.
+      expect(StravaService.authorizeUrl, contains('/oauth/mobile/authorize'));
+    });
+
+    test('ekran konfiguracji podaje domenę, a nie schemat', () {
+      // Instrukcja kazała wcześniej wpisać „liveride" — czyli dokładnie tę
+      // wartość, przez którą Strava odrzucała logowanie.
+      final screen = File(
+        'lib/screens/integrations_screen.dart',
+      ).readAsStringSync();
+      expect(screen, contains('StravaService.callbackHost'));
+      expect(
+        screen.contains("SelectableText(\n                'liveride'"),
+        isFalse,
+      );
+    });
+
+    test('nie koliduje z callbackiem Spotify', () {
+      // Ten sam schemat, inna ścieżka. Bez tego rozróżnienia kod autoryzacji
+      // jednej usługi mógłby trafić do drugiej.
+      expect(
+        StravaService.isOurCallback(
+          Uri.parse('liveride://ride.example.test/strava-callback?code=x'),
+        ),
+        isTrue,
+      );
+      expect(
+        StravaService.isOurCallback(
+          Uri.parse('liveride://spotify-callback?code=x'),
+        ),
+        isFalse,
+      );
+      expect(
+        StravaService.isOurCallback(
+          Uri.parse('https://evil.example/strava-callback?code=x'),
+        ),
+        isFalse,
+      );
+    });
+  });
+
+  group('przebieg logowania', () {
+    /// Serwis z podstawionym oknem logowania i transportem.
+    ({StravaService service, List<String> opened}) wired(
+      String Function(Uri authorize) respond, {
+      Future<ResponseBody> Function(RequestOptions options)? token,
+    }) {
+      final opened = <String>[];
+      final adapter = _StubAdapter(
+        token ??
+            (options) async => _json({
+              'access_token': 'at',
+              'refresh_token': 'rt',
+              'expires_at':
+                  DateTime.now()
+                      .add(const Duration(hours: 6))
+                      .millisecondsSinceEpoch ~/
+                  1000,
+              'athlete': {'firstname': 'Marek', 'lastname': 'P'},
+            }),
+      );
+      final service = StravaService(
+        client: _dio(adapter),
+        opener: (url, scheme) async {
+          opened.add(url);
+          return respond(Uri.parse(url));
+        },
+      );
+      return (service: service, opened: opened);
+    }
+
+    Future<void> configure(StravaService service) =>
+        service.setCredentials(clientId: '12345', clientSecret: 'sekret');
+
+    test('żądanie niesie poprawny redirect_uri i stan', () async {
+      final wiring = wired(
+        (authorize) =>
+            '${StravaService.redirectUri}'
+            '?state=${authorize.queryParameters['state']}&code=abc',
+      );
+      await configure(wiring.service);
+      expect(await wiring.service.connect(), isTrue);
+
+      final sent = Uri.parse(wiring.opened.single);
+      expect(sent.queryParameters['redirect_uri'], StravaService.redirectUri);
+      expect(sent.queryParameters['client_id'], '12345');
+      expect(sent.queryParameters['state'], isNotEmpty);
+      expect(sent.queryParameters['response_type'], 'code');
+      expect(wiring.service.isConnected, isTrue);
+    });
+
+    test('stan wraca ten sam, którym wyszliśmy', () async {
+      String? issued;
+      final wiring = wired((authorize) {
+        issued = authorize.queryParameters['state'];
+        return '${StravaService.redirectUri}?state=$issued&code=abc';
+      });
+      await configure(wiring.service);
+      await wiring.service.connect();
+
+      expect(issued, isNotNull);
+      expect(issued!.length, greaterThanOrEqualTo(16));
+    });
+
+    test('podmieniony stan przerywa logowanie', () async {
+      // Bez tej kontroli ktoś mógłby podrzucić własny kod autoryzacji.
+      final wiring = wired(
+        (authorize) => '${StravaService.redirectUri}?state=cudzy&code=abc',
+      );
+      await configure(wiring.service);
+
+      expect(await wiring.service.connect(), isFalse);
+      expect(wiring.service.isConnected, isFalse);
+      expect(wiring.service.lastError, isNotNull);
+    });
+
+    test('odmowa użytkownika to zwykła informacja, nie awaria', () async {
+      final wiring = wired(
+        (authorize) =>
+            '${StravaService.redirectUri}'
+            '?state=${authorize.queryParameters['state']}&error=access_denied',
+      );
+      await configure(wiring.service);
+
+      expect(await wiring.service.connect(), isFalse);
+      expect(wiring.service.lastError, 'Nie zgodziłeś się na dostęp.');
+    });
+
+    test('callback Spotify nie jest brany za odpowiedź Stravy', () async {
+      final wiring = wired(
+        (authorize) =>
+            'liveride://spotify-callback'
+            '?state=${authorize.queryParameters['state']}&code=abc',
+      );
+      await configure(wiring.service);
+
+      expect(await wiring.service.connect(), isFalse);
+      expect(wiring.service.isConnected, isFalse);
+    });
+
+    test('wymiana kodu na token zapisuje konto', () async {
+      final wiring = wired(
+        (authorize) =>
+            '${StravaService.redirectUri}'
+            '?state=${authorize.queryParameters['state']}&code=abc',
+      );
+      await configure(wiring.service);
+      await wiring.service.connect();
+
+      expect(wiring.service.credentials.accessToken, 'at');
+      expect(wiring.service.credentials.refreshToken, 'rt');
+      expect(wiring.service.credentials.athleteName, contains('Marek'));
+    });
+
+    test('bez poświadczeń nie otwiera nawet okna', () async {
+      final wiring = wired((authorize) => '');
+      expect(await wiring.service.connect(), isFalse);
+      expect(wiring.opened, isEmpty);
+      expect(wiring.service.lastError, isNotNull);
+    });
+  });
+
+  group('odświeżanie tokenu', () {
+    test('wygasły token wymienia się na nowy', () async {
+      final adapter = _StubAdapter(
+        (options) async => _json({
+          'access_token': 'nowy',
+          'refresh_token': 'rt2',
+          'expires_at':
+              DateTime.now()
+                  .add(const Duration(hours: 6))
+                  .millisecondsSinceEpoch ~/
+              1000,
+        }),
+      );
+      final service = StravaService(client: _dio(adapter));
+      await service.setCredentials(clientId: '1', clientSecret: 's');
+      await service.applyTokenForTest({
+        'access_token': 'stary',
+        'refresh_token': 'rt1',
+        'expires_at':
+            DateTime.now()
+                .subtract(const Duration(hours: 1))
+                .millisecondsSinceEpoch ~/
+            1000,
+      });
+
+      expect(await service.ensureFreshToken(), isTrue);
+      expect(service.credentials.accessToken, 'nowy');
+      final body = adapter.requests.last.data as Map;
+      expect(body['grant_type'], 'refresh_token');
+      expect(body['refresh_token'], 'rt1');
+    });
+
+    test('ważny token nie jest odświeżany bez potrzeby', () async {
+      final adapter = _StubAdapter((options) async => _json({}));
+      final service = StravaService(client: _dio(adapter));
+      await service.setCredentials(clientId: '1', clientSecret: 's');
+      await service.applyTokenForTest({
+        'access_token': 'at',
+        'refresh_token': 'rt',
+        'expires_at':
+            DateTime.now()
+                .add(const Duration(hours: 5))
+                .millisecondsSinceEpoch ~/
+            1000,
+      });
+
+      expect(await service.ensureFreshToken(), isTrue);
+      expect(adapter.requests, isEmpty);
+    });
+  });
+
+  group('błędy konfiguracji mówią, co poprawić', () {
+    test('odrzucony redirect_uri wskazuje domenę do wpisania', () {
+      // Dokładna odpowiedź, którą zwraca Strava przy złej konfiguracji.
+      final message = StravaService.configurationProblem({
+        'message': 'Bad Request',
+        'errors': [
+          {
+            'resource': 'Application',
+            'field': 'redirect_uri',
+            'code': 'invalid',
+          },
+        ],
+      });
+
+      expect(message, isNotNull);
+      expect(message, contains(StravaService.callbackHost));
+      expect(message, contains('Authorization Callback Domain'));
+      // Żadnego surowego JSON-a ani angielskiego „Bad Request".
+      expect(message, isNot(contains('Bad Request')));
+      expect(message, isNot(contains('{')));
+    });
+
+    test('zły client_id prowadzi do ustawień aplikacji', () {
+      final message = StravaService.configurationProblem({
+        'errors': [
+          {'field': 'client_id', 'code': 'invalid'},
+        ],
+      });
+      expect(message, contains('Client ID'));
+    });
+
+    test('inny błąd nie udaje problemu z konfiguracją', () {
+      expect(
+        StravaService.configurationProblem({'message': 'Bad Request'}),
+        isNull,
+      );
+      expect(StravaService.configurationProblem(null), isNull);
+      expect(
+        StravaService.configurationProblem({
+          'errors': [
+            {'field': 'activity', 'code': 'invalid'},
+          ],
+        }),
+        isNull,
+      );
     });
   });
 }

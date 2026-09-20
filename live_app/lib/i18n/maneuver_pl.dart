@@ -96,8 +96,9 @@ bool looksPolish(String instruction) {
   if (text.isEmpty) return false;
   final lower = text.toLowerCase();
   for (final marker in _englishMarkers) {
-    if (RegExp('(^|[^a-ząćęłńóśźż])$marker([^a-ząćęłńóśźż]|\$)')
-        .hasMatch(lower)) {
+    if (RegExp(
+      '(^|[^a-ząćęłńóśźż])$marker([^a-ząćęłńóśźż]|\$)',
+    ).hasMatch(lower)) {
       return false;
     }
   }

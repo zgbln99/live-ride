@@ -56,15 +56,18 @@ void main() {
       expect(preview.points.last.x, closeTo(1, 0.001));
     });
 
-    test('trasa z południa na północ leży pionowo, a nie na całą szerokość', () {
-      final preview = RoutePreview.fromRoute(
-        _line(fromLat: 52.0, toLat: 52.1, toLon: 21.0),
-      );
-      final xs = preview.points.map((p) => p.x).toSet();
-      expect(xs.length, 1);
-      // Wyśrodkowana, nie przyklejona do lewej krawędzi.
-      expect(preview.points.first.x, closeTo(0.5, 0.001));
-    });
+    test(
+      'trasa z południa na północ leży pionowo, a nie na całą szerokość',
+      () {
+        final preview = RoutePreview.fromRoute(
+          _line(fromLat: 52.0, toLat: 52.1, toLon: 21.0),
+        );
+        final xs = preview.points.map((p) => p.x).toSet();
+        expect(xs.length, 1);
+        // Wyśrodkowana, nie przyklejona do lewej krawędzi.
+        expect(preview.points.first.x, closeTo(0.5, 0.001));
+      },
+    );
 
     test('północ jest na górze', () {
       // Szerokość geograficzna rośnie na północ, a y na ekranie rośnie w dół.
@@ -89,7 +92,9 @@ void main() {
       ];
       final preview = RoutePreview.fromRoute(loop);
 
-      final width = preview.points.map((p) => p.x).reduce((a, b) => a > b ? a : b);
+      final width = preview.points
+          .map((p) => p.x)
+          .reduce((a, b) => a > b ? a : b);
       final height =
           1 - preview.points.map((p) => p.y).reduce((a, b) => a < b ? a : b);
       expect(width, closeTo(height, 0.05));

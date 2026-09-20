@@ -30,10 +30,7 @@ void main() {
       // Trzy sekundy potwierdzania postoju wymagają kilku próbek w tym
       // czasie. Rzadszy strumień przesunąłby pauzę poza okno, w którym
       // rowerzysta jeszcze uzna ją za reakcję, a nie za zawieszenie.
-      expect(
-        LocationService.rideInterval.inSeconds,
-        lessThanOrEqualTo(1),
-      );
+      expect(LocationService.rideInterval.inSeconds, lessThanOrEqualTo(1));
     });
 
     test('system nie ma prawa sam wstrzymać aktualizacji', () {
@@ -41,7 +38,9 @@ void main() {
       // rusza — czyli dokładnie w chwili, w której potrzebujemy go
       // najbardziej. To jest ustawienie, nie logika, więc jedyne miejsce,
       // w którym da się je sprawdzić, to źródło.
-      final source = File('lib/services/location_service.dart').readAsStringSync();
+      final source = File(
+        'lib/services/location_service.dart',
+      ).readAsStringSync();
       expect(source, contains('pauseLocationUpdatesAutomatically: false'));
       expect(source, contains('activityType: ActivityType.fitness'));
       // I żeby nikt nie wpisał liczby z powrotem obok stałej.
@@ -51,6 +50,5 @@ void main() {
         reason: 'filtr odległości musi iść ze stałej, nie z liczby w miejscu',
       );
     });
-
   });
 }

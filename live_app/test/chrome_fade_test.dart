@@ -192,7 +192,7 @@ void main() {
       await tester.pumpAndSettle();
 
       // Nagłówek nawigacji mówi po polsku także wtedy, gdy router nie.
-    expect(find.text('Skręć w lewo w Seestrasse'), findsOneWidget);
+      expect(find.text('Skręć w lewo w Seestrasse'), findsOneWidget);
       expect(find.byIcon(Icons.turn_left), findsOneWidget);
       expect(find.text('LEFT'), findsOneWidget);
       expect(find.text('ETA'), findsOneWidget);

@@ -245,7 +245,8 @@ void main() {
 
   group('pierwsza telemetria po udostępnieniu', () {
     /// Same żądania telemetryczne — `create` wysyła też prywatność.
-    List<RequestOptions> telemetry(_RecordingAdapter adapter) => adapter.requests
+    List<RequestOptions> telemetry(_RecordingAdapter adapter) => adapter
+        .requests
         .where((request) => request.path.endsWith('/telemetry'))
         .toList();
 

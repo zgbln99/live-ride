@@ -55,19 +55,18 @@ class _Valhalla implements HttpClientAdapter {
   ];
 }
 
-ResponseBody _json(Object body, {int status = 200}) =>
-    ResponseBody.fromString(
-      jsonEncode(body),
-      status,
-      headers: {
-        Headers.contentTypeHeader: [Headers.jsonContentType],
-      },
-    );
-
-ResponseBody _rejected() => _json(
-  {'error_code': 171, 'error': 'No suitable edges near location'},
-  status: 400,
+ResponseBody _json(Object body, {int status = 200}) => ResponseBody.fromString(
+  jsonEncode(body),
+  status,
+  headers: {
+    Headers.contentTypeHeader: [Headers.jsonContentType],
+  },
 );
+
+ResponseBody _rejected() => _json({
+  'error_code': 171,
+  'error': 'No suitable edges near location',
+}, status: 400);
 
 /// Prawidłowa odpowiedź Valhalli z prostą geometrią między dwoma punktami.
 Object _trip(List<GeoPoint> shape, {double km = 1.0}) => {
@@ -126,8 +125,7 @@ RoutingService _service(_Valhalla adapter) {
 }
 
 List<RouteWaypoint> _waypoints(List<GeoPoint> points) => [
-  for (var i = 0; i < points.length; i++)
-    RouteWaypoint(point: points[i]),
+  for (var i = 0; i < points.length; i++) RouteWaypoint(point: points[i]),
 ];
 
 const _a = GeoPoint(lat: 52.2300, lon: 21.0100);
@@ -140,10 +138,9 @@ void main() {
   group('punkt leżący na drodze', () {
     test('przechodzi za pierwszym razem, bez promienia', () async {
       final adapter = _Valhalla((path, body) => _json(_trip([_a, _b])));
-      final path = await _service(adapter).route(
-        waypoints: _waypoints([_a, _b]),
-        preferences: _prefs,
-      );
+      final path = await _service(
+        adapter,
+      ).route(waypoints: _waypoints([_a, _b]), preferences: _prefs);
 
       expect(path.points.length, greaterThanOrEqualTo(2));
       expect(path.mapMatched, isTrue);
@@ -164,40 +161,40 @@ void main() {
 
     test('10 m obok: druga próba z promieniem 25 m znajduje trasę', () async {
       final adapter = acceptsFrom(25);
-      final path = await _service(adapter).route(
-        waypoints: _waypoints([_a, _b]),
-        preferences: _prefs,
-      );
+      final path = await _service(
+        adapter,
+      ).route(waypoints: _waypoints([_a, _b]), preferences: _prefs);
 
       expect(path.mapMatched, isTrue);
       expect(adapter.radii.take(2).toList(), [null, 25]);
-      expect(adapter.routeCalls.length, 2, reason: 'nie próbuj dalej po sukcesie');
+      expect(
+        adapter.routeCalls.length,
+        2,
+        reason: 'nie próbuj dalej po sukcesie',
+      );
     });
 
     test('30 m obok: trzecia próba z promieniem 50 m', () async {
       final adapter = acceptsFrom(50);
-      await _service(adapter).route(
-        waypoints: _waypoints([_a, _b]),
-        preferences: _prefs,
-      );
+      await _service(
+        adapter,
+      ).route(waypoints: _waypoints([_a, _b]), preferences: _prefs);
       expect(adapter.radii, [null, 25, 50]);
     });
 
     test('75 m obok: czwarta próba z promieniem 100 m', () async {
       final adapter = acceptsFrom(100);
-      await _service(adapter).route(
-        waypoints: _waypoints([_a, _b]),
-        preferences: _prefs,
-      );
+      await _service(
+        adapter,
+      ).route(waypoints: _waypoints([_a, _b]), preferences: _prefs);
       expect(adapter.radii, [null, 25, 50, 100]);
     });
 
     test('promień idzie razem z szerszym oknem korelacji', () async {
       final adapter = acceptsFrom(25);
-      await _service(adapter).route(
-        waypoints: _waypoints([_a, _b]),
-        preferences: _prefs,
-      );
+      await _service(
+        adapter,
+      ).route(waypoints: _waypoints([_a, _b]), preferences: _prefs);
       final second = (adapter.routeCalls[1]['locations'] as List).first as Map;
       expect(second['radius'], 25);
       expect(second['search_cutoff'], greaterThan(25));
@@ -233,10 +230,9 @@ void main() {
         return movedHere ? _json(_trip([_a, snapped])) : _rejected();
       });
 
-      final path = await _service(adapter).route(
-        waypoints: _waypoints([_a, _b]),
-        preferences: _prefs,
-      );
+      final path = await _service(
+        adapter,
+      ).route(waypoints: _waypoints([_a, _b]), preferences: _prefs);
 
       expect(path.mapMatched, isTrue);
       // Kreator ma czym pokazać, że punkt został dosunięty.
@@ -266,10 +262,9 @@ void main() {
         return located ? _json(_trip([_a, nudged])) : _rejected();
       });
 
-      final path = await _service(adapter).route(
-        waypoints: _waypoints([_a, _b]),
-        preferences: _prefs,
-      );
+      final path = await _service(
+        adapter,
+      ).route(waypoints: _waypoints([_a, _b]), preferences: _prefs);
       expect(path.snappedWaypoints, isEmpty);
     });
   });
@@ -284,10 +279,9 @@ void main() {
         return _json(_trip([_a, _b]));
       });
 
-      final path = await _service(adapter).route(
-        waypoints: _waypoints([_a, _b, _c]),
-        preferences: _prefs,
-      );
+      final path = await _service(
+        adapter,
+      ).route(waypoints: _waypoints([_a, _b, _c]), preferences: _prefs);
 
       expect(path.mapMatched, isTrue);
       expect(path.distanceMeters, greaterThan(0));
@@ -306,18 +300,14 @@ void main() {
         return _json(_trip([_a, _b, _c]));
       });
 
-      final path = await _service(adapter).route(
-        waypoints: _waypoints([_a, _b, _c]),
-        preferences: _prefs,
-      );
+      final path = await _service(
+        adapter,
+      ).route(waypoints: _waypoints([_a, _b, _c]), preferences: _prefs);
 
       expect(path.maneuvers.length, 2);
       // Drugi manewr nie może wskazywać na początek geometrii.
       expect(path.maneuvers[1].beginShapeIndex, greaterThan(0));
-      expect(
-        path.maneuvers[1].beginShapeIndex,
-        lessThan(path.points.length),
-      );
+      expect(path.maneuvers[1].beginShapeIndex, lessThan(path.points.length));
     });
   });
 
@@ -334,10 +324,9 @@ void main() {
       });
 
       await expectLater(
-        _service(adapter).route(
-          waypoints: _waypoints([_a, _b, _c]),
-          preferences: _prefs,
-        ),
+        _service(
+          adapter,
+        ).route(waypoints: _waypoints([_a, _b, _c]), preferences: _prefs),
         throwsA(
           isA<RoutingException>()
               .having((e) => e.waypointIndex, 'waypointIndex', 2)
@@ -349,10 +338,9 @@ void main() {
     test('komunikat nie każe przesuwać punktu o pięć metrów', () async {
       final adapter = _Valhalla((path, body) => _rejected());
       try {
-        await _service(adapter).route(
-          waypoints: _waypoints([_a, _b]),
-          preferences: _prefs,
-        );
+        await _service(
+          adapter,
+        ).route(waypoints: _waypoints([_a, _b]), preferences: _prefs);
         fail('trasowanie powinno się nie udać');
       } on RoutingException catch (e) {
         expect(e.message, isNot(contains('Przesuń je bliżej drogi')));
@@ -363,10 +351,9 @@ void main() {
     test('wyczerpuje wszystkie próby, zanim zgłosi błąd', () async {
       final adapter = _Valhalla((path, body) => _rejected());
       try {
-        await _service(adapter).route(
-          waypoints: _waypoints([_a, _b]),
-          preferences: _prefs,
-        );
+        await _service(
+          adapter,
+        ).route(waypoints: _waypoints([_a, _b]), preferences: _prefs);
       } on RoutingException {
         // oczekiwane
       }
@@ -392,10 +379,9 @@ void main() {
         );
       });
 
-      final path = await _service(adapter).route(
-        waypoints: _waypoints([_a, _b]),
-        preferences: _prefs,
-      );
+      final path = await _service(
+        adapter,
+      ).route(waypoints: _waypoints([_a, _b]), preferences: _prefs);
 
       // Szkic zostaje szkicem i mówi to wprost, zamiast udawać trasę.
       expect(path.mapMatched, isFalse);
@@ -417,10 +403,9 @@ void main() {
         return locations.length > 2 ? _rejected() : _json(_trip([_a, _b]));
       });
 
-      await _service(adapter).route(
-        waypoints: _waypoints([_a, _b, _c]),
-        preferences: _prefs,
-      );
+      await _service(
+        adapter,
+      ).route(waypoints: _waypoints([_a, _b, _c]), preferences: _prefs);
 
       for (final request in adapter.requests) {
         expect(

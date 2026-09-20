@@ -464,6 +464,16 @@ class Strings {
   String get stravaAccessDenied => 'Nie zgodziłeś się na dostęp.';
   String get stravaAuthFailed => 'Strava odrzuciła logowanie.';
   String get stravaNoCode => 'Strava nie odesłała kodu autoryzacji.';
+
+  /// Najczęstszy błąd konfiguracji — i jedyny, który da się naprawić
+  /// wyłącznie po stronie Stravy, więc komunikat mówi dokładnie gdzie i co.
+  String stravaBadRedirect(String domain) =>
+      'Strava odrzuciła adres powrotny. W ustawieniach aplikacji na '
+      'stronie strava.com/settings/api wpisz w polu „Authorization '
+      'Callback Domain" dokładnie: $domain';
+  String get stravaBadClient =>
+      'Strava nie rozpoznaje Client ID lub Client Secret. Sprawdź je '
+      'w ustawieniach aplikacji na strava.com/settings/api.';
   String get stravaSignInAgain => 'Zaloguj się do Stravy ponownie.';
   String get stravaRateLimited =>
       'Strava chwilowo ogranicza zapytania. Spróbuj za kilka minut.';
@@ -479,7 +489,8 @@ class Strings {
       'telefonie.';
   String get stravaStep1 =>
       'Wejdź na strava.com/settings/api i utwórz aplikację.';
-  String get stravaStep2 => 'W polu Authorization Callback Domain wpisz:';
+  String get stravaStep2 =>
+      'W polu Authorization Callback Domain wpisz dokładnie tę domenę:';
   String get stravaStep3 => 'Skopiuj Client ID i Client Secret poniżej.';
   String get clientSecret => 'Client secret';
   String get connectStrava => 'POŁĄCZ ZE STRAVĄ';

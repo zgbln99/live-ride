@@ -11,8 +11,39 @@ import 'package:live_ride/models/navigation_plan.dart';
 
 /// Wszystkie kody manewrów, które Valhalla potrafi zwrócić dla roweru.
 const List<int> _allTypes = [
-  0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16,
-  17, 18, 19, 20, 21, 22, 23, 24, 25, 26, 27, 28, 29, 30, 37, 38,
+  0,
+  1,
+  2,
+  3,
+  4,
+  5,
+  6,
+  7,
+  8,
+  9,
+  10,
+  11,
+  12,
+  13,
+  14,
+  15,
+  16,
+  17,
+  18,
+  19,
+  20,
+  21,
+  22,
+  23,
+  24,
+  25,
+  26,
+  27,
+  28,
+  29,
+  30,
+  37,
+  38,
 ];
 
 /// Angielskie słowa, których rowerzysta nie ma prawa zobaczyć.
@@ -76,16 +107,19 @@ void main() {
   });
 
   group('zdania z briefu', () {
-    test('Turn left onto Burgenlandstraße → Skręć w lewo w Burgenlandstraße', () {
-      expect(
-        maneuverInstructionPl(
-          type: ValhallaManeuver.left,
-          streetNames: ['Burgenlandstraße'],
-          routerInstruction: 'Turn left onto Burgenlandstraße.',
-        ),
-        'Skręć w lewo w Burgenlandstraße',
-      );
-    });
+    test(
+      'Turn left onto Burgenlandstraße → Skręć w lewo w Burgenlandstraße',
+      () {
+        expect(
+          maneuverInstructionPl(
+            type: ValhallaManeuver.left,
+            streetNames: ['Burgenlandstraße'],
+            routerInstruction: 'Turn left onto Burgenlandstraße.',
+          ),
+          'Skręć w lewo w Burgenlandstraße',
+        );
+      },
+    );
 
     test('Turn right → Skręć w prawo', () {
       expect(
@@ -170,7 +204,10 @@ void main() {
     test('niemiecka nazwa przechodzi znak w znak', () {
       const street = 'Burgenlandstraße';
       expect(
-        maneuverInstructionPl(type: ValhallaManeuver.left, streetNames: [street]),
+        maneuverInstructionPl(
+          type: ValhallaManeuver.left,
+          streetNames: [street],
+        ),
         contains(street),
       );
     });

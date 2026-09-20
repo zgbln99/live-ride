@@ -66,18 +66,19 @@ void main() {
       r'payload\["(\w+)"\]',
     ).allMatches(updater).map((match) => match.group(1)!).toSet();
 
-    final sent = LiveActivityService()
-        .buildPayload(
-          metrics: const RideMetrics(),
-          paused: false,
-          live: false,
-          metric: true,
-        )
-        .keys
-        .toSet()
-      ..addAll(['routeShape', 'routeAspect'])
-      // `priority` steruje kolejką, a nie treścią karty.
-      ..remove('priority');
+    final sent =
+        LiveActivityService()
+            .buildPayload(
+              metrics: const RideMetrics(),
+              paused: false,
+              live: false,
+              metric: true,
+            )
+            .keys
+            .toSet()
+          ..addAll(['routeShape', 'routeAspect'])
+          // `priority` steruje kolejką, a nie treścią karty.
+          ..remove('priority');
 
     expect(
       sent.difference(merged),

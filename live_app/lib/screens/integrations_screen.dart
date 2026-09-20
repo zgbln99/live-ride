@@ -206,11 +206,14 @@ class _IntegrationsScreenState extends State<IntegrationsScreen> {
             const SizedBox(height: 12),
             _step(1, S.stravaStep1),
             _step(2, S.stravaStep2),
-            const Padding(
-              padding: EdgeInsets.fromLTRB(28, 2, 0, 8),
+            Padding(
+              padding: const EdgeInsets.fromLTRB(28, 2, 0, 8),
+              // Domena adresu powrotnego, a nie schemat. Strava sprawdza
+              // HOST, więc wpisanie tu „liveride" kończy się odrzuceniem
+              // logowania z błędem `redirect_uri invalid`.
               child: SelectableText(
-                'liveride',
-                style: TextStyle(fontFamily: 'Menlo', fontSize: 12.5),
+                StravaService.callbackHost,
+                style: const TextStyle(fontFamily: 'Menlo', fontSize: 12.5),
               ),
             ),
             _step(3, S.stravaStep3),

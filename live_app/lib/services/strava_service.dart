@@ -7,6 +7,7 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_web_auth_2/flutter_web_auth_2.dart';
 
+import '../core/api_client.dart';
 import '../data/settings_dao.dart';
 import '../i18n/strings.dart';
 import '../models/integration.dart';
@@ -34,10 +35,45 @@ class StravaService extends ChangeNotifier {
       _open = opener ?? _defaultOpener;
 
   static const String apiBase = 'https://www.strava.com/api/v3';
-  static const String authorizeUrl = 'https://www.strava.com/oauth/authorize';
+
+  /// Mobilny punkt autoryzacji Stravy.
+  ///
+  /// Wersja webowa (`/oauth/authorize`) jest pomyślana dla przeglądarki na
+  /// serwerze i odrzuca własne schematy adresów. Ta przyjmuje je i potrafi
+  /// przerzucić logowanie do zainstalowanej aplikacji Strava, zamiast kazać
+  /// wpisywać hasło w oknie przeglądarki.
+  static const String authorizeUrl =
+      'https://www.strava.com/oauth/mobile/authorize';
   static const String tokenUrl = 'https://www.strava.com/oauth/token';
-  static const String redirectUri = 'liveride://strava-callback';
   static const String callbackScheme = 'liveride';
+
+  /// Ścieżka, po której poznajemy, że wracamy właśnie ze Stravy.
+  ///
+  /// Spotify wraca tym samym schematem, więc rozróżnienie musi być w adresie,
+  /// a nie w tym, które okno akurat otworzyliśmy.
+  static const String callbackPath = '/strava-callback';
+
+  /// Adres powrotny po zalogowaniu.
+  ///
+  /// Host MUSI odpowiadać polu „Authorization Callback Domain" w ustawieniach
+  /// aplikacji Strava — i to jest cały powód, dla którego wygląda tak dziwnie.
+  /// Strava sprawdza domenę adresu powrotnego, a `liveride://strava-callback`
+  /// ma jako domenę „strava-callback", czyli coś, czego nie da się tam wpisać.
+  /// Stąd błąd `redirect_uri invalid` przy każdej próbie połączenia.
+  ///
+  /// Host bierze się z tego samego originu, pod którym stoi Live Ride, żeby
+  /// nie było dwóch miejsc do zmieniania przy przeprowadzce serwera.
+  static String get redirectUri => 'liveride://$callbackHost$callbackPath';
+
+  /// Domena, którą trzeba wpisać w ustawieniach aplikacji Strava.
+  static String get callbackHost {
+    final origin = Uri.tryParse(ApiClient.serverOrigin);
+    final host = origin?.host ?? '';
+    // Gdyby origin był popsuty, lepiej pokazać wprost, że nie ma czego wpisać,
+    // niż wysłać do Stravy adres z pustym hostem i dostać ten sam błąd.
+    return host.isEmpty ? 'live-ride.invalid' : host;
+  }
+
   static const String settingsKey = 'integration_strava';
 
   /// Zakres: zapis aktywności i odczyt profilu, nic więcej.
@@ -130,6 +166,15 @@ class StravaService extends ChangeNotifier {
     try {
       final result = await _open(url.toString(), callbackScheme);
       final returned = Uri.parse(result);
+
+      // Ten sam schemat obsługuje Spotify. Sprawdzamy ścieżkę, zanim
+      // uznamy cudzy kod autoryzacji za swój.
+      if (!_isOurCallback(returned)) {
+        _fail(S.stravaAuthFailed);
+        return false;
+      }
+      // Porównanie stanu chroni przed podrzuceniem cudzego kodu. Idzie
+      // PRZED odczytaniem czegokolwiek innego z adresu.
       if (returned.queryParameters['state'] != state) {
         _fail(S.stravaStateMismatch);
         return false;
@@ -156,6 +201,19 @@ class StravaService extends ChangeNotifier {
       return false;
     }
   }
+
+  /// Czy ten adres powrotny należy do Stravy, a nie do innej integracji.
+  ///
+  /// Schemat `liveride://` obsługuje też Spotify. Jedno okno logowania jest
+  /// otwarte naraz, więc pomyłka jest mało prawdopodobna — ale „mało
+  /// prawdopodobna" to za mało, gdy chodzi o cudzy kod autoryzacji.
+  @visibleForTesting
+  static bool isOurCallback(Uri returned) =>
+      returned.scheme == callbackScheme &&
+      (returned.path == callbackPath ||
+          returned.host == callbackPath.substring(1));
+
+  bool _isOurCallback(Uri returned) => isOurCallback(returned);
 
   Future<bool> _exchange(String code) async {
     try {
@@ -206,6 +264,16 @@ class StravaService extends ChangeNotifier {
       await disconnect();
       return false;
     }
+  }
+
+  /// Wstawia token tak, jakby przyszedł ze Stravy.
+  ///
+  /// Wyłącznie dla testów odświeżania: inaczej trzeba by przejść całe
+  /// logowanie w przeglądarce, żeby sprawdzić, co się dzieje po wygaśnięciu.
+  @visibleForTesting
+  Future<void> applyTokenForTest(Map<String, dynamic> data) async {
+    _applyToken(data);
+    await _persist();
   }
 
   void _applyToken(Map<String, dynamic>? data) {
@@ -344,10 +412,11 @@ class StravaService extends ChangeNotifier {
     if (status == 401) return S.stravaSignInAgain;
     if (status == 429) return S.stravaRateLimited;
     if (status == 400) {
-      final message = error.response?.data;
-      if (message is Map && message['message'] is String) {
-        return message['message'] as String;
-      }
+      // Strava opisuje błąd konfiguracji w `errors[]`, a w `message` daje
+      // samo „Bad Request". Pokazanie tego użytkownikowi nie mówi nic;
+      // pokazanie surowego JSON-a mówi jeszcze mniej.
+      final configuration = _configurationProblem(error.response?.data);
+      if (configuration != null) return configuration;
       return S.stravaRejected;
     }
     return switch (error.type) {
@@ -357,6 +426,35 @@ class StravaService extends ChangeNotifier {
       _ => S.stravaUnreachable,
     };
   }
+
+  /// Zamienia `errors[]` ze Stravy w zdanie, po którym wiadomo, co zrobić.
+  ///
+  /// Odpowiedź wygląda tak:
+  /// `{"message":"Bad Request","errors":[{"resource":"Application",
+  ///   "field":"redirect_uri","code":"invalid"}]}`
+  ///
+  /// Samo „Bad Request" nie prowadzi donikąd, a pole `redirect_uri` mówi
+  /// wprost, że rozjechała się domena adresu powrotnego.
+  @visibleForTesting
+  static String? configurationProblem(Object? body) {
+    if (body is! Map) return null;
+    final errors = body['errors'];
+    if (errors is! List) return null;
+    for (final entry in errors) {
+      if (entry is! Map) continue;
+      switch (entry['field']) {
+        case 'redirect_uri':
+          return S.stravaBadRedirect(callbackHost);
+        case 'client_id':
+        case 'client_secret':
+          return S.stravaBadClient;
+      }
+    }
+    return null;
+  }
+
+  static String? _configurationProblem(Object? body) =>
+      configurationProblem(body);
 
   static String _randomState() {
     final random = math.Random.secure();

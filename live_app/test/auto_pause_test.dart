@@ -472,11 +472,7 @@ void main() {
       // konsekwentnie mówi zero. Tak wygląda postój między blokami.
       const drift = [0.0, 6.0, -4.0, 15.0, 2.0, -11.0, 8.0, 0.0, -6.0, 13.0];
       for (var i = 0; i < 40; i++) {
-        ride.second(
-          0,
-          absolutePosition: drift[i % drift.length],
-          accuracy: 12,
-        );
+        ride.second(0, absolutePosition: drift[i % drift.length], accuracy: 12);
       }
 
       expect(ride.pausedAtLeastOnce, isTrue, reason: 'dryf nie blokuje pauzy');
@@ -486,10 +482,7 @@ void main() {
         reason: 'i nie wznawia jej z powrotem',
       );
       // Jedno przejście, nie seria — mruganie liczyłoby się tu jako wiele.
-      expect(
-        ride.actions.where((a) => a == AutoPauseAction.pause).length,
-        1,
-      );
+      expect(ride.actions.where((a) => a == AutoPauseAction.pause).length, 1);
     });
 
     test('D: po pauzie dryf w miejscu nadal nie wznawia', () {
@@ -500,11 +493,7 @@ void main() {
       expect(ride.paused, isTrue);
 
       for (var i = 0; i < 60; i++) {
-        ride.second(
-          0,
-          absolutePosition: (i % 5) * 3.0 - 6.0,
-          accuracy: 10,
-        );
+        ride.second(0, absolutePosition: (i % 5) * 3.0 - 6.0, accuracy: 10);
       }
       expect(ride.resumedAtLeastOnce, isFalse);
     });

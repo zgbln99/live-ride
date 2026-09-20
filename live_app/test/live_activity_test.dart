@@ -294,15 +294,13 @@ void main() {
       final service = wiring.service;
       await service.start(riderName: 'Marek', title: 'Test', navigating: false);
 
-      Future<void> push({
-        required bool paused,
-        required double speed,
-      }) => service.update(
-        metrics: RideMetrics(speedKmh: speed),
-        paused: paused,
-        live: false,
-        metric: true,
-      );
+      Future<void> push({required bool paused, required double speed}) =>
+          service.update(
+            metrics: RideMetrics(speedKmh: speed),
+            paused: paused,
+            live: false,
+            metric: true,
+          );
 
       await push(paused: false, speed: 20);
       final afterFirst = wiring.calls.length;
@@ -332,9 +330,14 @@ void main() {
       await service.setRoute(preview);
       await service.setRoute(preview);
 
-      final routeCalls =
-          wiring.calls.where((call) => call.method == 'route').toList();
-      expect(routeCalls.length, 1, reason: 'ten sam kształt drugi raz nie leci');
+      final routeCalls = wiring.calls
+          .where((call) => call.method == 'route')
+          .toList();
+      expect(
+        routeCalls.length,
+        1,
+        reason: 'ten sam kształt drugi raz nie leci',
+      );
       final payload = routeCalls.single.arguments as Map;
       expect(payload['routeShape'], isNotEmpty);
       expect(payload['routeAspect'], isA<double>());
