@@ -11,12 +11,18 @@
 #
 # `flutter create` produces a single-target iOS project, so the watch target
 # has to be added afterwards. Doing it by hand is a dozen screens of Xcode
-# clicking that would have to be repeated every time the shell is
-# regenerated — which is exactly the kind of "works on my machine" step this
-# project refuses to require.
+# clicking that would have to be repeated every time the shell is regenerated.
 #
-# The script is idempotent: a second run replaces the target instead of
-# adding a second one.
+# Xcode 26 changed how a modern, single-target watchOS app (product type
+# `com.apple.product-type.application`) is embedded. Putting that target in the
+# historical Runner.app/Watch directory can make installd reject the iPhone app
+# with InvalidWatchKitApp / "Could not get contents of Watch directory". On
+# Xcode 26+ this script therefore embeds the watch product as a Foundation
+# extension in Runner.app/PlugIns. Xcode 16 and older keep the historical
+# Watch/ layout.
+#
+# The script is idempotent: a second run replaces the target instead of adding
+# a second one and removes stale empty Watch copy phases left by older runs.
 #
 # Usage: ruby add_watch_target.rb <path-to-ios-dir> <app-bundle-id>
 
@@ -34,6 +40,14 @@ abort "No Xcode project at #{project_path}" unless Dir.exist?(project_path)
 project = Xcodeproj::Project.open(project_path)
 runner = project.targets.find { |target| target.name == 'Runner' }
 abort 'No Runner target in the project' if runner.nil?
+
+# Xcode 26+ treats a single-target watchOS `application` product as a
+# Foundation extension when it is embedded in an iOS companion app. Detect the
+# toolchain that will actually build the generated project instead of assuming
+# a layout forever.
+xcode_version_output = `xcodebuild -version 2>/dev/null`
+xcode_major = xcode_version_output[/Xcode\s+(\d+)/, 1].to_i
+modern_watch_embedding = xcode_major >= 26
 
 # ---------------------------------------------------------------- clean slate
 project.targets.select { |target| target.name == TARGET_NAME }.each do |target|
@@ -53,11 +67,18 @@ runner.copy_files_build_phases.each do |phase|
   }.each(&:remove_from_project)
 end
 
+# An old script may have left an empty Embed Watch Content phase behind. With
+# Xcode 26 that is harmful: merely keeping the legacy Watch destination around
+# can leave a Runner.app/Watch directory for installd to inspect. Remove only
+# empty legacy phases, never a phase that still embeds some other product.
+if modern_watch_embedding
+  runner.copy_files_build_phases
+        .select { |phase| phase.name == 'Embed Watch Content' && phase.files.empty? }
+        .each(&:remove_from_project)
+end
+
 # -------------------------------------------------------------- create target
-#
-# A single-target watch app (watchOS 7+), not the old app + extension pair:
-# the two-target layout has been deprecated since Xcode 14 and doubles the
-# signing work for no benefit here.
+# A single-target watch app (watchOS 7+), not the old app + extension pair.
 watch = project.new_target(:application, TARGET_NAME, :watchos, DEPLOYMENT_TARGET)
 
 group = project.main_group.new_group(TARGET_NAME, TARGET_NAME)
@@ -112,21 +133,33 @@ end
 # --------------------------------------------------------------- embed + link
 runner.add_dependency(watch)
 
-embed = runner.copy_files_build_phases.find do |phase|
-  phase.name == 'Embed Watch Content'
+if modern_watch_embedding
+  # Xcode 26+ modern single-target watch apps are Foundation extensions. Reuse
+  # the same PlugIns phase as LiveRideWidgets when it already exists.
+  embed = runner.copy_files_build_phases.find do |phase|
+    phase.symbol_dst_subfolder_spec == :plug_ins
+  end
+  embed ||= runner.new_copy_files_build_phase('Embed Foundation Extensions')
+  embed.name = 'Embed Foundation Extensions'
+  embed.symbol_dst_subfolder_spec = :plug_ins
+  embed.dst_path = ''
+else
+  # Historical layout used by Xcode 16 and older.
+  embed = runner.copy_files_build_phases.find do |phase|
+    phase.name == 'Embed Watch Content'
+  end
+  embed ||= runner.new_copy_files_build_phase('Embed Watch Content')
+  embed.symbol_dst_subfolder_spec = :products_directory
+  embed.dst_path = '$(CONTENTS_FOLDER_PATH)/Watch'
 end
-embed ||= runner.new_copy_files_build_phase('Embed Watch Content')
-embed.symbol_dst_subfolder_spec = :products_directory
-embed.dst_path = '$(CONTENTS_FOLDER_PATH)/Watch'
 embed.run_only_for_deployment_postprocessing = '0'
 build_file = embed.add_file_reference(watch.product_reference)
 build_file.settings = { 'ATTRIBUTES' => ['RemoveHeadersOnCopy'] }
 
 # ----------------------------------------------------- break the build cycle
-#
-# Same trap as the Live Activity extension: Flutter's "Thin Binary" script
-# reads the finished .app, and this phase writes into it. Left after the
-# script, Xcode 15+ refuses the build with "Cycle inside Runner".
+# Flutter's "Thin Binary" script reads the finished .app while the embed phase
+# writes into it. Xcode 15+ can report a dependency cycle if embedding is left
+# after Thin Binary, so keep the embed phase before it for both layouts.
 def flutter_thin_phase?(phase)
   return false unless phase.is_a?(Xcodeproj::Project::Object::PBXShellScriptBuildPhase)
 
@@ -134,7 +167,7 @@ def flutter_thin_phase?(phase)
   script = phase.shell_script.to_s
   name.include?('Thin Binary') ||
     script.include?('embed_and_thin') ||
-    script.include?('xcode_backend.sh\" thin') ||
+    script.include?('xcode_backend.sh\\" thin') ||
     script.include?("xcode_backend.sh' thin")
 end
 
@@ -146,12 +179,14 @@ if thin_index && embed_index && embed_index > thin_index
   phases.insert(thin_index, embed)
   runner.build_phases.clear
   phases.each { |phase| runner.build_phases << phase }
-  puts 'Moved "Embed Watch Content" before "Thin Binary".'
+  puts "Moved \"#{embed.name}\" before \"Thin Binary\"."
 end
 
 project.save
 
+layout = modern_watch_embedding ? 'PlugIns (Xcode 26+)' : 'Watch (legacy Xcode)'
 puts "Added #{TARGET_NAME} (#{app_bundle_id}.watchkitapp), watchOS #{DEPLOYMENT_TARGET}+."
+puts "Watch embedding: #{layout}; detected Xcode #{xcode_major.zero? ? 'unknown' : xcode_major}."
 puts 'Build phase order on Runner:'
 runner.build_phases.each_with_index do |phase, index|
   label = phase.respond_to?(:name) && phase.name ? phase.name : phase.isa
