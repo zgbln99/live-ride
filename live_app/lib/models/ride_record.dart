@@ -97,6 +97,7 @@ class RecordedRide {
   final String name;
   final DateTime startedAt;
   final DateTime endedAt;
+
   /// Czas zegarowy od startu do mety, razem z postojami.
   final int elapsedSeconds;
   final int movingSeconds;
@@ -283,8 +284,7 @@ class RecordedRide {
       // their moving time rather than showing zero.
       elapsedSeconds: (json['elapsed_seconds'] as num?)?.toInt() ?? moving,
       movingSeconds: moving,
-      autoPausedSeconds:
-          (json['auto_paused_seconds'] as num?)?.toInt() ?? 0,
+      autoPausedSeconds: (json['auto_paused_seconds'] as num?)?.toInt() ?? 0,
       manualPausedSeconds:
           (json['manual_paused_seconds'] as num?)?.toInt() ?? 0,
       distanceMeters: (json['distance_meters'] as num?)?.toDouble() ?? 0,

@@ -11,6 +11,7 @@ import 'package:live_ride/models/rider_profile.dart';
 import 'package:live_ride/services/ride_recorder.dart';
 import 'package:live_ride/widgets/chrome_fade.dart';
 import 'package:live_ride/widgets/navigation_header.dart';
+import 'package:live_ride/widgets/pause_banner.dart';
 import 'package:live_ride/widgets/ride_controls.dart';
 import 'package:live_ride/widgets/ride_data_grid.dart';
 
@@ -23,6 +24,7 @@ Widget rideScaffold({
   bool chromeVisible = true,
   double bottomInset = 0,
   double availableHeight = double.infinity,
+  bool? automaticPause,
 }) {
   const metrics = RideMetrics(
     speedKmh: 34.7,
@@ -73,6 +75,12 @@ Widget rideScaffold({
               onExit: () {},
               onOverview: () {},
             ),
+          if (automaticPause != null)
+            PauseBanner(
+              key: const Key('pause'),
+              automatic: automaticPause,
+              onResume: () {},
+            ),
           const Expanded(
             child: ColoredBox(key: Key('map'), color: LR.canvas),
           ),
@@ -97,7 +105,9 @@ Widget rideScaffold({
             collapse: true,
             child: RideControls(
               key: const Key('controls'),
-              state: RideState.recording,
+              state: automaticPause == null
+                  ? RideState.recording
+                  : RideState.paused,
               onPause: () {},
               onResume: () {},
               onStop: () {},
@@ -219,4 +229,77 @@ void main() {
       closeTo(667, 1),
     );
   });
+
+  group('pasek pauzy', () {
+    // Pauza jest paskiem, nie oknem: zasłonięcie mapy komunikatem w środku
+    // jazdy jest gorsze niż sam zatrzymany czas. Pasek musi się zmieścić
+    // razem z najgęstszym pulpitem na najmniejszym telefonie.
+    for (final device in sizes) {
+      for (final automatic in [true, false]) {
+        testWidgets('${automatic ? 'automatyczna' : 'ręczna'} mieści się na '
+            '${device.size.width.toInt()}x${device.size.height.toInt()}', (
+          tester,
+        ) async {
+          tester.view.physicalSize = device.size;
+          tester.view.devicePixelRatio = 1;
+          addTearDown(tester.view.reset);
+
+          await tester.pumpWidget(
+            rideScaffold(
+              layout: RideFieldLayout.eight,
+              navigating: true,
+              bottomInset: device.inset,
+              availableHeight: device.size.height,
+              automaticPause: automatic,
+            ),
+          );
+          await tester.pumpAndSettle();
+
+          expect(tester.takeException(), isNull);
+          expect(find.byKey(const Key('pause')), findsOneWidget);
+          // Mapa nie znika pod paskiem — pasek zajmuje pasek.
+          expect(
+            tester.getSize(find.byKey(const Key('map'))).height,
+            greaterThan(0),
+          );
+        });
+      }
+    }
+
+    testWidgets('automatyczna mówi, jak ją zdjąć, i nie ma przycisku', (
+      tester,
+    ) async {
+      await tester.pumpWidget(
+        const MaterialApp(
+          home: Scaffold(body: PauseBanner(automatic: true, onResume: _noop)),
+        ),
+      );
+      expect(find.text('AUTOMATYCZNA PAUZA'), findsOneWidget);
+      expect(find.text('Rusz, aby wznowić'), findsOneWidget);
+      // Przycisk WZNÓW przy pauzie automatycznej sugerowałby, że bez
+      // naciśnięcia licznik nie ruszy.
+      expect(find.widgetWithText(TextButton, 'WZNÓW'), findsNothing);
+    });
+
+    testWidgets('ręczna czeka na palec i nie nazywa się automatyczną', (
+      tester,
+    ) async {
+      var resumed = 0;
+      await tester.pumpWidget(
+        MaterialApp(
+          home: Scaffold(
+            body: PauseBanner(automatic: false, onResume: () => resumed++),
+          ),
+        ),
+      );
+      expect(find.text('PAUZA'), findsOneWidget);
+      expect(find.text('AUTOMATYCZNA PAUZA'), findsNothing);
+      expect(find.text('Rusz, aby wznowić'), findsNothing);
+
+      await tester.tap(find.widgetWithText(TextButton, 'WZNÓW'));
+      expect(resumed, 1);
+    });
+  });
 }
+
+void _noop() {}

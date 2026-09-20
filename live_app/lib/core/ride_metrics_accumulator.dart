@@ -328,9 +328,7 @@ class RideMetricsAccumulator {
     cadenceRpm: _cadence,
     averageCadenceRpm: averageCadenceRpm,
     maxCadenceRpm: _cadenceCount == 0 ? null : _cadenceMax,
-    power: _power.hasData
-        ? _power.build(elapsed: recording ?? elapsed)
-        : null,
+    power: _power.hasData ? _power.build(elapsed: recording ?? elapsed) : null,
     workKj: _workJoules > 0 ? _workJoules / 1000 : null,
     sensorSpeedKmh: _sensorSpeedKmh,
     gpsAccuracyMeters: _accuracy,

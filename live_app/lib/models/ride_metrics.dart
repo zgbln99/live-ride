@@ -35,6 +35,7 @@ class RideMetrics {
   final double speedKmh;
   final double maxSpeedKmh;
   final double distanceMeters;
+
   /// Czas od startu do teraz, razem z każdym postojem.
   final Duration elapsed;
 

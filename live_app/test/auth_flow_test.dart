@@ -168,10 +168,7 @@ void main() {
     test('nie jest traktowany jak wygaśnięcie sesji', () async {
       // 401 na trasie publicznej znaczy „złe dane", a nie „wyloguj mnie".
       // Bez tego nieudany reset wyrzucałby zalogowanego z aplikacji.
-      expect(
-        ApiClient.publicPaths.any('/auth/reset'.startsWith),
-        isTrue,
-      );
+      expect(ApiClient.publicPaths.any('/auth/reset'.startsWith), isTrue);
     });
   });
 

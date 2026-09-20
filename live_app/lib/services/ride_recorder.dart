@@ -107,6 +107,7 @@ class RideRecorder extends ChangeNotifier {
   RideState _state = RideState.idle;
   RideMetrics _metrics = RideMetrics.empty;
   GeoPoint? _position;
+
   /// Cały podział czasu na jazdę i postoje — razem z zasadą, że ręcznej
   /// pauzy nie zdejmuje nikt poza rowerzystą.
   final RideClock _clock = RideClock();
@@ -509,11 +510,10 @@ class RideRecorder extends ChangeNotifier {
   WorkoutProgress? get workoutProgress => workoutRunner.progress;
 
   /// Porównanie z wirtualnym rywalem albo null, gdy żadnego nie ma.
-  PaceComparison? get paceComparison =>
-      pace.compare(
-        riderMeters: _accumulator.distanceMeters,
-        elapsed: recordingTime,
-      );
+  PaceComparison? get paceComparison => pace.compare(
+    riderMeters: _accumulator.distanceMeters,
+    elapsed: recordingTime,
+  );
 
   void _updateClimb(GeoPoint point) {
     if (_route == null) return;

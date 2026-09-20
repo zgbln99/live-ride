@@ -678,9 +678,8 @@ class _AutoPauseAdvanced extends StatelessWidget {
           max: 15,
           divisions: 13,
           format: (value) => '${value.round()} s',
-          onChanged: (value) => onChanged(
-            profile.copyWith(autoPauseDelaySeconds: value.round()),
-          ),
+          onChanged: (value) =>
+              onChanged(profile.copyWith(autoPauseDelaySeconds: value.round())),
         ),
         Align(
           alignment: Alignment.centerRight,
@@ -689,8 +688,7 @@ class _AutoPauseAdvanced extends StatelessWidget {
                 ? null
                 : () => onChanged(
                     profile.copyWith(
-                      autoPauseSpeedKmh:
-                          RiderProfile.defaultAutoPauseSpeedKmh,
+                      autoPauseSpeedKmh: RiderProfile.defaultAutoPauseSpeedKmh,
                       autoPauseDelaySeconds:
                           RiderProfile.defaultAutoPauseDelaySeconds,
                     ),
