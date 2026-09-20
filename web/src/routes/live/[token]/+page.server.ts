@@ -53,6 +53,37 @@ export const load: PageServerLoad = async ({ params, fetch, setHeaders, url }) =
     };
 };
 
+/**
+ * „Marek" → „Marka".
+ *
+ * Dopełniacz dla polskich imion na spółgłoskę i na -a. Reszty nie ruszamy:
+ * źle odmienione imię w podglądzie linku jest gorsze niż nieodmienione.
+ */
+function possessive(name: string): string {
+    if (!name || name.includes(" ")) return name;
+    if (/[aA]$/.test(name)) return `${name.slice(0, -1)}y`;
+    if (/[bcdfghjklmnprstwzBCDFGHJKLMNPRSTWZ]$/.test(name)) return `${name}a`;
+    return name;
+}
+
+/**
+ * Dystans i przewyższenie z podsumowania — albo nic.
+ *
+ * Bez zapisanych liczb opis nie zmyśla: przejazd bez podsumowania dostaje
+ * zdanie ogólne zamiast wymyślonych kilometrów.
+ */
+function summaryShape(snapshot: Snapshot): string {
+    const rider = snapshot.summary?.riders?.[0];
+    const parts: string[] = [];
+    if (rider?.distance_m !== undefined && rider.distance_m > 0) {
+        parts.push(`${(rider.distance_m / 1000).toFixed(1).replace(".", ",")} km`);
+    }
+    if (rider?.elevation_gain_m !== undefined && rider.elevation_gain_m > 0) {
+        parts.push(`${Math.round(rider.elevation_gain_m)} m ↑`);
+    }
+    return parts.join(" · ");
+}
+
 function buildMeta(input: {
     snapshot: Snapshot | null;
     riderName: string;
@@ -72,13 +103,17 @@ function buildMeta(input: {
 
     switch (snapshot?.status) {
         case "active":
-            title = `${who} jedzie teraz 🚴 · Live Ride`;
-            description = `Śledź przejazd na żywo${group}: mapa, dystans i tempo w czasie rzeczywistym. Bez aplikacji i bez zakładania konta.`;
+            title = `Live Ride · ${who}`;
+            description = `${who} jedzie teraz na rowerze${group} — śledź przejazd na żywo. Bez aplikacji i bez zakładania konta.`;
             break;
-        case "ended":
-            title = `${who} — przejazd zakończony · Live Ride`;
-            description = "Zobacz podsumowanie przejazdu: mapa, dystans, czas i przewyższenie.";
+        case "ended": {
+            title = `Live Ride · przejazd ${possessive(who)}`;
+            // Liczby w opisie, bo to one zostają po jeździe. Nigdy miejsce:
+            // miniatura podglądu trafia dalej niż sam link.
+            const shape = summaryShape(snapshot);
+            description = shape || "Zobacz podsumowanie przejazdu: dystans, czas i przewyższenie.";
             break;
+        }
         case "expired":
             title = "Link wygasł · Live Ride";
             description = "Ten link do śledzenia przejazdu na żywo już nie działa.";

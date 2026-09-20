@@ -1,5 +1,5 @@
 import { createRequire } from "node:module";
-import { readFileSync } from "node:fs";
+import { readFileSync, readdirSync } from "node:fs";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "vitest";
@@ -17,6 +17,15 @@ import { MAPLIBRE_WORKER_URL } from "./maplibre_worker";
 const here = dirname(fileURLToPath(import.meta.url));
 const webRoot = resolve(here, "../../..");
 const require = createRequire(import.meta.url);
+
+/** Wszystkie pliki pod katalogiem, rekurencyjnie. */
+function* walk(directory: string): Generator<string> {
+    for (const entry of readdirSync(directory, { withFileTypes: true })) {
+        const full = join(directory, entry.name);
+        if (entry.isDirectory()) yield* walk(full);
+        else yield full;
+    }
+}
 
 describe("worker MapLibre", () => {
     it("adres w kodzie i w pluginie budowania to ten sam adres", () => {
@@ -51,21 +60,39 @@ describe("worker MapLibre", () => {
     });
 
     it("każda mapa w aplikacji ustawia adres workera przed startem", () => {
-        const pages = [
-            "src/routes/live/[token]/+page.svelte",
-            "src/routes/route/[token]/+page.svelte",
-            "src/lib/components/trail/map_with_elevation_maplibre.svelte",
-        ];
-        for (const page of pages) {
-            const source = readFileSync(join(webRoot, page), "utf8");
+        // Lista plików celowo nie jest wpisana na sztywno: mapa przeniesiona
+        // do nowego komponentu wypadłaby ze sztywnej listy razem z ochroną.
+        // Szukamy więc każdego miejsca, które buduje mapę, i pytamy o nie.
+        const sources = [...walk(join(webRoot, "src"))].filter(
+            (file) => file.endsWith(".svelte") || file.endsWith(".ts"),
+        );
+        const builders = sources.filter((file) =>
+            /new M\.Map\(/.test(readFileSync(file, "utf8")),
+        );
+        expect(builders.length, "nie znaleziono ani jednej mapy").toBeGreaterThan(0);
+
+        for (const file of builders) {
+            const source = readFileSync(file, "utf8");
+            const page = file.slice(webRoot.length + 1);
             expect(source, page).toContain("ensureMapLibreWorker");
             // Wywołanie musi poprzedzać konstruktor mapy: pula workerów czyta
             // adres przy pierwszym żądaniu kafelka.
             const call = source.indexOf("ensureMapLibreWorker()");
             const construction = source.search(/new M\.Map\(/);
             expect(call, page).toBeGreaterThan(-1);
-            expect(construction, page).toBeGreaterThan(-1);
             expect(call, page).toBeLessThan(construction);
+        }
+    });
+
+    it("publiczne strony LIVE i trasy nadal mają mapę", () => {
+        // Ten test broni poprzedniego: gdyby mapa zniknęła z publicznych
+        // stron, tamten przeszedłby na pustej liście.
+        for (const page of [
+            "src/routes/live/[token]/+page.svelte",
+            "src/routes/route/[token]/+page.svelte",
+        ]) {
+            const source = readFileSync(join(webRoot, page), "utf8");
+            expect(source, page).toMatch(/LiveMap|new M\.Map\(/);
         }
     });
 });

@@ -1,4 +1,5 @@
 <script lang="ts">
+    import { ensureMapLibreWorker } from "$lib/util/maplibre_worker";
     import * as M from "maplibre-gl";
 
     import GPX from "$lib/models/gpx/gpx";
@@ -31,6 +32,9 @@
     });
 
     async function initMap() {
+        // Bez tego pula workerów szuka pliku pod adresem, którego w zbudowanej
+        // aplikacji nie ma, i mapa zostaje pustym tłem — bez żadnego błędu.
+        ensureMapLibreWorker();
         map = new M.Map({
             container: "trail-picker-map",
             attributionControl: false,

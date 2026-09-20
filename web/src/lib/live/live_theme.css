@@ -1,0 +1,291 @@
+/*
+ * Tokeny Live Ride dla przeglądarki.
+ *
+ * Jeden do jednego z live_app/lib/core/lr_theme.dart. To nie jest „inspiracja
+ * aplikacją" — znajomy, który dostał link, ma zobaczyć tę samą aplikację
+ * w widoku dla obserwującego, a nie osobny produkt o podobnych kolorach.
+ *
+ * Reguły, które z tego wynikają i których nie wolno tu złamać:
+ *   – jasno; ciemny jest tylko nagłówek i mapa nocą,
+ *   – włosowe kreski zamiast cieni,
+ *   – promień 6 px, nigdy 24,
+ *   – cyjan wyłącznie jako akcent, nigdy jako tło powierzchni,
+ *   – liczby tabelaryczne wszędzie, gdzie wartość zmienia się w trakcie
+ *     czytania — inaczej cały wiersz drga przy każdej aktualizacji.
+ */
+
+.lr {
+    --lr-ink: #0b1116;
+    --lr-ink-soft: #47555f;
+    --lr-muted: #7c8a95;
+    --lr-line: #d7dee4;
+    --lr-line-strong: #b4c0c9;
+    --lr-surface: #ffffff;
+    --lr-canvas: #eff2f5;
+    --lr-panel: #f7f9fb;
+
+    --lr-accent: #00bfd8;
+    --lr-accent-deep: #0090a8;
+    --lr-alert: #e02b20;
+    --lr-go: #00a868;
+
+    --lr-night: #07101a;
+    --lr-night-panel: #0e1a24;
+    --lr-night-line: #1d2c38;
+
+    --lr-radius: 6px;
+
+    /* Wysokość mapy: na telefonie ma zostawić miejsce na pierwsze liczby,
+       ale nie schodzić poniżej czytelnego kadru. */
+    --lr-map-height: 42vh;
+
+    font-family:
+        "Inter",
+        system-ui,
+        -apple-system,
+        "Segoe UI",
+        Roboto,
+        sans-serif;
+    color: var(--lr-ink);
+    background: var(--lr-canvas);
+    font-variant-numeric: tabular-nums slashed-zero;
+    -webkit-text-size-adjust: 100%;
+}
+
+.lr *,
+.lr *::before,
+.lr *::after {
+    box-sizing: border-box;
+}
+
+/* ------------------------------------------------------------- typografia */
+
+.lr-label {
+    font-size: 10.5px;
+    font-weight: 800;
+    letter-spacing: 1.1px;
+    line-height: 1;
+    color: var(--lr-ink-soft);
+    text-transform: uppercase;
+}
+
+.lr-value {
+    font-weight: 800;
+    letter-spacing: -0.03em;
+    line-height: 0.94;
+    color: var(--lr-ink);
+    font-variant-numeric: tabular-nums slashed-zero;
+}
+
+.lr-unit {
+    font-size: 12px;
+    font-weight: 700;
+    color: var(--lr-ink-soft);
+}
+
+.lr-body {
+    font-size: 13px;
+    line-height: 1.45;
+    color: var(--lr-ink-soft);
+}
+
+.lr-section-title {
+    font-size: 11px;
+    font-weight: 900;
+    letter-spacing: 1.4px;
+    color: var(--lr-ink-soft);
+    text-transform: uppercase;
+    margin: 0;
+}
+
+/* ------------------------------------------------------------ powierzchnie */
+
+.lr-panel {
+    background: var(--lr-surface);
+    border: 1px solid var(--lr-line);
+    border-radius: var(--lr-radius);
+}
+
+.lr-section {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+}
+
+.lr-section-head {
+    display: flex;
+    align-items: baseline;
+    justify-content: space-between;
+    gap: 12px;
+    padding: 0 2px;
+}
+
+.lr-divider {
+    height: 1px;
+    background: var(--lr-line);
+}
+
+/* --------------------------------------------------------------- plakietki */
+
+.lr-status {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    padding: 3px 8px;
+    border-radius: var(--lr-radius);
+    border: 1px solid var(--lr-line-strong);
+    font-size: 10.5px;
+    font-weight: 900;
+    letter-spacing: 1px;
+    white-space: nowrap;
+}
+
+.lr-status .dot {
+    width: 7px;
+    height: 7px;
+    border-radius: 50%;
+    background: currentColor;
+    flex: none;
+}
+
+.lr-status-live {
+    color: #0a7a46;
+    border-color: rgba(0, 168, 104, 0.45);
+    background: rgba(0, 168, 104, 0.1);
+}
+.lr-status-live .dot {
+    background: var(--lr-go);
+    animation: lr-pulse 2s ease-in-out infinite;
+}
+
+.lr-status-idle {
+    color: #8a5a00;
+    border-color: rgba(200, 140, 0, 0.4);
+    background: rgba(242, 192, 55, 0.16);
+}
+
+.lr-status-waiting {
+    color: var(--lr-accent-deep);
+    border-color: rgba(0, 144, 168, 0.4);
+    background: rgba(0, 191, 216, 0.12);
+}
+.lr-status-waiting .dot {
+    animation: lr-pulse 1.4s ease-in-out infinite;
+}
+
+.lr-status-offline {
+    color: var(--lr-muted);
+    background: var(--lr-panel);
+}
+
+.lr-status-ended {
+    color: var(--lr-ink);
+    border-color: var(--lr-line-strong);
+    background: var(--lr-panel);
+}
+
+@keyframes lr-pulse {
+    0%,
+    100% {
+        opacity: 1;
+    }
+    50% {
+        opacity: 0.35;
+    }
+}
+
+@media (prefers-reduced-motion: reduce) {
+    .lr-status .dot {
+        animation: none;
+    }
+}
+
+/* ------------------------------------------------------------------ siatka */
+
+.lr-grid {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    background: var(--lr-line);
+    gap: 1px;
+    border: 1px solid var(--lr-line);
+    border-radius: var(--lr-radius);
+    overflow: hidden;
+}
+
+.lr-grid-4 {
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+}
+
+.lr-cell {
+    background: var(--lr-surface);
+    padding: 11px 12px 12px;
+    display: flex;
+    flex-direction: column;
+    gap: 7px;
+    min-width: 0;
+}
+
+/* Nieparzysta liczba pól zostawiałaby w rogu szarą dziurę wyglądającą jak
+   panel, z którego coś zniknęło. Ostatnie pole zajmuje wtedy całą szerokość
+   — tak samo jak pulpit licznika układa pola pod liczbę, którą ma. */
+.lr-cell:last-child:nth-child(odd) {
+    grid-column: 1 / -1;
+}
+
+.lr-cell-value {
+    display: flex;
+    align-items: baseline;
+    gap: 4px;
+    min-width: 0;
+    /* Długa wartość („1 godz. 5 min") ma się zmieścić, a nie wyjść poza
+       kreskę: zawijanie w obrębie komórki, nigdy na sąsiada. */
+    flex-wrap: wrap;
+    row-gap: 2px;
+}
+
+.lr-cell-value .lr-value {
+    overflow-wrap: anywhere;
+}
+
+/* --------------------------------------------------------------- przyciski */
+
+.lr-button {
+    appearance: none;
+    border: 1px solid var(--lr-line-strong);
+    background: var(--lr-surface);
+    color: var(--lr-ink);
+    border-radius: var(--lr-radius);
+    font: inherit;
+    font-size: 12px;
+    font-weight: 800;
+    letter-spacing: 0.4px;
+    padding: 8px 12px;
+    cursor: pointer;
+    min-height: 36px;
+}
+
+.lr-button:hover {
+    border-color: var(--lr-accent-deep);
+}
+
+.lr-button[aria-pressed="true"] {
+    background: var(--lr-ink);
+    border-color: var(--lr-ink);
+    color: #fff;
+}
+
+/* ------------------------------------------------------------------ paski */
+
+.lr-track {
+    height: 6px;
+    border-radius: 3px;
+    background: var(--lr-line);
+    overflow: hidden;
+}
+
+.lr-track > span {
+    display: block;
+    height: 100%;
+    background: var(--lr-accent-deep);
+    border-radius: 3px;
+}

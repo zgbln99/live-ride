@@ -6,8 +6,20 @@
  * OFFLINE, a nie JEDZIE" da się sprawdzić testem, a nie tylko wzrokiem.
  */
 
-/** Stan zawodnika policzony po stronie serwera. */
-export type RiderState = "riding" | "paused" | "stopped" | "offline" | "ended";
+/**
+ * Stan zawodnika policzony po stronie serwera.
+ *
+ * `waiting` to zawodnik, od którego jeszcze nic nie przyszło — dopiero
+ * udostępnił link i szuka pierwszego fiksa. To NIE jest `offline`: tamto
+ * znaczy „milczy od ponad minuty" i czyta się jak awaria.
+ */
+export type RiderState =
+    | "riding"
+    | "paused"
+    | "stopped"
+    | "waiting"
+    | "offline"
+    | "ended";
 
 /**
  * Jeden zawodnik w migawce.
@@ -23,6 +35,10 @@ export type Rider = {
     last_seen_at: string;
     age_seconds?: number;
     role?: string;
+    /** Chwila dołączenia do jazdy — znana, zanim przyjdzie pierwsza pozycja. */
+    joined_at?: string;
+    /** Czy od zawodnika przyszła kiedykolwiek pozycja. */
+    has_fix?: boolean;
     latitude?: number;
     longitude?: number;
     altitude_m?: number;
@@ -37,6 +53,10 @@ export type Rider = {
     power_watts?: number;
     cadence_rpm?: number;
     battery_percent?: number;
+    /** Czas zatrzymany przez licznik, bo rower stał. */
+    auto_paused_seconds?: number;
+    /** Czas zatrzymany palcem zawodnika. */
+    manual_paused_seconds?: number;
 };
 
 export type Meetup = { latitude: number; longitude: number; label: string };
@@ -84,8 +104,13 @@ export type Climb = {
     length_m: number;
     gain_m: number;
     avg_gradient: number;
+    max_gradient?: number;
+    name?: string;
     category?: string;
 };
+
+/** Udział jednej nawierzchni w trasie, tak jak podał ją routing. */
+export type Surface = { surface?: string; name?: string; distance_m?: number; meters?: number };
 
 export type RouteSnapshot = {
     name?: string;
@@ -97,6 +122,7 @@ export type RouteSnapshot = {
     descent_m?: number;
     elevation_profile?: { d: number; e: number }[];
     climbs?: Climb[];
+    surfaces?: Surface[];
 };
 
 export type TrackSlice = {
@@ -123,7 +149,7 @@ export const RIDER_COLOURS = [
 /** Po tylu sekundach ciszy strona przestaje twierdzić, że pozycja jest świeża. */
 export const OFFLINE_AFTER_SECONDS = 75;
 
-export type StatusTone = "live" | "idle" | "offline" | "ended";
+export type StatusTone = "live" | "idle" | "waiting" | "offline" | "ended";
 
 /**
  * Polska etykieta stanu zawodnika.
@@ -137,6 +163,12 @@ export function riderStatus(
     ageSeconds: number,
 ): { label: string; short: string; tone: StatusTone } {
     if (state === "ended") return { label: "ZAKOŃCZONY", short: "ZAKOŃCZONY", tone: "ended" };
+    // „Czekam na GPS" wygrywa z wiekiem próbki, bo żadnej próbki jeszcze nie
+    // było. Zawodnik, który przed chwilą wysłał link, nie stracił sygnału —
+    // on go dopiero szuka, a to zupełnie inna wiadomość dla obserwującego.
+    if (state === "waiting") {
+        return { label: "OCZEKIWANIE NA GPS", short: "SZUKA GPS", tone: "waiting" };
+    }
     if (state === "offline" || !Number.isFinite(ageSeconds) || ageSeconds > OFFLINE_AFTER_SECONDS) {
         // Pełne zdanie do panelu, skrót do plakietki nad mapą: na iPhonie SE
         // „BRAK AKTUALNYCH DANYCH" wchodziło na tytuł przejazdu.
@@ -161,7 +193,7 @@ export function riderStatus(
  * tej sekundy, znika.
  */
 export function liveOnly<T>(value: T, tone: StatusTone): T | undefined {
-    return tone === "offline" ? undefined : value;
+    return tone === "offline" || tone === "waiting" ? undefined : value;
 }
 
 /** „przed chwilą", „42 s temu", „3 min temu". */
@@ -244,6 +276,52 @@ export function hasPosition(rider: Rider): boolean {
         Number.isFinite(rider.longitude) &&
         !(rider.latitude === 0 && rider.longitude === 0)
     );
+}
+
+/**
+ * Czasy jednego zawodnika.
+ *
+ * Trzy różne liczby, które łatwo pomylić: zegarowy czas od startu, czas
+ * w ruchu i czas stania. Ostatni jest znany tylko wtedy, gdy licznik go
+ * przysłał — różnica „całkowity minus w ruchu" to nie postoje, bo zawiera
+ * także sekundy poniżej progu auto-pauzy.
+ */
+export type RideTimes = {
+    elapsedSeconds: number | undefined;
+    movingSeconds: number | undefined;
+    pausedSeconds: number | undefined;
+    autoPausedSeconds: number | undefined;
+    manualPausedSeconds: number | undefined;
+};
+
+export function rideTimes(
+    rider: Rider | null,
+    startedAt: string | undefined,
+    endedAt: string | undefined,
+    serverNow: number,
+): RideTimes {
+    let elapsedSeconds: number | undefined;
+    if (startedAt) {
+        const started = new Date(startedAt).getTime();
+        if (!Number.isNaN(started)) {
+            const finished = endedAt ? new Date(endedAt).getTime() : NaN;
+            const reference = Number.isNaN(finished) ? serverNow : finished;
+            elapsedSeconds = Math.max(0, (reference - started) / 1000);
+        }
+    }
+
+    const auto = rider?.auto_paused_seconds;
+    const manual = rider?.manual_paused_seconds;
+    const paused =
+        auto === undefined && manual === undefined ? undefined : (auto ?? 0) + (manual ?? 0);
+
+    return {
+        elapsedSeconds,
+        movingSeconds: rider?.moving_seconds,
+        pausedSeconds: paused,
+        autoPausedSeconds: auto,
+        manualPausedSeconds: manual,
+    };
 }
 
 const EARTH_RADIUS_METERS = 6371008.8;
