@@ -69,6 +69,27 @@ void main() {
     );
   });
 
+  test('Xcode 26 embeds the modern Watch app in PlugIns', () {
+    final watchScript = File(
+      'ios_native/scripts/add_watch_target.rb',
+    ).readAsStringSync();
+
+    expect(watchScript.contains('xcode_major >= 26'), isTrue);
+    expect(watchScript.contains(':plug_ins'), isTrue);
+    expect(
+      watchScript.contains("phase.name == 'Embed Watch Content' && phase.files.empty?"),
+      isTrue,
+      reason:
+          'a stale legacy Watch phase can recreate Runner.app/Watch and make '
+          'installd reject the app on Xcode 26',
+    );
+    expect(
+      watchScript.contains("embed.dst_path = '\$(CONTENTS_FOLDER_PATH)/Watch'"),
+      isTrue,
+      reason: 'legacy Xcode still needs the historical Watch/ layout',
+    );
+  });
+
   test('the bridge is registered in AppDelegate whichever template ships', () {
     // Flutter has two AppDelegate shapes in the wild; both are patched.
     expect(bootstrap.contains('didInitializeImplicitFlutterEngine'), isTrue);
