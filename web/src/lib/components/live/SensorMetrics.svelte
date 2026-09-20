@@ -17,12 +17,15 @@
         cadence,
         batteryPercent,
         maxSpeedKmh,
+        gradientPercent,
     }: {
         heartRate: number | undefined;
         power: number | undefined;
         cadence: number | undefined;
         batteryPercent: number | undefined;
         maxSpeedKmh: number | undefined;
+        /** Nachylenie teraz. Zero jest pomiarem, więc kryterium to undefined. */
+        gradientPercent?: number;
     } = $props();
 
     const anything = $derived(
@@ -30,7 +33,8 @@
             power !== undefined ||
             cadence !== undefined ||
             batteryPercent !== undefined ||
-            maxSpeedKmh !== undefined,
+            maxSpeedKmh !== undefined ||
+            gradientPercent !== undefined,
     );
 </script>
 
@@ -45,6 +49,13 @@
             {/if}
             {#if cadence !== undefined}
                 <Field label="Kadencja" value={num(cadence, 0)} unit="rpm" />
+            {/if}
+            {#if gradientPercent !== undefined}
+                <Field
+                    label="Nachylenie"
+                    value={num(gradientPercent, 1)}
+                    unit="%"
+                />
             {/if}
             {#if maxSpeedKmh !== undefined}
                 <Field

@@ -362,6 +362,37 @@ class ApiClient {
   }
 
   /// Zapisuje, co zawodnik udostępnia obserwującym.
+  /// Doczepia albo podmienia trasę aktywnej sesji LIVE.
+  ///
+  /// [route] to pełny opis trasy w kształcie, którego używa synchronizacja.
+  /// Wysyłamy go zamiast samego identyfikatora, bo trasa świeżo z kreatora,
+  /// z pliku GPX albo z cudzego linku jeszcze nie istnieje na serwerze —
+  /// a publiczna strona ma ją pokazać i tak, bez proszenia zawodnika, żeby
+  /// „najpierw zsynchronizował".
+  Future<bool> attachLiveRoute(
+    String sessionId, {
+    Map<String, dynamic>? route,
+    String? routeClientId,
+    bool detach = false,
+  }) async {
+    try {
+      await dio.post<dynamic>(
+        '/live-rides/$sessionId/route',
+        data: {
+          if (detach) 'detach': true,
+          if (route != null) 'route': route,
+          if (routeClientId != null && routeClientId.isNotEmpty)
+            'route_client_id': routeClientId,
+        },
+      );
+      return true;
+    } on DioException {
+      // Trasa na publicznej stronie jest dodatkiem do jazdy, a nie jej
+      // warunkiem. Nieudane doczepienie nie ma prawa niczego przerwać.
+      return false;
+    }
+  }
+
   Future<void> setLivePrivacy(
     String sessionId,
     Map<String, dynamic> privacy,

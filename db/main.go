@@ -171,6 +171,17 @@ func setupEventHandlers(app *pocketbase.PocketBase, client meilisearch.ServiceMa
 	// persist branch; the upstream fetch happens off the request goroutine.
 	app.OnRecordAfterUpdateSuccess("regions").BindFunc(hooks.CacheGeometryOnEnableHandler(app))
 
+	// Publiczna strona LIVE ma dowiedzieć się o skręcie wtedy, gdy zawodnik
+	// go zrobił, a nie przy najbliższym odpytaniu. Hak nie robi nic poza
+	// obudzeniem otwartych strumieni — nie czyta bazy i nie może przewrócić
+	// zapisu telemetrii, bo zapis już się udał.
+	app.OnRecordAfterCreateSuccess("live_ride_participants", "live_ride_events").
+		BindFunc(hooks.NotifyLiveRideViewers())
+	app.OnRecordAfterUpdateSuccess("live_ride_participants", "live_ride_events").
+		BindFunc(hooks.NotifyLiveRideViewers())
+	app.OnRecordAfterUpdateSuccess("live_ride_sessions").
+		BindFunc(hooks.NotifyLiveRideSession())
+
 	app.OnRecordCreateRequest().BindFunc(util.SanitizeHTML())
 	app.OnRecordUpdateRequest().BindFunc(util.SanitizeHTML())
 
@@ -212,11 +223,19 @@ func registerRoutes(se *core.ServeEvent, client meilisearch.ServiceManager) {
 	se.Router.POST("/live-rides/{id}/telemetry", routes.LiveRideTelemetry).Bind(apis.RequireAuth())
 	se.Router.POST("/live-rides/{id}/stop", routes.LiveRideStop).Bind(apis.RequireAuth())
 	se.Router.POST("/live-rides/{id}/share", routes.LiveRideSetShare).Bind(apis.RequireAuth())
+	se.Router.POST("/live-rides/{id}/route", routes.LiveRideAttachRoute).Bind(apis.RequireAuth())
 	se.Router.GET("/live/{token}", routes.LiveRidePublicSnapshot)
 	se.Router.GET("/live/{token}/route", routes.LiveRidePublicRoute)
 	// Ślad przejazdu: raz w całości, potem tylko przyrosty po ?since=.
 	se.Router.GET("/live/{token}/track", routes.LiveRidePublicTrack)
 	se.Router.GET("/live/{token}/weather", routes.LiveRideWeather)
+	// Oś czasu przejazdu: start, postoje, podjazdy, zjechanie z trasy, meta.
+	se.Router.GET("/live/{token}/events", routes.LiveRidePublicEvents)
+	// Strumień zmian. Polling zostaje jako zapas dla przeglądarek i
+	// pośredników, które nie utrzymają długiego połączenia.
+	se.Router.GET("/live/{token}/stream", routes.LiveRidePublicStream)
+	se.Router.GET("/live-rides/{id}/diagnostics", routes.LiveRideDiagnostics).
+		Bind(apis.RequireAuth())
 
 	// Synchronizacja: telefon jest źródłem prawdy, serwer trzyma kopię.
 	se.Router.POST("/live-rides/sync/rides", routes.LiveRideSyncRides).Bind(apis.RequireAuth())

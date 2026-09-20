@@ -242,7 +242,7 @@ class RideRecorder extends ChangeNotifier {
           // Kształt trasy idzie raz, zaraz po starcie aktywności, a nie
           // z metrykami co sekundę. Zmienia się tylko przy przeliczeniu
           // trasy, a waży kilkaset bajtów budżetu ActivityKit.
-          .then((_) => _publishRouteShape()),
+          .then((_) => publishActiveRoute()),
     );
 
     _ticker = Timer.periodic(const Duration(seconds: 1), (_) {
@@ -250,6 +250,7 @@ class RideRecorder extends ChangeNotifier {
       _feedWorkout();
       _publishWorkoutAlert();
       _feedAlerts();
+      _ensureRoutePublished();
       if (_state != RideState.recording) return;
       _publish();
     });
@@ -652,6 +653,10 @@ class RideRecorder extends ChangeNotifier {
       batteryPercent: battery?.percent ?? 0,
       autoPausedSeconds: autoPausedTotal.inSeconds,
       manualPausedSeconds: manualPausedTotal.inSeconds,
+      elapsedSeconds: elapsed.inSeconds,
+      gradientPercent: _metrics.gradientPercent,
+      nav: _navTelemetry(),
+      climb: _climbTelemetry(),
       force: force,
     );
     final failed = !ok;
@@ -660,6 +665,51 @@ class RideRecorder extends ChangeNotifier {
       notifyListeners();
     }
     return ok;
+  }
+
+  /// Nawigacja tak, jak widzi ją zawodnik — albo null, gdy żadnej nie ma.
+  ///
+  /// Null nie jest tu brakiem danych, tylko informacją: serwer na jego widok
+  /// KASUJE manewr u widzów. Inaczej po dojechaniu do mety publiczna strona
+  /// zostałaby ze strzałką w lewo, której na kierownicy już dawno nie ma.
+  Map<String, dynamic>? _navTelemetry() {
+    final progress = _progress;
+    if (progress == null) return null;
+    final maneuver = progress.next ?? progress.current;
+    final offRoute = progress.offRoute;
+    if (maneuver == null && !offRoute) return null;
+    return {
+      'instruction': maneuver?.instructionPl ?? '',
+      'street': maneuver?.streetName ?? '',
+      'maneuver_type': maneuver?.type ?? 0,
+      'distance_m': progress.distanceToManeuver,
+      'remaining_m': progress.remainingMeters,
+      'eta_seconds': (progress.remainingSeconds ?? 0).round(),
+      'off_route': offRoute,
+      'off_route_m': progress.offRouteMeters,
+    };
+  }
+
+  /// Aktualny podjazd, tym samym ClimbPro, który widzi zawodnik.
+  ///
+  /// Null za szczytem — publiczna strona ma wtedy zdjąć kafelek podjazdu,
+  /// a nie zamrozić go na „100%".
+  Map<String, dynamic>? _climbTelemetry() {
+    final progress = climbs.progress;
+    if (progress == null) return null;
+    final climb = progress.climb;
+    if (climb.lengthMeters <= 0) return null;
+    return {
+      'index': climb.index,
+      'total': _route?.analysis.climbs.length ?? 0,
+      'done_m': progress.doneMeters,
+      'length_m': climb.lengthMeters,
+      'gain_m': climb.gainMeters,
+      'remaining_gain_m': progress.remainingGainMeters,
+      'avg_gradient': climb.averageGradientPercent,
+      'max_gradient': climb.maxGradientPercent,
+      'category': climb.category.shortLabel,
+    };
   }
 
   void _onSensors() {
@@ -740,6 +790,41 @@ class RideRecorder extends ChangeNotifier {
       case AutoPauseAction.none:
         break;
     }
+  }
+
+  /// Dosyła trasę, gdy poprzednia próba nie doszła.
+  ///
+  /// Dwa realne przypadki, w których jedno wywołanie przy starcie nie
+  /// wystarcza: zawodnik włączył LIVE JUŻ w trakcie jazdy po trasie, więc
+  /// w chwili startu jazdy sesji jeszcze nie było; albo doczepienie poszło
+  /// w chwilowy brak zasięgu. W obu przypadkach trasa istnieje, sesja
+  /// istnieje, a widz i tak nie ma czego oglądać — i nikt się o tym nie
+  /// dowie, bo nic nie wygląda na zepsute.
+  ///
+  /// Sprawdzenie jest darmowe: doczepienie pamięta, co już wysłało, więc
+  /// wywołanie na sekundę kosztuje porównanie napisu.
+  void _ensureRoutePublished() {
+    if (!live.isActive || _route == null) return;
+    if (live.hasAttachedRoute) return;
+    unawaited(publishActiveRoute());
+  }
+
+  /// Publikuje aktywną trasę wszędzie, gdzie ma się pojawić.
+  ///
+  /// Dwa różne odbiorniki tej samej informacji: ekran blokady dostaje sam
+  /// kształt do narysowania, a publiczny LIVE całą trasę razem z profilem
+  /// wysokości i podjazdami. Jedno wywołanie, bo rozjazd między nimi znaczyłby,
+  /// że obserwujący widzi inną trasę niż zawodnik.
+  ///
+  /// Wołane przy starcie jazdy i po każdej zmianie planu — łącznie z
+  /// przeliczeniem trasy po zjechaniu z niej.
+  Future<void> publishActiveRoute() async {
+    await _publishRouteShape();
+    if (!live.isActive) return;
+    final route = _route;
+    await live.attachRoute(
+      route == null ? null : SyncService.routeToJson(route),
+    );
   }
 
   /// Wysyła kształt trasy na ekran blokady.

@@ -8,7 +8,7 @@
  * ma jak odróżnić jej od zmierzonej.
  */
 
-import type { Climb, Surface } from "./live_viewer";
+import type { Climb, RiderClimb, Surface } from "./live_viewer";
 
 /** Podjazd umiejscowiony względem zawodnika. */
 export type PlacedClimb = Climb & {
@@ -264,4 +264,37 @@ export function surfaceShares(surfaces: Surface[] | undefined): SurfaceShare[] {
             fraction: meters / total,
         }))
         .sort((a, b) => b.meters - a.meters);
+}
+
+/**
+ * Podjazd zgłoszony przez licznik zawodnika, ubrany w [PlacedClimb].
+ *
+ * Telefon liczy ClimbPro na profilu trasy, którego publiczna strona może nie
+ * mieć wcale — trasa bywa lokalna, świeżo z kreatora albo z GPX-a. Gdy
+ * telemetria niesie podjazd, wygrywa on z rachunkiem z trasy: to ta sama
+ * liczba, którą zawodnik widzi na kierownicy, a nie jej druga, rozjeżdżająca
+ * się wersja.
+ */
+export function reportedClimb(climb: RiderClimb | undefined): PlacedClimb | null {
+    if (!climb || !(climb.length_m > 0)) return null;
+    const done = Math.min(climb.length_m, Math.max(0, climb.done_m));
+    return {
+        start_m: 0,
+        length_m: climb.length_m,
+        gain_m: climb.gain_m,
+        avg_gradient: climb.avg_gradient,
+        max_gradient: climb.max_gradient,
+        category: climb.category || undefined,
+        name:
+            climb.index && climb.total
+                ? `Podjazd ${climb.index} z ${climb.total}`
+                : climb.index
+                  ? `Podjazd ${climb.index}`
+                  : undefined,
+        endMeters: climb.length_m,
+        distanceAheadMeters: 0,
+        doneMeters: done,
+        remainingMeters: Math.max(0, climb.length_m - done),
+        fraction: done / climb.length_m,
+    };
 }

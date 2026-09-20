@@ -10,6 +10,8 @@
     import RouteProgressSection from "$lib/components/live/RouteProgress.svelte";
     import ElevationProfile from "$lib/components/live/ElevationProfile.svelte";
     import ClimbCard from "$lib/components/live/ClimbCard.svelte";
+    import NavigationCard from "$lib/components/live/NavigationCard.svelte";
+    import RideTimesSection from "$lib/components/live/RideTimes.svelte";
     import UpcomingClimbs from "$lib/components/live/UpcomingClimbs.svelte";
     import RouteBriefing from "$lib/components/live/RouteBriefing.svelte";
     import RouteWeather from "$lib/components/live/RouteWeather.svelte";
@@ -43,6 +45,7 @@
         climbSummary,
         currentClimb,
         elevationInsight,
+        reportedClimb,
         surfaceShares,
         upcomingClimbs,
     } from "$lib/live/route_insight";
@@ -189,11 +192,26 @@
     );
 
     const averageSpeedKmh = $derived.by(() => {
+        // Serwer liczy średnią z tych samych dwóch liczb, ale zna je
+        // dokładniej niż my po zaokrągleniu w migawce.
+        if (selected?.average_speed_kmh !== undefined) return selected.average_speed_kmh;
         const metres = selected?.distance_m;
         const moving = selected?.moving_seconds;
         if (metres === undefined || moving === undefined || moving <= 0) return undefined;
         return (metres / moving) * 3.6;
     });
+
+    /**
+     * Nawigacja z telemetrii — tylko dopóki jazda trwa.
+     *
+     * Po mecie manewr jest wspomnieniem, a nie wskazówką.
+     */
+    const nav = $derived(ended ? null : (selected?.nav ?? null));
+
+    /** Nachylenie chwilowe znika razem z resztą chwilowych po utracie sygnału. */
+    const liveGradient = $derived(
+        selected ? liveOnly(selected.gradient_percent, tone) : undefined,
+    );
 
     /**
      * Pozycja na trasie — albo nic, gdy przejazd się skończył.
@@ -207,7 +225,17 @@
         ended ? null : (selected?.progress?.alongMeters ?? null),
     );
 
-    const climbNow = $derived(currentClimb(route?.climbs, alongMeters));
+    /**
+     * Podjazd z licznika zawodnika wygrywa z podjazdem policzonym z trasy.
+     *
+     * Trasa bywa lokalna albo z GPX-a bez profilu, a telefon i tak liczy
+     * ClimbPro. Gdy telemetria go niesie, widz dostaje tę samą liczbę, którą
+     * zawodnik ma przed oczami — a nie jej drugą wersję.
+     */
+    const climbNow = $derived(
+        (ended ? null : reportedClimb(selected?.climb)) ??
+            currentClimb(route?.climbs, alongMeters),
+    );
     const climbsAhead = $derived(
         upcomingClimbs(route?.climbs, alongMeters, allClimbs ? 50 : 3),
     );
@@ -546,6 +574,13 @@
                 />
             {/if}
 
+            {#if nav}
+                <NavigationCard
+                    {nav}
+                    etaAt={selected?.progress?.etaAt ?? null}
+                />
+            {/if}
+
             {#if routeLengthMeters > 0 && !ended}
                 <RouteProgressSection
                     routeName={route?.name ?? ""}
@@ -586,7 +621,9 @@
                     cadence={liveCadence}
                     batteryPercent={selected?.battery_percent}
                     maxSpeedKmh={selected?.max_speed_kmh}
+                    gradientPercent={liveGradient}
                 />
+                <RideTimesSection {times} />
             {/if}
 
             {#if routeLengthMeters > 0}

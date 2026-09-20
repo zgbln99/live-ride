@@ -5,6 +5,7 @@ import '../core/api_client.dart';
 import '../core/lr_theme.dart';
 import '../i18n/strings.dart';
 import '../models/live_privacy.dart';
+import '../services/live_service.dart';
 import '../services/app_services.dart';
 import '../widgets/lr_common.dart';
 import '../widgets/share_sheet.dart';
@@ -105,6 +106,8 @@ class _LiveSheetState extends State<_LiveSheet> {
           style: LR.body.copyWith(fontSize: 11.5, height: 1.4),
         ),
       ],
+      const SizedBox(height: 16),
+      _privacySection(live),
       const SizedBox(height: 14),
       _visibilityPicker(),
       const SizedBox(height: 10),
@@ -248,6 +251,111 @@ class _LiveSheetState extends State<_LiveSheet> {
         ),
       ],
     ),
+  );
+
+  /// Co z jazdy widzą obserwujący.
+  ///
+  /// Przełączniki były wcześniej wyłącznie w arkuszu jazdy grupowej, więc
+  /// zawodnik jadący sam NIE MIAŁ JAK włączyć tętna — a domyślnie jest
+  /// wyłączone, bo to dana osobista. Efekt wyglądał jak usterka publicznej
+  /// strony: telefon pokazuje 142 bpm, strona nie pokazuje nic, i nic nigdzie
+  /// nie mówi, dlaczego.
+  Widget _privacySection(LiveSessionController live) {
+    final privacy = live.privacy;
+    final all =
+        privacy.sharePosition &&
+        privacy.shareSpeed &&
+        privacy.shareHeartRate &&
+        privacy.sharePower &&
+        privacy.shareBattery;
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Row(
+          children: [
+            Expanded(child: Text(S.sharedInLive, style: LR.fieldLabel)),
+            TextButton(
+              onPressed: all
+                  ? null
+                  : () => live.updatePrivacy(
+                      const LivePrivacy(
+                        sharePosition: true,
+                        shareSpeed: true,
+                        shareHeartRate: true,
+                        sharePower: true,
+                        shareBattery: true,
+                      ),
+                    ),
+              child: Text(S.shareEverything),
+            ),
+          ],
+        ),
+        _privacyTile(
+          S.sharePosition,
+          privacy.sharePosition,
+          (value) => live.updatePrivacy(
+            privacy.copyWith(sharePosition: value),
+          ),
+        ),
+        _privacyTile(
+          S.shareSpeed,
+          privacy.shareSpeed,
+          (value) => live.updatePrivacy(privacy.copyWith(shareSpeed: value)),
+        ),
+        _privacyTile(
+          S.shareHeartRate,
+          privacy.shareHeartRate,
+          (value) => live.updatePrivacy(
+            privacy.copyWith(shareHeartRate: value),
+          ),
+          // Bez podłączonego paska przełącznik i tak nie ma czego wysyłać —
+          // lepiej powiedzieć to wprost, niż zostawić kogoś z włączonym
+          // przełącznikiem i pustym polem na stronie.
+          hint: widget.services.heartRate.latestBpm == null
+              ? S.noHeartRateSensor
+              : null,
+        ),
+        _privacyTile(
+          S.sharePower,
+          privacy.sharePower,
+          (value) => live.updatePrivacy(privacy.copyWith(sharePower: value)),
+          hint: widget.services.sensors.snapshot.powerWatts == null
+              ? S.noPowerSensor
+              : null,
+        ),
+        _privacyTile(
+          S.shareBattery,
+          privacy.shareBattery,
+          (value) => live.updatePrivacy(privacy.copyWith(shareBattery: value)),
+        ),
+        if (!privacy.sharesAnything)
+          Padding(
+            padding: const EdgeInsets.only(top: 4),
+            child: Text(
+              S.sharesNothing,
+              style: LR.body.copyWith(fontSize: 12, color: LR.alert),
+            ),
+          ),
+      ],
+    );
+  }
+
+  Widget _privacyTile(
+    String title,
+    bool value,
+    ValueChanged<bool> onChanged, {
+    String? hint,
+  }) => SwitchListTile(
+    dense: true,
+    contentPadding: EdgeInsets.zero,
+    visualDensity: VisualDensity.compact,
+    title: Text(title, style: LR.body.copyWith(color: LR.ink, fontSize: 14)),
+    subtitle: hint == null
+        ? null
+        : Text(hint, style: LR.body.copyWith(fontSize: 11.5)),
+    value: value,
+    onChanged: onChanged,
   );
 
   Future<void> _start() async {

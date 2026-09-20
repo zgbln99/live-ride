@@ -692,6 +692,10 @@ class Strings {
   String get liveCode => 'Kod LIVE';
   String get joinCode => 'KOD DOŁĄCZENIA';
   String get spectatorLink => 'LINK DLA WIDZÓW';
+  String get sharedInLive => 'UDOSTĘPNIANE W LIVE';
+  String get shareEverything => 'UDOSTĘPNIJ WSZYSTKO';
+  String get noHeartRateSensor => 'Brak podłączonego pomiaru tętna.';
+  String get noPowerSensor => 'Brak podłączonego miernika mocy.';
   String get shareTheLink => 'UDOSTĘPNIJ LINK';
   String get endLive => 'ZAKOŃCZ LIVE';
   String get rider => 'Zawodnik';

@@ -151,6 +151,49 @@ class LiveSessionController extends ChangeNotifier {
   /// Zapis idzie najpierw lokalnie, a dopiero potem na serwer: zawodnik,
   /// który wyłączył udostępnianie tętna w tunelu bez zasięgu, ma prawo
   /// oczekiwać, że zostanie ono wyłączone także po wyjeździe z tunelu.
+  /// Ostatnio doczepiona trasa — żeby nie wysyłać jej w kółko.
+  String? _attachedRouteKey;
+
+  /// Czy aktywna sesja ma doczepioną trasę. Do diagnostyki właściciela.
+  bool get hasAttachedRoute => _attachedRouteKey != null;
+
+  /// Doczepia aktywną trasę do sesji LIVE.
+  ///
+  /// [route] to pełny opis trasy. Wysyłamy go, a nie sam identyfikator,
+  /// bo w chwili startu LIVE trasa często jeszcze nie istnieje na serwerze:
+  /// właśnie powstała w kreatorze, przyszła z pliku GPX albo została
+  /// skopiowana z cudzego linku. Wcześniej serwer szukał jej wśród tras już
+  /// zsynchronizowanych, nie znajdował i sesja zostawała bez planu — a widz
+  /// dostawał sam znacznik zawodnika, bez żadnego błędu po drodze.
+  ///
+  /// Null odpina trasę: tak wygląda zakończenie nawigacji w trakcie jazdy.
+  Future<bool> attachRoute(Map<String, dynamic>? route) async {
+    final active = _session;
+    if (active == null) return false;
+
+    // Klucz z identyfikatora i geometrii: zmiana którejkolwiek z nich znaczy
+    // inną trasę, a reroute zmienia właśnie geometrię przy tym samym id.
+    final key = route == null
+        ? null
+        : [
+            route['client_id'],
+            (route['polyline'] as String?)?.length,
+            route['distance_m'],
+          ].join('|');
+    if (key == _attachedRouteKey) return true;
+
+    final ok = await api.attachLiveRoute(
+      active.id,
+      route: route,
+      detach: route == null,
+    );
+    if (ok) {
+      _attachedRouteKey = key;
+      notifyListeners();
+    }
+    return ok;
+  }
+
   Future<void> updatePrivacy(LivePrivacy privacy) async {
     _privacy = privacy;
     notifyListeners();
@@ -228,6 +271,7 @@ class LiveSessionController extends ChangeNotifier {
     );
     _session = created;
     _title = resolved;
+    _attachedRouteKey = null;
     _lastSentAt = null;
     _lastAcceptedAt = null;
     _lastPushFailed = false;
@@ -267,6 +311,7 @@ class LiveSessionController extends ChangeNotifier {
     final active = _session;
     _session = null;
     _title = null;
+    _attachedRouteKey = null;
     _lastSentAt = null;
     _lastAcceptedAt = null;
     _lastPushFailed = false;
@@ -300,6 +345,21 @@ class LiveSessionController extends ChangeNotifier {
     int batteryPercent = 0,
     int autoPausedSeconds = 0,
     int manualPausedSeconds = 0,
+
+    /// Czas od startu razem z pauzami. Bez niego publiczna strona nie umie
+    /// odjąć postojów od całości.
+    int elapsedSeconds = 0,
+
+    /// Aktualne nachylenie. Ujemne na zjeździe, więc nie wolno go obcinać
+    /// do zera ani traktować braku jak płaskiego.
+    double gradientPercent = 0,
+
+    /// Stan nawigacji: manewr, ulica, dystans, ETA, zjechanie z trasy.
+    /// `null` znaczy „nawigacja nie działa" i CZYŚCI manewr u widza.
+    Map<String, dynamic>? nav,
+
+    /// Aktualny podjazd liczony tym samym ClimbPro, co na kierownicy.
+    Map<String, dynamic>? climb,
 
     /// Pomija odczekanie między próbkami.
     ///
@@ -359,6 +419,13 @@ class LiveSessionController extends ChangeNotifier {
         'battery_percent': _privacy.shareBattery ? batteryPercent : 0,
         'auto_paused_seconds': autoPausedSeconds,
         'manual_paused_seconds': manualPausedSeconds,
+        'elapsed_seconds': elapsedSeconds,
+        // Nawigacja i podjazd jadą razem z pozycją: bez zgody na pozycję
+        // „za 300 m w lewo w Burgenlandstraße" samo w sobie mówi, gdzie
+        // ktoś jest.
+        'gradient_percent': _privacy.sharePosition ? gradientPercent : 0,
+        'nav': _privacy.sharePosition ? nav : null,
+        'climb': _privacy.sharePosition ? climb : null,
       });
       _lastAcceptedAt = now;
       _lastPushFailed = false;

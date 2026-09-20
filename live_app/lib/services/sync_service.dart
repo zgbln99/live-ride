@@ -312,7 +312,12 @@ class SyncService extends ChangeNotifier {
     'client_updated_at': ride.endedAt.toUtc().toIso8601String(),
   };
 
-  @visibleForTesting
+  /// Trasa w postaci, którą rozumie serwer.
+  ///
+  /// Jeden opis trasy dla dwóch zastosowań: wysyłki w synchronizacji i
+  /// doczepienia do aktywnej sesji LIVE. Osobny kształt dla LIVE znaczyłby
+  /// dwa modele tej samej rzeczy — i pierwszy dzień, w którym publiczna
+  /// strona pokazuje inną trasę niż biblioteka tras.
   static Map<String, dynamic> routeToJson(RideRoute route) =>
       _routeToJson(route);
 

@@ -57,6 +57,49 @@ export type Rider = {
     auto_paused_seconds?: number;
     /** Czas zatrzymany palcem zawodnika. */
     manual_paused_seconds?: number;
+    /** Czas od startu licznika razem z pauzami, liczony przez telefon. */
+    elapsed_seconds?: number;
+    /** Średnia z jazdy policzona przez serwer z dystansu i czasu w ruchu. */
+    average_speed_kmh?: number;
+    /** Nachylenie teraz. Ujemne na zjeździe — zero jest realnym pomiarem. */
+    gradient_percent?: number;
+    nav?: RiderNav;
+    climb?: RiderClimb;
+};
+
+/**
+ * Nawigacja tak, jak widzi ją zawodnik na kierownicy.
+ *
+ * Liczona w telefonie, nie tutaj: publiczna strona nie ma manewrów Valhalli,
+ * a nawet gdyby je miała, musiałaby zgadywać, którym wariantem trasy ktoś
+ * właśnie jedzie. Zamiast dwóch niezależnych nawigacji jest jedna, a ta
+ * strona pokazuje jej stan.
+ */
+export type RiderNav = {
+    instruction: string;
+    street?: string;
+    maneuver_type?: number;
+    /** Ile metrów do manewru. */
+    distance_m?: number;
+    /** Ile metrów do mety według planu trasy. */
+    remaining_m?: number;
+    /** Sekundy do mety według planu trasy. */
+    eta_seconds?: number;
+    off_route?: boolean;
+    off_route_m?: number;
+};
+
+/** Podjazd policzony w telefonie tym samym ClimbPro, który widzi zawodnik. */
+export type RiderClimb = {
+    index?: number;
+    total?: number;
+    done_m: number;
+    length_m: number;
+    gain_m: number;
+    remaining_gain_m?: number;
+    avg_gradient: number;
+    max_gradient?: number;
+    category?: string;
 };
 
 export type Meetup = { latitude: number; longitude: number; label: string };
@@ -300,8 +343,11 @@ export function rideTimes(
     endedAt: string | undefined,
     serverNow: number,
 ): RideTimes {
-    let elapsedSeconds: number | undefined;
-    if (startedAt) {
+    // Zegar licznika zawodnika wygrywa z różnicą „teraz minus start sesji":
+    // link bywa udostępniony na kwadrans przed startem, a wtedy ta różnica
+    // nie jest czasem jazdy tylko czasem od udostępnienia.
+    let elapsedSeconds: number | undefined = rider?.elapsed_seconds;
+    if (elapsedSeconds === undefined && startedAt) {
         const started = new Date(startedAt).getTime();
         if (!Number.isNaN(started)) {
             const finished = endedAt ? new Date(endedAt).getTime() : NaN;
@@ -498,4 +544,53 @@ export function elevationAt(
         return previous.e + (profile[i].e - previous.e) * t;
     }
     return profile[profile.length - 1].e;
+}
+
+/**
+ * Strzałka manewru dla typu z Valhalli.
+ *
+ * Te same numery, które w aplikacji wybierają ikonę Material — tutaj muszą
+ * wystarczyć znaki, bo publiczna strona nie ładuje zestawu ikon dla jednego
+ * trójkąta. Nieznany typ dostaje strzałkę w górę, nie pustkę: widz ma
+ * widzieć, że manewr jest, nawet gdy nie wiemy który.
+ */
+export function maneuverArrow(type: number | undefined): string {
+    switch (type) {
+        case 4:
+        case 5:
+        case 6:
+            return "\u25C9"; // meta
+        case 9:
+            return "\u2197"; // lekko w prawo
+        case 10:
+        case 11:
+            return "\u21B1"; // w prawo
+        case 12:
+        case 13:
+            return "\u21B6"; // zawracanie
+        case 14:
+        case 15:
+            return "\u21B0"; // w lewo
+        case 16:
+            return "\u2196"; // lekko w lewo
+        case 26:
+        case 27:
+            return "\u21BB"; // rondo
+        default:
+            return "\u2191";
+    }
+}
+
+/**
+ * Dystans do manewru, zaokrąglony tak, jak czyta go człowiek na rowerze.
+ *
+ * „za 312 m" sugeruje precyzję, której GPS nie ma, i zmienia się co sekundę.
+ * Poniżej stu metrów liczy się co dziesięć, wyżej co pięćdziesiąt.
+ */
+export function maneuverDistance(meters: number | undefined): string {
+    if (meters === undefined || !Number.isFinite(meters)) return "";
+    if (meters < 20) return "teraz";
+    if (meters < 100) return `za ${Math.round(meters / 10) * 10} m`;
+    if (meters < 1000) return `za ${Math.round(meters / 50) * 50} m`;
+    return `za ${distance(meters)}`;
 }

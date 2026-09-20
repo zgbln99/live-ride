@@ -141,7 +141,16 @@ func LiveRidePublicSnapshot(e *core.RequestEvent) error {
 		})
 	}
 
-	participants, err := e.App.FindRecordsByFilter(
+	return e.JSON(http.StatusOK, liveRideSnapshotJSON(e.App, session, now))
+}
+
+// liveRideSnapshotJSON składa publiczną migawkę jednej sesji.
+//
+// Wydzielone z uchwytu HTTP, bo strumień zdarzeń buduje dokładnie to samo.
+// Dwie kopie tej funkcji rozjechałyby się po pierwszej zmianie i widz
+// dostawałby co innego w pierwszej odpowiedzi, a co innego na żywo.
+func liveRideSnapshotJSON(app core.App, session *core.Record, now time.Time) map[string]any {
+	participants, err := app.FindRecordsByFilter(
 		"live_ride_participants",
 		"session={:session}",
 		"display_name",
@@ -150,26 +159,33 @@ func LiveRidePublicSnapshot(e *core.RequestEvent) error {
 		dbx.Params{"session": session.Id},
 	)
 	if err != nil {
-		return err
+		participants = nil
 	}
 
 	ended := session.GetString("status") == "ended"
+	// Metę planu czytamy raz na migawkę, a nie raz na zawodnika: w jeździe
+	// grupowej byłoby to dziesięć odczytów tej samej trasy.
+	finish := liveRideRouteFinish(app, session)
 	riders := make([]map[string]any, 0, len(participants))
 	for _, participant := range participants {
-		riders = append(riders, liveRideRiderJSON(participant, now, ended))
+		riders = append(riders, liveRideRiderJSON(app, participant, finish, now, ended))
 	}
 
 	snapshot := map[string]any{
-		"title":       session.GetString("title"),
-		"trail_id":    session.GetString("trail"),
-		"status":      session.GetString("status"),
-		"visibility":  visibility,
-		"kind":        session.GetString("kind"),
-		"started_at":  session.GetDateTime("started_at"),
-		"ended_at":    session.GetDateTime("ended_at"),
-		"server_time": now,
-		"has_route":   session.GetString("route") != "" || session.GetString("trail") != "",
-		"riders":      riders,
+		"status":     session.GetString("status"),
+		"visibility": liveRideVisibility(session),
+		"title":      session.GetString("title"),
+		"trail_id":   session.GetString("trail"),
+		"kind":       session.GetString("kind"),
+		"started_at": session.GetDateTime("started_at"),
+		"ended_at":   session.GetDateTime("ended_at"),
+		// Numer wersji trasy. Strona pobiera geometrię dopiero wtedy, gdy ta
+		// liczba się zmieni — a nie co trzy sekundy „na wszelki wypadek".
+		"route_revision": session.GetInt("route_revision"),
+		"event_seq":      session.GetInt("event_seq"),
+		"server_time":    now,
+		"has_route":      session.GetString("route") != "" || session.GetString("trail") != "",
+		"riders":         riders,
 	}
 	if expires := session.GetDateTime("expires_at").Time(); !expires.IsZero() {
 		snapshot["expires_at"] = expires
@@ -186,7 +202,7 @@ func LiveRidePublicSnapshot(e *core.RequestEvent) error {
 			snapshot["summary"] = summary
 		}
 	}
-	return e.JSON(http.StatusOK, snapshot)
+	return snapshot
 }
 
 // LiveRidePublicTrack wydaje przejechany ślad: raz w całości, potem tylko
@@ -233,6 +249,7 @@ func LiveRidePublicTrack(e *core.RequestEvent) error {
 		return err
 	}
 
+	finish := liveRideRouteFinish(e.App, session)
 	tracks := make([]map[string]any, 0, len(participants))
 	for _, participant := range participants {
 		// Ślad to ciąg pozycji. Zawodnik, który nie udostępnia pozycji, nie
@@ -240,7 +257,11 @@ func LiveRidePublicTrack(e *core.RequestEvent) error {
 		if !liveRideShares(participant, "share_position") {
 			continue
 		}
-		track, err := liveRideTrackFor(e, participant.Id, since)
+		// Te same filtry co dla bieżącej pozycji. Bez nich ukryty start
+		// byłby ukryty przez jedną sekundę, a potem narysowany linią
+		// prowadzącą pod same drzwi.
+		policy := liveRideLocationPolicyFor(participant, finish)
+		track, err := liveRideTrackFor(e, participant.Id, since, policy, now)
 		if err != nil {
 			return err
 		}
@@ -260,12 +281,25 @@ func LiveRidePublicTrack(e *core.RequestEvent) error {
 }
 
 // liveRideTrackFor koduje punkty jednego uczestnika.
-func liveRideTrackFor(e *core.RequestEvent, participantID string, since time.Time) (map[string]any, error) {
+func liveRideTrackFor(
+	e *core.RequestEvent,
+	participantID string,
+	since time.Time,
+	policy liveRideLocationPolicy,
+	now time.Time,
+) (map[string]any, error) {
 	filter := "participant={:participant}"
 	params := dbx.Params{"participant": participantID}
 	if !since.IsZero() {
 		filter += " && recorded_at > {:since}"
 		params["since"] = since.Format("2006-01-02 15:04:05.000Z")
+	}
+	if policy.DelaySeconds > 0 {
+		// Ślad kończy się tam, gdzie kończy się opóźniona pozycja. Inaczej
+		// linia jechałaby dalej niż znacznik i pokazywała dokładnie to, co
+		// opóźnienie miało zatrzymać.
+		filter += " && recorded_at <= {:cutoff}"
+		params["cutoff"] = policy.cutoff(now).Format("2006-01-02 15:04:05.000Z")
 	}
 
 	records, err := e.App.FindRecordsByFilter(
@@ -291,14 +325,25 @@ func liveRideTrackFor(e *core.RequestEvent, participantID string, since time.Tim
 	}
 
 	coordinates := make([][]float64, 0, len(records)/stride+2)
+	hidden := false
 	for i, record := range records {
 		if i%stride != 0 && i != len(records)-1 {
 			continue
 		}
-		coordinates = append(coordinates, []float64{
-			record.GetFloat("latitude"),
-			record.GetFloat("longitude"),
-		})
+		lat := record.GetFloat("latitude")
+		lon := record.GetFloat("longitude")
+		if policy.hides(lat, lon) {
+			// Punkt wypada z linii, nie przesuwa się na jej brzeg. Ślad
+			// urwany przed domem mówi prawdę; ślad doprowadzony do granicy
+			// promienia wskazywałby jego środek.
+			hidden = true
+			continue
+		}
+		lat, lon = policy.blur(lat, lon)
+		coordinates = append(coordinates, []float64{lat, lon})
+	}
+	if len(coordinates) == 0 {
+		return nil, nil
 	}
 
 	last := records[len(records)-1]
@@ -310,6 +355,9 @@ func liveRideTrackFor(e *core.RequestEvent, participantID string, since time.Tim
 		"until":     last.GetDateTime("recorded_at"),
 		"cursor":    last.GetDateTime("recorded_at").Time().UTC().Format(time.RFC3339Nano),
 		"precision": liveRidePolylinePrecision,
+		"trimmed":   hidden,
+		"coarse":    policy.Coarse,
+		"delayed":   policy.DelaySeconds > 0,
 	}, nil
 }
 
@@ -380,6 +428,78 @@ func LiveRideSetShare(e *core.RequestEvent) error {
 }
 
 // ------------------------------------------------------------- pomocnicze
+
+// liveRideNavJSON opisuje stan nawigacji dla obserwujących.
+//
+// Instrukcja przechodzi BEZ ZMIAN: złożył ją telefon, po polsku, tym samym
+// kodem, który wypisuje ją na kierownicy. Serwer jej nie tłumaczy i nie
+// skraca — obserwujący ma przeczytać dokładnie to zdanie, które zawodnik ma
+// przed oczami, a nie jego wariant.
+//
+// Cała sekcja jest częścią telemetrii pozycyjnej: „skręć w lewo w
+// Burgenlandstraße" mówi, gdzie ktoś jest, równie dokładnie jak współrzędne.
+func liveRideNavJSON(participant *core.Record) map[string]any {
+	instruction := strings.TrimSpace(participant.GetString("nav_instruction"))
+	offRoute := participant.GetBool("nav_off_route")
+	if instruction == "" && !offRoute {
+		return nil
+	}
+
+	nav := map[string]any{
+		"instruction":   instruction,
+		"maneuver_type": participant.GetInt("nav_maneuver_type"),
+		"distance_m":    participant.GetFloat("nav_distance_m"),
+		"off_route":     offRoute,
+	}
+	if moment := participant.GetDateTime("nav_updated_at").Time(); !moment.IsZero() {
+		nav["updated_at"] = moment.UTC().Format(time.RFC3339)
+	}
+	if street := strings.TrimSpace(participant.GetString("nav_street")); street != "" {
+		nav["street"] = street
+	}
+	if remaining := participant.GetFloat("nav_remaining_m"); remaining > 0 {
+		nav["remaining_m"] = remaining
+	}
+	if eta := participant.GetInt("nav_eta_seconds"); eta > 0 {
+		nav["eta_seconds"] = eta
+	}
+	if offRoute {
+		nav["off_route_m"] = participant.GetFloat("nav_off_route_m")
+	}
+	return nav
+}
+
+// liveRideClimbJSON opisuje podjazd, na którym zawodnik właśnie jest.
+//
+// Liczy go telefon, tym samym kodem co ClimbPro na kierownicy. Zero długości
+// znaczy „nie jestem na żadnym podjeździe" — i wtedy sekcji nie ma w ogóle,
+// zamiast być z zerami.
+func liveRideClimbJSON(participant *core.Record) map[string]any {
+	length := participant.GetFloat("climb_length_m")
+	if length <= 0 {
+		return nil
+	}
+	climb := map[string]any{
+		"done_m":       participant.GetFloat("climb_done_m"),
+		"length_m":     length,
+		"gain_m":       participant.GetFloat("climb_gain_m"),
+		"avg_gradient": participant.GetFloat("climb_avg_gradient"),
+	}
+	if index := participant.GetInt("climb_index"); index > 0 {
+		climb["index"] = index
+		climb["total"] = participant.GetInt("climb_total")
+	}
+	if remaining := participant.GetFloat("climb_remaining_gain_m"); remaining > 0 {
+		climb["remaining_gain_m"] = remaining
+	}
+	if maximum := participant.GetFloat("climb_max_gradient"); maximum > 0 {
+		climb["max_gradient"] = maximum
+	}
+	if category := strings.TrimSpace(participant.GetString("climb_category")); category != "" {
+		climb["category"] = category
+	}
+	return climb
+}
 
 // liveRideHasFix mówi, czy od zawodnika przyszła kiedykolwiek pozycja.
 //
@@ -455,7 +575,13 @@ func liveRideRiderState(participant *core.Record, now time.Time, sessionEnded bo
 // Prywatność stosujemy tutaj, na wyjściu, a nie przy zapisie: zawodnik może
 // przestawić przełącznik w trakcie jazdy i już następna migawka ma to
 // uwzględnić, bez przepisywania wierszy zapisanych wcześniej.
-func liveRideRiderJSON(participant *core.Record, now time.Time, sessionEnded bool) map[string]any {
+func liveRideRiderJSON(
+	app core.App,
+	participant *core.Record,
+	finish *liveRideGeoPoint,
+	now time.Time,
+	sessionEnded bool,
+) map[string]any {
 	state, age := liveRideRiderState(participant, now, sessionEnded)
 	hasFix := liveRideHasFix(participant)
 
@@ -483,11 +609,7 @@ func liveRideRiderJSON(participant *core.Record, now time.Time, sessionEnded boo
 		// Gwinejskiej — więc wysyłanie zer jako „brak pozycji" oznaczałoby
 		// znacznik na Atlantyku u każdego, kto jeszcze nie złapał GPS-a.
 		if hasFix {
-			rider["latitude"] = participant.GetFloat("latitude")
-			rider["longitude"] = participant.GetFloat("longitude")
-			rider["altitude_m"] = participant.GetFloat("altitude_m")
-			rider["heading_deg"] = participant.GetFloat("heading_deg")
-			rider["accuracy_m"] = participant.GetFloat("accuracy_m")
+			liveRideApplyPosition(app, participant, rider, finish, now)
 		}
 		rider["distance_m"] = participant.GetFloat("distance_m")
 		rider["elevation_gain_m"] = participant.GetFloat("elevation_gain_m")
@@ -501,22 +623,173 @@ func liveRideRiderJSON(participant *core.Record, now time.Time, sessionEnded boo
 		if manual := participant.GetInt("manual_paused_seconds"); manual > 0 {
 			rider["manual_paused_seconds"] = manual
 		}
+		if elapsed := participant.GetInt("elapsed_seconds"); elapsed > 0 {
+			rider["elapsed_seconds"] = elapsed
+		}
+		// Średnia z dystansu i czasu w ruchu. Liczona TUTAJ, a nie na
+		// stronie: strona zna tylko to, co dostała, a tu mamy obie liczby
+		// z tego samego pomiaru i wiemy, czy wolno je podać.
+		if moving := participant.GetInt("moving_seconds"); moving > 0 {
+			rider["average_speed_kmh"] =
+				participant.GetFloat("distance_m") / float64(moving) * 3.6
+		}
+		// Nachylenie jest częścią pozycji: mówi, pod jaką górę zawodnik
+		// właśnie jedzie, więc dzieli jej ustawienie prywatności.
+		rider["gradient_percent"] = participant.GetFloat("gradient_percent")
+
+		if nav := liveRideNavJSON(participant); nav != nil {
+			rider["nav"] = nav
+		}
+		if climb := liveRideClimbJSON(participant); climb != nil {
+			rider["climb"] = climb
+		}
 	}
 	if liveRideShares(participant, "share_speed") {
 		rider["speed_kmh"] = participant.GetFloat("speed_kmh")
 		rider["max_speed_kmh"] = participant.GetFloat("max_speed_kmh")
+		if sensor := participant.GetFloat("sensor_speed_kmh"); sensor > 0 {
+			rider["sensor_speed_kmh"] = sensor
+		}
+		if sensor := participant.GetFloat("sensor_distance_m"); sensor > 0 {
+			rider["sensor_distance_m"] = sensor
+		}
+		liveRideSourceJSON(participant, rider, "speed_source", "speed_source")
+		liveRideFreshnessJSON(participant, rider, "gps_updated_at", "gps_updated_at")
 	}
 	if liveRideShares(participant, "share_heart_rate") {
 		rider["heart_rate_bpm"] = participant.GetInt("heart_rate_bpm")
+		if average := participant.GetInt("avg_heart_rate_bpm"); average > 0 {
+			rider["avg_heart_rate_bpm"] = average
+		}
+		if maximum := participant.GetInt("max_heart_rate_bpm"); maximum > 0 {
+			rider["max_heart_rate_bpm"] = maximum
+		}
+		liveRideSourceJSON(participant, rider, "hr_source", "hr_source")
+		liveRideFreshnessJSON(participant, rider, "hr_updated_at", "hr_updated_at")
 	}
 	if liveRideShares(participant, "share_power") {
 		rider["power_watts"] = participant.GetInt("power_watts")
 		rider["cadence_rpm"] = participant.GetInt("cadence_rpm")
+		if average := participant.GetInt("avg_power_watts"); average > 0 {
+			rider["avg_power_watts"] = average
+		}
+		if maximum := participant.GetInt("max_power_watts"); maximum > 0 {
+			rider["max_power_watts"] = maximum
+		}
+		if average := participant.GetInt("avg_cadence_rpm"); average > 0 {
+			rider["avg_cadence_rpm"] = average
+		}
+		liveRideSourceJSON(participant, rider, "power_source", "power_source")
+		liveRideSourceJSON(participant, rider, "cadence_source", "cadence_source")
+		liveRideFreshnessJSON(participant, rider, "power_updated_at", "power_updated_at")
+		liveRideFreshnessJSON(participant, rider, "cadence_updated_at", "cadence_updated_at")
 	}
 	if liveRideShares(participant, "share_battery") {
+		// Jedna liczba nie wystarczy. Telefon na 61% i pas HR na 4% to dwie
+		// różne wiadomości, a druga tłumaczy, dlaczego za kwadrans zniknie
+		// tętno. Bateria czujnika jedzie tylko wtedy, gdy jego dane też jadą.
+		batteries := map[string]any{"phone": participant.GetInt("battery_percent")}
+		if liveRideShares(participant, "share_heart_rate") {
+			liveRideBatteryJSON(participant, batteries, "hr_battery_percent", "heart_rate")
+		}
+		if liveRideShares(participant, "share_power") {
+			liveRideBatteryJSON(participant, batteries, "power_battery_percent", "power")
+			liveRideBatteryJSON(participant, batteries, "cadence_battery_percent", "cadence")
+		}
+		if liveRideShares(participant, "share_speed") {
+			liveRideBatteryJSON(participant, batteries, "speed_battery_percent", "speed")
+		}
 		rider["battery_percent"] = participant.GetInt("battery_percent")
+		rider["batteries"] = batteries
 	}
 	return rider
+}
+
+// liveRideApplyPosition wypuszcza pozycję przez wszystkie filtry naraz.
+//
+// Kolejność jest znacząca: najpierw OPÓŹNIENIE (bo decyduje, o którą próbkę
+// w ogóle chodzi), potem UKRYCIE (bo może ją skasować w całości), na końcu
+// ZAOKRĄGLENIE. Odwrotnie — zaokrąglona pozycja mogłaby wypaść tuż poza
+// promieniem ukrycia i pokazać dom z dokładnością do stu metrów.
+func liveRideApplyPosition(
+	app core.App,
+	participant *core.Record,
+	rider map[string]any,
+	finish *liveRideGeoPoint,
+	now time.Time,
+) {
+	policy := liveRideLocationPolicyFor(participant, finish)
+
+	lat := participant.GetFloat("latitude")
+	lon := participant.GetFloat("longitude")
+	altitude := participant.GetFloat("altitude_m")
+	heading := participant.GetFloat("heading_deg")
+	accuracy := participant.GetFloat("accuracy_m")
+
+	if policy.DelaySeconds > 0 {
+		delayed := liveRideDelayedPosition(app, participant.Id, policy.cutoff(now))
+		if delayed == nil {
+			// Przez pierwsze N sekund transmisji nie ma jeszcze nic dość
+			// starego, żeby to pokazać. Brak pozycji jest tu poprawną
+			// odpowiedzią, a nie awarią.
+			rider["location_delayed"] = true
+			return
+		}
+		lat = delayed.GetFloat("latitude")
+		lon = delayed.GetFloat("longitude")
+		rider["position_at"] = delayed.GetDateTime("recorded_at")
+		rider["location_delayed"] = true
+		// Wysokość, kurs i dokładność opisują TAMTĄ próbkę, nie bieżącą.
+		// Punkty historii ich nie przechowują, więc nie zmyślamy ich tutaj.
+		altitude, heading, accuracy = 0, 0, 0
+	}
+
+	if policy.hides(lat, lon) {
+		rider["location_hidden"] = true
+		return
+	}
+
+	lat, lon = policy.blur(lat, lon)
+	rider["latitude"] = lat
+	rider["longitude"] = lon
+	if policy.Coarse {
+		rider["location_coarse"] = true
+		return
+	}
+	if altitude != 0 {
+		rider["altitude_m"] = altitude
+	}
+	if heading != 0 {
+		rider["heading_deg"] = heading
+	}
+	if accuracy != 0 {
+		rider["accuracy_m"] = accuracy
+	}
+}
+
+// liveRideSourceJSON dokłada nazwę źródła, gdy telefon ją podał.
+func liveRideSourceJSON(participant *core.Record, rider map[string]any, field, key string) {
+	if value := strings.TrimSpace(participant.GetString(field)); value != "" {
+		rider[key] = value
+	}
+}
+
+// liveRideFreshnessJSON dokłada moment ostatniego odczytu danej.
+//
+// Jeden `last_seen_at` na całego zawodnika kłamał: GPS potrafi nadawać co
+// sekundę, gdy pas HR odpadł cztery minuty temu, a strona pokazywała tamto
+// tętno jako bieżące.
+func liveRideFreshnessJSON(participant *core.Record, rider map[string]any, field, key string) {
+	if moment := participant.GetDateTime(field).Time(); !moment.IsZero() {
+		rider[key] = moment.UTC().Format(time.RFC3339)
+	}
+}
+
+// liveRideBatteryJSON dokłada procent baterii, gdy czujnik go podał.
+func liveRideBatteryJSON(participant *core.Record, batteries map[string]any, field, key string) {
+	if value := participant.GetInt(field); value > 0 {
+		batteries[key] = value
+	}
 }
 
 // liveRideBuildSummary zamyka jazdę liczbami, które strona pokaże po mecie.
@@ -632,5 +905,9 @@ func liveRideRouteJSONForViewer(record *core.Record) map[string]any {
 		// Gdy trasa jej nie niesie (import GPX, stary zapis), pole jest puste
 		// i strona po prostu nie pokazuje tej sekcji.
 		"surfaces": record.Get("surfaces"),
+		// Punkty pośrednie ułożone przez zawodnika, nazwane przez niego.
+		// Bezimienne pomijamy: to szczegół układania trasy, a nie miejsce,
+		// o którym warto komukolwiek powiedzieć.
+		"checkpoints": liveRideCheckpoints(record),
 	}
 }
