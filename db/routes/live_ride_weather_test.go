@@ -24,14 +24,9 @@ func liveRideWeatherFixture(t *testing.T) *liveRideFixture {
 	t.Helper()
 	f := newLiveRideFixture(t)
 
-	routes := core.NewBaseCollection("live_ride_routes")
-	routes.Fields.Add(
-		&core.TextField{Name: "polyline", Max: 1000000},
-		&core.NumberField{Name: "distance_m"},
-	)
-	if err := f.app.Save(routes); err != nil {
-		t.Fatal(err)
-	}
+	// Kolekcja tras powstaje już w podstawowej atrapie — tu tylko wkładamy
+	// do niej geometrię, na której liczy się pogodę.
+	routes := f.routes
 
 	// Prosta linia na wschód: około 100 km w czterech odcinkach, więc punkty
 	// „za 20 km" i „za 40 km" na pewno w niej mieszczą.

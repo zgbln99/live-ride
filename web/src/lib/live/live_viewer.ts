@@ -774,3 +774,30 @@ export function placeCheckpoints(
             return { ...checkpoint, remainingMeters, reached, etaAt };
         });
 }
+
+/** Jedna próbka z przebiegu jazdy. */
+export type HistorySample = {
+    at: string;
+    lat: number;
+    lon: number;
+    altitude_m?: number;
+    distance_m?: number;
+    speed_kmh?: number;
+    heart_rate_bpm?: number;
+    power_watts?: number;
+    cadence_rpm?: number;
+};
+
+export type HistoryRider = {
+    participant: string;
+    display_name: string;
+    samples: HistorySample[];
+};
+
+export type HistorySnapshot = {
+    status: string;
+    from?: string;
+    to?: string;
+    samples?: number;
+    riders?: HistoryRider[];
+};

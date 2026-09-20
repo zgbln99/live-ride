@@ -23,9 +23,12 @@
     import Timeline from "$lib/components/live/Timeline.svelte";
     import Checkpoints from "$lib/components/live/Checkpoints.svelte";
     import NearProfile from "$lib/components/live/NearProfile.svelte";
+    import TimeMachine from "$lib/components/live/TimeMachine.svelte";
+    import SafetyAlert from "$lib/components/live/SafetyAlert.svelte";
 
     import {
         RIDER_COLOURS,
+        clock as clockLabel,
         cumulativeDistances,
         freshValue,
         hasPosition,
@@ -38,6 +41,8 @@
         rideTimes,
         riderStatus,
         routeProgress,
+        type HistoryRider,
+        type HistorySnapshot,
         type LiveEvent,
         type LngLat,
         type Projection,
@@ -99,6 +104,15 @@
     let weather = $state<WeatherSnapshot | null>(null);
     let messages = $state<Message[]>([]);
     let events = $state<LiveEvent[]>([]);
+    let history = $state<HistoryRider[]>([]);
+    /**
+     * Wybrana chwila z przeszłości albo null, gdy oglądamy bieżący stan.
+     *
+     * Cofnięcie NIE przerywa transmisji: telemetria dalej przychodzi, a strona
+     * po prostu przez chwilę pokazuje co innego — i mówi o tym wprost, żeby
+     * nikt nie pomylił nagrania z bieżącą pozycją.
+     */
+    let rewindIndex = $state<number | null>(null);
     let offline = $state(false);
     let selectedRiderId = $state<string | null>(null);
     let allClimbs = $state(false);
@@ -212,8 +226,20 @@
      * Zawodnik bez sygnału nie jedzie 31 km/h — jechał tyle wtedy, gdy
      * ostatni raz było go słychać. Dystans i czas zostają, bo narastają.
      */
+    /** Przebieg wybranego zawodnika i próbka, na której stoi suwak. */
+    const historySamples = $derived(
+        history.find((entry) => entry.participant === selected?.id)?.samples ?? [],
+    );
+    const rewound = $derived(
+        rewindIndex === null ? null : (historySamples[rewindIndex] ?? null),
+    );
+
     const liveSpeed = $derived(
-        selected ? liveOnly(selected.speed_kmh, tone) : undefined,
+        rewound
+            ? rewound.speed_kmh
+            : selected
+              ? liveOnly(selected.speed_kmh, tone)
+              : undefined,
     );
     /**
      * Odczyty czujników, każdy z własnym terminem ważności.
@@ -224,23 +250,37 @@
      * dokładnie tak samo jak pomiar sprzed sekundy.
      */
     const liveHeartRate = $derived(
-        selected
-            ? freshValue(liveOnly(selected.heart_rate_bpm, tone), selected.hr_updated_at, serverNow)
-            : undefined,
+        rewound
+            ? rewound.heart_rate_bpm
+            : selected
+              ? freshValue(
+                    liveOnly(selected.heart_rate_bpm, tone),
+                    selected.hr_updated_at,
+                    serverNow,
+                )
+              : undefined,
     );
     const livePower = $derived(
-        selected
-            ? freshValue(liveOnly(selected.power_watts, tone), selected.power_updated_at, serverNow)
-            : undefined,
+        rewound
+            ? rewound.power_watts
+            : selected
+              ? freshValue(
+                    liveOnly(selected.power_watts, tone),
+                    selected.power_updated_at,
+                    serverNow,
+                )
+              : undefined,
     );
     const liveCadence = $derived(
-        selected
-            ? freshValue(
-                  liveOnly(selected.cadence_rpm, tone),
-                  selected.cadence_updated_at,
-                  serverNow,
-              )
-            : undefined,
+        rewound
+            ? rewound.cadence_rpm
+            : selected
+              ? freshValue(
+                    liveOnly(selected.cadence_rpm, tone),
+                    selected.cadence_updated_at,
+                    serverNow,
+                )
+              : undefined,
     );
 
     const times = $derived(
@@ -262,7 +302,7 @@
      *
      * Po mecie manewr jest wspomnieniem, a nie wskazówką.
      */
-    const nav = $derived(ended ? null : (selected?.nav ?? null));
+    const nav = $derived(ended || rewound ? null : (selected?.nav ?? null));
 
     /** Nachylenie chwilowe znika razem z resztą chwilowych po utracie sygnału. */
     const liveGradient = $derived(
@@ -313,6 +353,9 @@
      * do zapamiętania, gdzie to było.
      */
     const climbFocus = $derived(climbNow !== null && !ended);
+
+    /** Najnowszy alert bezpieczeństwa, jeśli w tej jeździe jakiś padł. */
+    const safetyAlert = $derived(events.find((event) => event.kind === "sos") ?? null);
     const forecasts = $derived(forecastAlongRoute(weather, serverNow, pace));
     const alert = $derived(weatherAlert(forecasts));
     const sunset = $derived(
@@ -365,9 +408,12 @@
             id: rider.id,
             name: rider.display_name,
             colour: rider.colour,
-            lngLat: hasPosition(rider)
-                ? ([rider.longitude!, rider.latitude!] as LngLat)
-                : null,
+            lngLat:
+                rewound && rider.id === selected?.id
+                    ? ([rewound.lon, rewound.lat] as LngLat)
+                    : hasPosition(rider)
+                      ? ([rider.longitude!, rider.latitude!] as LngLat)
+                      : null,
             tone: rider.status.tone,
             headingDeg: liveOnly(rider.heading_deg, rider.status.tone),
         })),
@@ -457,6 +503,25 @@
         } catch {
             // LIVE bez zaplanowanej trasy jest w pełni poprawny: znaczniki,
             // telemetria i mapa działają bez niej.
+        }
+    }
+
+    /**
+     * Przebieg jazdy: pełny po mecie, ostatnie pół godziny w trakcie.
+     *
+     * Pobierany RAZ na wejście i po zakończeniu — nie co odświeżenie. Suwak
+     * po zakończonej jeździe ma sens od pierwszej sekundy, a w trwającej
+     * transmisji to, co widać cofniętym, i tak jest przeszłością.
+     */
+    async function loadHistory() {
+        try {
+            const window_ = ended ? "" : "?minutes=30";
+            const response = await fetch(api(`/history${window_}`), { cache: "no-store" });
+            if (!response.ok) return;
+            const payload = (await response.json()) as HistorySnapshot;
+            history = payload.riders ?? [];
+        } catch {
+            // Bez historii znika suwak, nie strona.
         }
     }
 
@@ -595,18 +660,21 @@
         void loadTrack();
         void loadWeather();
         void loadMessages();
+        void loadHistory();
         const closeStream = connectStream();
 
         let snapshotTimer = 0;
         let trackTimer = 0;
         let messageTimer = 0;
         let weatherTimer = 0;
+        let historyTimer = 0;
 
         const schedule = () => {
             window.clearInterval(snapshotTimer);
             window.clearInterval(trackTimer);
             window.clearInterval(messageTimer);
             window.clearInterval(weatherTimer);
+            window.clearInterval(historyTimer);
             if (ended) return;
             // Karta w tle dostaje rzadsze odświeżanie: przeglądarka i tak
             // dławi timery, a bateria telefonu widza nie jest za darmo.
@@ -624,6 +692,9 @@
                 document.hidden ? BACKGROUND_REFRESH_MS * 2 : TRACK_REFRESH_MS,
             );
             messageTimer = window.setInterval(() => void loadMessages(), 20000);
+            // Okno cofania przesuwa się razem z jazdą, ale wolno: to nie jest
+            // dana, na którą ktokolwiek czeka.
+            historyTimer = window.setInterval(() => void loadHistory(), 120000);
             weatherTimer = window.setInterval(() => void loadWeather(), WEATHER_REFRESH_MS);
         };
         schedule();
@@ -652,6 +723,7 @@
             window.clearInterval(trackTimer);
             window.clearInterval(messageTimer);
             window.clearInterval(weatherTimer);
+            window.clearInterval(historyTimer);
             window.clearInterval(tick);
             document.removeEventListener("visibilitychange", onVisibility);
         };
@@ -715,6 +787,18 @@
             {#if offline}
                 <p class="notice">
                     Brak połączenia z serwerem. Pokazujemy ostatnie znane dane.
+                </p>
+            {/if}
+
+            {#if safetyAlert}
+                <SafetyAlert at={safetyAlert.at} />
+            {/if}
+
+            {#if rewound}
+                <!-- Najważniejsze zdanie na stronie w tym trybie: liczby
+                     poniżej nie są bieżące. -->
+                <p class="rewind">
+                    Podgląd z {clockLabel(rewound.at)} — to nie jest bieżąca pozycja.
                 </p>
             {/if}
 
@@ -857,6 +941,15 @@
                 <LiveMessages {messages} />
             {/if}
 
+            <TimeMachine
+                count={historySamples.length}
+                index={rewindIndex}
+                at={rewound?.at ?? null}
+                {ended}
+                onseek={(index) => (rewindIndex = index)}
+                onlive={() => (rewindIndex = null)}
+            />
+
             <Timeline {events} />
 
             <p class="foot">
@@ -892,6 +985,19 @@
        przeoczyć. */
     .body > :global(*) {
         flex: none;
+    }
+
+    /* Pasek cofnięcia jest ostrzeżeniem, nie ozdobą: dopóki wisi, żadna
+       liczba na tej stronie nie opisuje tej chwili. */
+    .rewind {
+        margin: 0;
+        padding: 9px 12px;
+        border: 1px solid var(--lr-line-strong);
+        background: var(--lr-ink);
+        color: var(--lr-surface);
+        border-radius: var(--lr-radius);
+        font-size: 12.5px;
+        font-weight: 700;
     }
 
     .notice {

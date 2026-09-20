@@ -27,6 +27,8 @@ type liveRideFixture struct {
 	sessions    *core.Collection
 	participant *core.Collection
 	points      *core.Collection
+	routes      *core.Collection
+	events      *core.Collection
 	session     *core.Record
 }
 
@@ -60,6 +62,9 @@ func newLiveRideFixture(t *testing.T) *liveRideFixture {
 		&core.JSONField{Name: "summary", MaxSize: 20000},
 		&core.TextField{Name: "trail", Max: 40},
 		&core.TextField{Name: "route", Max: 40},
+		&core.NumberField{Name: "route_revision", OnlyInt: true},
+		&core.DateField{Name: "route_updated_at"},
+		&core.NumberField{Name: "event_seq", OnlyInt: true},
 		&core.NumberField{Name: "meetup_lat"},
 		&core.NumberField{Name: "meetup_lon"},
 		&core.TextField{Name: "meetup_label", Max: 160},
@@ -99,7 +104,99 @@ func newLiveRideFixture(t *testing.T) *liveRideFixture {
 		&core.NumberField{Name: "auto_paused_seconds", OnlyInt: true},
 		&core.NumberField{Name: "manual_paused_seconds", OnlyInt: true},
 	)
+	// Pola komputera pokładowego pochodzą z migracji. Powielamy je tutaj
+	// nazwa w nazwę, bo testowa aplikacja PocketBase startuje bez migracji —
+	// gdyby któraś nazwa się rozjechała, testy przechodziłyby na schemacie,
+	// którego nie ma na produkcji.
+	participants.Fields.Add(
+		&core.NumberField{Name: "elapsed_seconds", OnlyInt: true},
+		&core.NumberField{Name: "gradient_percent"},
+		&core.TextField{Name: "nav_instruction", Max: 200},
+		&core.TextField{Name: "nav_street", Max: 160},
+		&core.NumberField{Name: "nav_maneuver_type", OnlyInt: true},
+		&core.NumberField{Name: "nav_distance_m"},
+		&core.NumberField{Name: "nav_remaining_m"},
+		&core.NumberField{Name: "nav_eta_seconds", OnlyInt: true},
+		&core.BoolField{Name: "nav_off_route"},
+		&core.NumberField{Name: "nav_off_route_m"},
+		&core.NumberField{Name: "climb_index", OnlyInt: true},
+		&core.NumberField{Name: "climb_total", OnlyInt: true},
+		&core.NumberField{Name: "climb_done_m"},
+		&core.NumberField{Name: "climb_length_m"},
+		&core.NumberField{Name: "climb_gain_m"},
+		&core.NumberField{Name: "climb_remaining_gain_m"},
+		&core.NumberField{Name: "climb_avg_gradient"},
+		&core.NumberField{Name: "climb_max_gradient"},
+		&core.TextField{Name: "climb_category", Max: 16},
+		&core.NumberField{Name: "telemetry_seq", OnlyInt: true},
+		&core.NumberField{Name: "sensor_speed_kmh"},
+		&core.NumberField{Name: "sensor_distance_m"},
+		&core.TextField{Name: "hr_source", Max: 40},
+		&core.TextField{Name: "power_source", Max: 40},
+		&core.TextField{Name: "cadence_source", Max: 40},
+		&core.TextField{Name: "speed_source", Max: 40},
+		&core.DateField{Name: "gps_updated_at"},
+		&core.DateField{Name: "hr_updated_at"},
+		&core.DateField{Name: "power_updated_at"},
+		&core.DateField{Name: "cadence_updated_at"},
+		&core.DateField{Name: "nav_updated_at"},
+		&core.NumberField{Name: "avg_heart_rate_bpm", OnlyInt: true},
+		&core.NumberField{Name: "max_heart_rate_bpm", OnlyInt: true},
+		&core.NumberField{Name: "avg_power_watts", OnlyInt: true},
+		&core.NumberField{Name: "max_power_watts", OnlyInt: true},
+		&core.NumberField{Name: "avg_cadence_rpm", OnlyInt: true},
+		&core.NumberField{Name: "hr_battery_percent", OnlyInt: true},
+		&core.NumberField{Name: "power_battery_percent", OnlyInt: true},
+		&core.NumberField{Name: "cadence_battery_percent", OnlyInt: true},
+		&core.NumberField{Name: "speed_battery_percent", OnlyInt: true},
+		&core.NumberField{Name: "location_delay_seconds", OnlyInt: true},
+		&core.BoolField{Name: "location_coarse"},
+		&core.NumberField{Name: "hide_start_m", OnlyInt: true},
+		&core.NumberField{Name: "hide_finish_m", OnlyInt: true},
+		&core.NumberField{Name: "start_lat"},
+		&core.NumberField{Name: "start_lon"},
+	)
 	if err := app.Save(participants); err != nil {
+		t.Fatal(err)
+	}
+
+	liveRoutes := core.NewBaseCollection("live_ride_routes")
+	liveRoutes.Fields.Add(
+		&core.RelationField{Name: "owner", CollectionId: users.Id, MaxSelect: 1},
+		&core.TextField{Name: "client_id", Max: 64},
+		&core.TextField{Name: "name", Max: 160},
+		&core.NumberField{Name: "distance_m"},
+		&core.NumberField{Name: "ascent_m"},
+		&core.NumberField{Name: "descent_m"},
+		&core.TextField{Name: "polyline", Max: 1000000},
+		&core.JSONField{Name: "waypoints", MaxSize: 200000},
+		&core.JSONField{Name: "elevation_profile", MaxSize: 400000},
+		&core.JSONField{Name: "climbs", MaxSize: 100000},
+		&core.JSONField{Name: "surfaces", MaxSize: 100000},
+		&core.SelectField{Name: "privacy", Values: []string{"private", "link", "public"}, MaxSelect: 1},
+		&core.TextField{Name: "share_token", Max: 64},
+		&core.DateField{Name: "client_updated_at"},
+	)
+	if err := app.Save(liveRoutes); err != nil {
+		t.Fatal(err)
+	}
+
+	events := core.NewBaseCollection("live_ride_events")
+	events.Fields.Add(
+		&core.RelationField{Name: "session", CollectionId: sessions.Id, MaxSelect: 1},
+		&core.RelationField{Name: "participant", CollectionId: participants.Id, MaxSelect: 1},
+		&core.DateField{Name: "at"},
+		&core.SelectField{Name: "kind", MaxSelect: 1, Values: []string{
+			"start", "stop", "resume", "pause", "auto_pause",
+			"climb_start", "climb_end", "off_route", "back_on_route",
+			"reroute", "checkpoint", "finish", "sos",
+		}},
+		&core.TextField{Name: "label", Max: 120},
+		&core.NumberField{Name: "distance_m"},
+		&core.NumberField{Name: "value"},
+		&core.NumberField{Name: "seq", OnlyInt: true},
+	)
+	if err := app.Save(events); err != nil {
 		t.Fatal(err)
 	}
 
@@ -134,6 +231,8 @@ func newLiveRideFixture(t *testing.T) *liveRideFixture {
 		sessions:    sessions,
 		participant: participants,
 		points:      points,
+		routes:      liveRoutes,
+		events:      events,
 		session:     session,
 	}
 }

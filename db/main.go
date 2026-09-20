@@ -231,6 +231,9 @@ func registerRoutes(se *core.ServeEvent, client meilisearch.ServiceManager) {
 	se.Router.GET("/live/{token}/weather", routes.LiveRideWeather)
 	// Oś czasu przejazdu: start, postoje, podjazdy, zjechanie z trasy, meta.
 	se.Router.GET("/live/{token}/events", routes.LiveRidePublicEvents)
+	// Przebieg w czasie: cofnięcie się w trwającej jeździe i odtworzenie
+	// zakończonej to ten sam problem, więc ten sam adres.
+	se.Router.GET("/live/{token}/history", routes.LiveRideHistory)
 	// Strumień zmian. Polling zostaje jako zapas dla przeglądarek i
 	// pośredników, które nie utrzymają długiego połączenia.
 	se.Router.GET("/live/{token}/stream", routes.LiveRidePublicStream)
