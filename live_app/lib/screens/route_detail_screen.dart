@@ -8,6 +8,7 @@ import '../i18n/strings.dart';
 import '../models/ride_route.dart';
 import '../models/route/route_analysis.dart';
 import '../models/route/route_briefing.dart';
+import '../services/ride_intelligence.dart';
 import '../models/route/route_weather.dart';
 import '../services/app_services.dart';
 import '../widgets/climb_profile.dart';
@@ -42,6 +43,10 @@ class _RouteDetailScreenState extends State<RouteDetailScreen> {
   bool _starting = false;
   bool _loadingForecast = false;
 
+  /// Profil z własnych przejazdów. Zanim doczyta, briefing liczy czas
+  /// z założonego tempa i mówi wprost, że stąd go wziął.
+  RiderHistoryProfile _history = RiderHistoryProfile.empty;
+
   @override
   void initState() {
     super.initState();
@@ -57,6 +62,15 @@ class _RouteDetailScreenState extends State<RouteDetailScreen> {
         _route = route;
         _briefing = _buildBriefing(route, null);
       });
+      final history = RiderHistoryProfile.fromRides(
+        await services.rides.list(),
+      );
+      if (mounted && history.isUsable) {
+        setState(() {
+          _history = history;
+          _briefing = _buildBriefing(route, _forecast);
+        });
+      }
       unawaitedForecast(route);
     } catch (e, stack) {
       debugPrint('Live Ride: nie udało się wczytać trasy: $e\n$stack');
@@ -77,6 +91,8 @@ class _RouteDetailScreenState extends State<RouteDetailScreen> {
       preferences: route.preferences,
       forecast: forecast,
       riderWeightKg: profile.weightKg,
+      riderAverageKmh: _history.isUsable ? _history.movingAverageKmh : null,
+      riderRideCount: _history.rideCount,
       metric: profile.metricUnits,
     );
   }

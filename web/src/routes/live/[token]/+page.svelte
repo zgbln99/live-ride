@@ -10,6 +10,7 @@
     import RouteProgressSection from "$lib/components/live/RouteProgress.svelte";
     import ElevationProfile from "$lib/components/live/ElevationProfile.svelte";
     import ClimbCard from "$lib/components/live/ClimbCard.svelte";
+    import RiderInsights from "$lib/components/live/RiderInsights.svelte";
     import NavigationCard from "$lib/components/live/NavigationCard.svelte";
     import RideTimesSection from "$lib/components/live/RideTimes.svelte";
     import UpcomingClimbs from "$lib/components/live/UpcomingClimbs.svelte";
@@ -855,6 +856,14 @@
                  gdzie to było. -->
             {#if climbNow && !ended}
                 <ClimbCard climb={climbNow} />
+            {/if}
+
+            <!-- Zdania licznika tuż pod podjazdem: to samo miejsce, w którym
+                 zawodnik je widzi, i ta sama kolejność. Serwer przysłał
+                 wyłącznie to, na co jest zgoda — strona nie ma tu nic do
+                 odfiltrowania. -->
+            {#if !ended && selected?.insights?.length}
+                <RiderInsights insights={selected.insights} />
             {/if}
 
             {#if climbFocus && !ended}

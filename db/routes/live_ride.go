@@ -54,6 +54,10 @@ type liveRideTelemetryPoint struct {
 	// Aktualny podjazd, policzony tym samym kodem co ClimbPro na kierownicy.
 	Climb *liveRideClimbPayload `json:"climb"`
 
+	// Insighty Ride Intelligence, gotowymi zdaniami. Serwer decyduje, które
+	// z nich w ogóle zapisze i które pokaże — patrz live_ride_insights.go.
+	Insights []liveRideInsightPayload `json:"insights"`
+
 	// Numer próbki, rosnący w obrębie jednej sesji.
 	//
 	// Telemetria jedzie po LTE i pakiety potrafią się wyprzedzić. Bez tego
@@ -474,6 +478,7 @@ func LiveRideTelemetry(e *core.RequestEvent) error {
 		participant.Set("gradient_percent", newest.GradientPercent)
 		liveRideApplyNav(participant, newest.Nav)
 		liveRideApplyClimb(participant, newest.Climb)
+		liveRideApplyInsights(participant, newest.Insights)
 		// Rekord prędkości nigdy nie maleje w trakcie jazdy — telefon, który
 		// po restarcie przysłał niższą wartość, nie może skasować maksimum.
 		if newest.MaxSpeedKmh > participant.GetFloat("max_speed_kmh") {

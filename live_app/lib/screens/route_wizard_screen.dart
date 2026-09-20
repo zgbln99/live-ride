@@ -76,6 +76,9 @@ class _RouteWizardScreenState extends State<RouteWizardScreen> {
       start: start,
       preferences: _preferences,
       movingAverageKmh: history.movingAverageKmh,
+      // Wiatr decyduje o kierunku pierwszego odcinka: pod wiatr na
+      // świeżych nogach, z wiatrem na powrocie.
+      weather: _services.weather.current,
     );
   }
 
@@ -197,6 +200,28 @@ class _RouteWizardScreenState extends State<RouteWizardScreen> {
             Expanded(
               child: Text(route.label, style: LR.fieldValue(16)),
             ),
+            // Plakietka pojawia się tylko przy wariancie, który umie
+            // powiedzieć, dlaczego jest lepszy od pozostałych.
+            if (route.recommended)
+              Container(
+                margin: const EdgeInsets.only(right: 8),
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 7,
+                  vertical: 2,
+                ),
+                decoration: BoxDecoration(
+                  color: LR.accent.withValues(alpha: 0.16),
+                  borderRadius: BorderRadius.circular(6),
+                ),
+                child: Text(
+                  S.recommended,
+                  style: LR.body.copyWith(
+                    fontSize: 10.5,
+                    color: LR.accent,
+                    fontWeight: FontWeight.w700,
+                  ),
+                ),
+              ),
             Text(
               Fmt.distance(route.distanceMeters, metric: true),
               style: LR.fieldValue(18),

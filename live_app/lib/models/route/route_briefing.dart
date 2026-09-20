@@ -49,11 +49,17 @@ class RouteBriefing {
     required RoutePreferences preferences,
     RouteForecast? forecast,
     double? riderWeightKg,
+    double? riderAverageKmh,
+    int? riderRideCount,
     bool metric = true,
   }) {
-    final duration = analysis.estimatedDuration(
-      assumedSpeedKmh: preferences.assumedSpeedKmh,
-    );
+    // Tempo z WŁASNEJ historii bije domyślne założenie: kto jeździ 22 km/h,
+    // ten na pięćdziesięciu kilometrach nie zrobi dwóch godzin, choćby
+    // producent tak liczył. Bez historii zostaje założenie i mówimy o tym.
+    final learned =
+        riderAverageKmh != null && riderAverageKmh > 5 && riderAverageKmh < 60;
+    final speed = learned ? riderAverageKmh : preferences.assumedSpeedKmh;
+    final duration = analysis.estimatedDuration(assumedSpeedKmh: speed);
     final lines = <BriefingLine>[];
     final headline = <String>[
       '${Fmt.distance(analysis.distanceMeters, metric: metric)} '
@@ -90,13 +96,17 @@ class RouteBriefing {
 
     if (duration > Duration.zero) {
       final average = analysis.estimatedAverageSpeedKmh(
-        assumedSpeedKmh: preferences.assumedSpeedKmh,
+        assumedSpeedKmh: speed,
       );
+      final source = learned
+          ? ' — policzone z Twoich '
+                '${riderRideCount ?? 0} ostatnich przejazdów'
+          : ' — z założonego tempa, bo za mało historii';
       lines.add(
         BriefingLine(
           'Przewidywany czas ${Fmt.durationCompact(duration)}, '
           'średnia około ${Fmt.speed(average, metric: metric)} '
-          '${Fmt.speedUnit(metric: metric)}.',
+          '${Fmt.speedUnit(metric: metric)}$source.',
         ),
       );
     }

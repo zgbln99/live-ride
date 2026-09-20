@@ -579,6 +579,9 @@ class Strings {
   String get findRoutes => 'ZNAJDŹ TRASY';
   String get planAgain => 'SZUKAJ PONOWNIE';
   String get rideIt => 'JEDŹ';
+
+  /// Plakietka przy wariancie, który sam umie się uzasadnić.
+  String get recommended => 'POLECANA';
   String get plannerNoStart =>
       'Nie znamy jeszcze Twojej pozycji. Poczekaj na GPS albo zbuduj trasę '
       'ręcznie.';
@@ -723,6 +726,9 @@ class Strings {
   String get movingTime => 'W ruchu';
   String get history => 'Historia';
   String get rideSummary => 'PODSUMOWANIE PRZEJAZDU';
+
+  /// Nagłówek sekcji z policzonymi highlightami przejazdu.
+  String get worthNoting => 'WARTE ODNOTOWANIA';
   String get noRidesYet => 'Brak zapisanych przejazdów';
   String get noRidesMessage =>
       'Naciśnij ROZPOCZNIJ JAZDĘ na karcie Jazda. Po zakończeniu przejazd '

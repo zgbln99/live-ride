@@ -65,6 +65,10 @@ export type Rider = {
     gradient_percent?: number;
     nav?: RiderNav;
     climb?: RiderClimb;
+    /** Insighty licznika, gotowymi zdaniami. Serwer wyciął z nich już
+     * wszystko, na co zawodnik nie pozwolił, i wszystko, co dotyczy jego
+     * ciała — ta strona ich nie filtruje i nie ma czym. */
+    insights?: RiderInsight[];
     /** Prędkość z czujnika koła, gdy jest — inny pomiar niż GPS-owy. */
     sensor_speed_kmh?: number;
     sensor_distance_m?: number;
@@ -90,6 +94,20 @@ export type Rider = {
     /** Pozycja jest opóźniona; `position_at` mówi, z której chwili pochodzi. */
     location_delayed?: boolean;
     position_at?: string;
+};
+
+/**
+ * Jedno zdanie, które licznik powiedział zawodnikowi.
+ *
+ * Przychodzi GOTOWE i po polsku, tak jak instrukcja nawigacji. Strona go nie
+ * składa i nie tłumaczy: widz ma przeczytać dokładnie to, co rowerzysta ma
+ * przed oczami.
+ */
+export type RiderInsight = {
+    kind: string;
+    title?: string;
+    body: string;
+    priority?: 'info' | 'notable' | 'urgent';
 };
 
 /**

@@ -6,6 +6,7 @@ import 'package:flutter/foundation.dart';
 import '../core/geo.dart';
 import '../models/route/route_preferences.dart';
 import '../models/route/route_waypoint.dart';
+import '../models/weather.dart';
 import 'geocoding_service.dart';
 import 'route_generator.dart';
 import 'route_intent.dart';
@@ -83,6 +84,7 @@ class RoutePlannerController extends ChangeNotifier {
     required GeoPoint? start,
     required RoutePreferences preferences,
     required double movingAverageKmh,
+    WeatherSnapshot? weather,
   }) async {
     final intent = parseRouteIntent(text);
     final request = ++_requestId;
@@ -114,6 +116,7 @@ class RoutePlannerController extends ChangeNotifier {
               targetMeters: target!,
               preferences: applied,
               intent: intent,
+              weather: weather,
               cancelToken: cancelToken,
             );
 

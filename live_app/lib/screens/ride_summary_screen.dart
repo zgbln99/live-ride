@@ -6,6 +6,7 @@ import '../core/lr_theme.dart';
 import '../i18n/strings.dart';
 import '../models/ride_record.dart';
 import '../services/app_services.dart';
+import '../services/ride_intelligence.dart';
 import '../widgets/elevation_profile.dart';
 import '../widgets/lr_common.dart';
 import 'integrations_screen.dart';
@@ -32,6 +33,27 @@ class RideSummaryScreen extends StatefulWidget {
 class _RideSummaryScreenState extends State<RideSummaryScreen> {
   late RecordedRide _ride = widget.ride;
   bool _busy = false;
+
+  /// Profil z pozostałych przejazdów — bez niego „szybciej niż zwykle”
+  /// nie miałoby do czego się odnieść.
+  RiderHistoryProfile _history = RiderHistoryProfile.empty;
+
+  @override
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addPostFrameCallback((_) => _loadHistory());
+  }
+
+  Future<void> _loadHistory() async {
+    final rides = await AppServices.of(context).rides.list();
+    if (!mounted) return;
+    // Bieżący przejazd nie może być własnym punktem odniesienia.
+    setState(() {
+      _history = RiderHistoryProfile.fromRides(
+        rides.where((ride) => ride.id != _ride.id).toList(),
+      );
+    });
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -96,6 +118,7 @@ class _RideSummaryScreenState extends State<RideSummaryScreen> {
               ),
             ),
           const SizedBox(height: 18),
+          _highlights(),
           LrSectionHeader(title: S.ride),
           LrPanel(
             padding: const EdgeInsets.all(18),
@@ -198,6 +221,57 @@ class _RideSummaryScreenState extends State<RideSummaryScreen> {
             ),
         ],
       ),
+    );
+  }
+
+  /// To, co naprawdę się wydarzyło — policzone, nie napisane.
+  ///
+  /// Panel znika w całości, gdy nie ma czego pokazać. Pusta sekcja
+  /// „Warte odnotowania” byłaby gorsza niż jej brak.
+  Widget _highlights() {
+    final lines = RideIntelligence.highlights(_ride, profile: _history);
+    if (lines.isEmpty) return const SizedBox.shrink();
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        LrSectionHeader(title: S.worthNoting),
+        LrPanel(
+          padding: const EdgeInsets.fromLTRB(16, 14, 16, 14),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              for (final line in lines)
+                Padding(
+                  padding: const EdgeInsets.symmetric(vertical: 3),
+                  child: Row(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Padding(
+                        padding: const EdgeInsets.only(top: 6),
+                        child: Container(
+                          width: 5,
+                          height: 5,
+                          decoration: const BoxDecoration(
+                            color: LR.accent,
+                            shape: BoxShape.circle,
+                          ),
+                        ),
+                      ),
+                      const SizedBox(width: 10),
+                      Expanded(
+                        child: Text(
+                          line,
+                          style: LR.body.copyWith(fontSize: 13.5, height: 1.35),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+            ],
+          ),
+        ),
+        const SizedBox(height: 18),
+      ],
     );
   }
 

@@ -5,6 +5,7 @@ import 'package:dio/dio.dart';
 import '../core/geo.dart';
 import '../models/route/route_preferences.dart';
 import '../models/route/route_waypoint.dart';
+import '../models/weather.dart';
 import 'route_intent.dart';
 import 'routing_service.dart';
 
@@ -16,6 +17,8 @@ class GeneratedRoute {
     required this.waypoints,
     required this.preferences,
     required this.reasons,
+    this.bearing,
+    this.recommended = false,
   });
 
   /// Nazwa wariantu: „Spokojna", „Sportowa", „Krajobrazowa".
@@ -30,6 +33,14 @@ class GeneratedRoute {
   /// Pusta lista jest poprawna: wariant, którego niczym nie da się uzasadnić,
   /// dostaje samą nazwę zamiast wymyślonego powodu.
   final List<String> reasons;
+
+  /// Kierunek pierwszego odcinka pętli. Potrzebny, żeby powiedzieć cokolwiek
+  /// o wietrze — bez niego „z wiatrem na powrocie" byłoby zgadywaniem.
+  final double? bearing;
+
+  /// Wariant, który proponujemy jako pierwszy. Zawsze umie powiedzieć czemu:
+  /// [reasons] nigdy nie jest puste dla polecanego.
+  final bool recommended;
 
   double get distanceMeters => path.distanceMeters;
 
@@ -88,6 +99,7 @@ class RouteGenerator {
     required RoutePreferences preferences,
     RouteIntent? intent,
     int variants = 3,
+    WeatherSnapshot? weather,
     CancelToken? cancelToken,
   }) async {
     if (!start.isValid || targetMeters < 2000) return const [];
@@ -96,7 +108,7 @@ class RouteGenerator {
     // Wachlarz kierunków: z każdego wychodzi inna pętla, więc trzy warianty
     // biorą się z trzech różnych stron świata, a nie z trzech odcieni tej
     // samej drogi.
-    final bearings = _spreadBearings(variants);
+    final bearings = _spreadBearings(variants, weather: weather);
 
     for (final bearing in bearings) {
       final tuned = await _tuneLoop(
@@ -127,7 +139,7 @@ class RouteGenerator {
     // Gdy nic nie trafiło w tolerancję, oddajemy najlepsze, co wyszło —
     // ale wołający musi wiedzieć, ile naprawdę ma, i to jest w `path`.
     final chosen = (usable.isEmpty ? distinct : usable).take(variants).toList();
-    return _label(chosen, intent);
+    return _label(chosen, intent, weather, targetMeters);
   }
 
   /// Iteracyjnie dostraja pętlę, aż trafi w dystans.
@@ -164,6 +176,7 @@ class RouteGenerator {
           waypoints: waypoints,
           preferences: preferences,
           reasons: const [],
+          bearing: bearing,
         );
       }
       if (error <= routeDistanceGoodTolerance) break;
@@ -237,13 +250,40 @@ class RouteGenerator {
   static double _error(double actual, double target) =>
       target <= 0 ? 1 : (actual - target).abs() / target;
 
-  List<double> _spreadBearings(int variants) {
+  List<double> _spreadBearings(int variants, {WeatherSnapshot? weather}) {
     if (variants >= seedBearings.length) return seedBearings;
     // Równomiernie po całym wachlarzu, a nie trzy sąsiednie kierunki.
     final step = seedBearings.length ~/ math.max(1, variants);
-    return [
-      for (var i = 0; i < variants; i++) seedBearings[(i * step) % seedBearings.length],
+    final fan = [
+      for (var i = 0; i < variants; i++)
+        seedBearings[(i * step) % seedBearings.length],
     ];
+
+    // Przy wietrze wartym uwagi obracamy CAŁY wachlarz tak, żeby pierwszy
+    // kierunek szedł pod wiatr. Zmęczoną drugą połowę jazdy chcemy mieć
+    // z wiatrem w plecy, a nie odwrotnie.
+    if (!windMatters(weather)) return fan;
+    final offset = weather!.windDirectionDegrees - fan.first;
+    return [for (final bearing in fan) (bearing + offset) % 360];
+  }
+
+  /// Poniżej tej prędkości wiatr nie zmienia planu jazdy.
+  static const double windMattersKmh = 15;
+
+  /// Czy w ogóle jest o czym mówić.
+  static bool windMatters(WeatherSnapshot? weather) =>
+      weather != null && weather.windSpeedKmh >= windMattersKmh;
+
+  /// Jak bardzo pierwszy odcinek idzie pod wiatr.
+  ///
+  /// 1 = prosto pod wiatr (czyli dobrze: powrót będzie z wiatrem),
+  /// -1 = z wiatrem na starcie, a więc pod wiatr do domu.
+  static double windAlignment({
+    required double bearing,
+    required double windFromDegrees,
+  }) {
+    final delta = ((bearing - windFromDegrees) % 360) * math.pi / 180;
+    return math.cos(delta);
   }
 
   /// Odsiewa warianty, które są w praktyce tą samą pętlą.
@@ -282,7 +322,12 @@ class RouteGenerator {
   ///
   /// Żadnej „krajobrazowej", jeśli nie mamy danych, które by to uzasadniały.
   /// Nazwa wariantu jest opisem policzonej liczby, a nie obietnicą.
-  List<GeneratedRoute> _label(List<GeneratedRoute> routes, RouteIntent? intent) {
+  List<GeneratedRoute> _label(
+    List<GeneratedRoute> routes,
+    RouteIntent? intent,
+    WeatherSnapshot? weather,
+    double targetMeters,
+  ) {
     if (routes.isEmpty) return routes;
     final byAscent = [...routes]
       ..sort((a, b) => a.ascentMeters.compareTo(b.ascentMeters));
@@ -292,7 +337,7 @@ class RouteGenerator {
       final reasons = <String>[];
       final flattest = identical(route, byAscent.first);
       final hilliest = identical(route, byAscent.last);
-      // Przy jednym wariancie „najpłaszczy" i „najbardziej pagórkowaty" to
+      // Przy jednym wariancie „najpłaszczy” i „najbardziej pagórkowaty” to
       // ta sama trasa — wtedy nie mówimy ani jednego, ani drugiego.
       final comparable = byAscent.length > 1;
       final hasElevation = route.ascentMeters > 0;
@@ -307,6 +352,21 @@ class RouteGenerator {
       } else {
         label = 'Zrównoważona';
       }
+
+      // Dystans mówimy tylko wtedy, gdy naprawdę trafiliśmy w cel. Wariant
+      // trzydziestosiedmiokilometrowy nie dostanie pochwały za „dokładnie
+      // tyle, ile prosiłeś”.
+      final error = _error(route.distanceMeters, targetMeters);
+      if (error <= routeDistanceGoodTolerance) {
+        final km = (route.distanceMeters / 1000)
+            .toStringAsFixed(1)
+            .replaceAll('.', ',');
+        reasons.add('$km km, czyli tyle, ile prosiłeś');
+      }
+
+      final wind = _windReason(route, weather);
+      if (wind != null) reasons.add(wind);
+
       if (route.preferences.avoidBusyRoads) {
         reasons.add('boczne drogi');
       }
@@ -320,10 +380,81 @@ class RouteGenerator {
           waypoints: route.waypoints,
           preferences: route.preferences,
           reasons: reasons,
+          bearing: route.bearing,
         ),
       );
     }
-    return labelled;
+
+    return _recommend(labelled, weather, targetMeters);
+  }
+
+  /// „Pod wiatr na starcie, z wiatrem do domu” — albo nic.
+  ///
+  /// Przy słabym wietrze i bez znanego kierunku wyjazdu milczymy: obietnica
+  /// o wietrze, której nie umiemy sprawdzić, jest gorsza niż jej brak.
+  static String? _windReason(GeneratedRoute route, WeatherSnapshot? weather) {
+    if (!windMatters(weather)) return null;
+    final bearing = route.bearing;
+    if (bearing == null) return null;
+    final alignment = windAlignment(
+      bearing: bearing,
+      windFromDegrees: weather!.windDirectionDegrees,
+    );
+    if (alignment < 0.4) return null;
+    return 'pod wiatr na starcie (${weather.windSpeedKmh.round()} km/h), '
+        'z wiatrem na powrocie';
+  }
+
+  /// Wybiera wariant polecany i pilnuje, żeby umiał się wytłumaczyć.
+  ///
+  /// Kolejność: najpierw te, które trafiły w dystans, potem te z wiatrem po
+  /// właściwej stronie. Jeśli o żadnym nie da się powiedzieć nic konkretnego,
+  /// nie polecamy żadnego — trzy propozycje bez rekomendacji są uczciwsze
+  /// niż rekomendacja bez powodu.
+  static List<GeneratedRoute> _recommend(
+    List<GeneratedRoute> routes,
+    WeatherSnapshot? weather,
+    double targetMeters,
+  ) {
+    GeneratedRoute? best;
+    var bestScore = 0.0;
+    for (final route in routes) {
+      if (route.reasons.isEmpty) continue;
+      var score = 0.0;
+      if (_error(route.distanceMeters, targetMeters) <=
+          routeDistanceGoodTolerance) {
+        score += 2;
+      }
+      final bearing = route.bearing;
+      if (windMatters(weather) && bearing != null) {
+        score +=
+            windAlignment(
+              bearing: bearing,
+              windFromDegrees: weather!.windDirectionDegrees,
+            ) *
+            1.5;
+      }
+      if (score > bestScore) {
+        bestScore = score;
+        best = route;
+      }
+    }
+    if (best == null) return routes;
+    return [
+      for (final route in routes)
+        if (identical(route, best))
+          GeneratedRoute(
+            label: route.label,
+            path: route.path,
+            waypoints: route.waypoints,
+            preferences: route.preferences,
+            reasons: route.reasons,
+            bearing: route.bearing,
+            recommended: true,
+          )
+        else
+          route,
+    ];
   }
 }
 

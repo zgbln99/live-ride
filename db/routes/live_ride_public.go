@@ -702,6 +702,13 @@ func liveRideRiderJSON(
 		rider["battery_percent"] = participant.GetInt("battery_percent")
 		rider["batteries"] = batteries
 	}
+	// Insighty na koniec, bo każdy z nich pyta o te same przełączniki, które
+	// ustawiły się wyżej. Filtr siedzi po stronie serwera: wyłączony
+	// przełącznik znaczy, że zdanie nie wyszło z bazy, a nie że strona go
+	// nie narysowała.
+	if insights := liveRideSafeInsights(participant); insights != nil {
+		rider["insights"] = insights
+	}
 	return rider
 }
 

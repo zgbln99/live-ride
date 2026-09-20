@@ -155,6 +155,7 @@ func newLiveRideFixture(t *testing.T) *liveRideFixture {
 		&core.NumberField{Name: "hide_finish_m", OnlyInt: true},
 		&core.NumberField{Name: "start_lat"},
 		&core.NumberField{Name: "start_lon"},
+		&core.JSONField{Name: "insights", MaxSize: 4000},
 	)
 	if err := app.Save(participants); err != nil {
 		t.Fatal(err)

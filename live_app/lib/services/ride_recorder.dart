@@ -18,6 +18,7 @@ import 'live_service.dart';
 import 'local_store.dart';
 import 'location_service.dart';
 import 'profile_service.dart';
+import 'ride_intelligence.dart';
 import 'ride_storage_service.dart';
 import 'alert_controller.dart';
 import 'auto_pause_detector.dart';
@@ -116,6 +117,19 @@ class RideRecorder extends ChangeNotifier {
 
   RideState _state = RideState.idle;
   RideMetrics _metrics = RideMetrics.empty;
+
+  /// Rozjazd tętna i tempa przez całą jazdę.
+  ///
+  /// Mieszka tu, a nie na ekranie, bo przełączenie zakładki nie może
+  /// wyzerować obserwacji zbieranej od dwóch godzin.
+  final DecouplingTracker _decoupling = DecouplingTracker();
+
+  /// Profil z własnych przejazdów, wczytywany raz na starcie jazdy.
+  ///
+  /// Bez niego „szybciej niż zwykle” nie miałoby do czego się odnieść,
+  /// a insight o tempie nigdy nie dotarłby do obserwujących. Czytamy
+  /// bazę raz, a nie przy każdej próbce telemetrii.
+  RiderHistoryProfile _history = RiderHistoryProfile.empty;
   GeoPoint? _position;
 
   /// Ostatni surowy fiks, taki jak przyszedł z systemu.
@@ -138,6 +152,10 @@ class RideRecorder extends ChangeNotifier {
 
   RideState get state => _state;
   RideMetrics get metrics => _metrics;
+
+  /// O ile procent tętno „odjechało" od tempa względem pierwszej połowy.
+  /// Null, dopóki nie ma z czego liczyć.
+  double? get decouplingPercent => _decoupling.percent;
   GeoPoint? get position => _position;
   DateTime? get startedAt => _clock.startedAt;
   RideRoute? get route => _route;
@@ -195,6 +213,9 @@ class RideRecorder extends ChangeNotifier {
 
     _accumulator.reset();
     _points.clear();
+    // Historia doczytuje się w tle: jazda nie ma czekać na odczyt bazy,
+    // a pierwsze minuty i tak są poniżej progu, od którego mówimy o tempie.
+    unawaited(_loadHistory());
     _route = route;
     _plan = plan;
     climbs.attach(route);
@@ -450,6 +471,7 @@ class RideRecorder extends ChangeNotifier {
     _points.clear();
     _state = RideState.idle;
     _metrics = RideMetrics.empty;
+    _decoupling.reset();
     _clock.reset();
     _autoPause.reset();
     _route = null;
@@ -669,6 +691,7 @@ class RideRecorder extends ChangeNotifier {
       gradientPercent: _metrics.gradientPercent,
       nav: _navTelemetry(),
       climb: _climbTelemetry(),
+      insights: _shareableInsights(),
       // Dystans z czujnika koła celowo nie jedzie: licznik go nie prowadzi
       // osobno, a wysłanie dystansu GPS pod tą nazwą byłoby zmyśleniem
       // drugiego pomiaru.
@@ -690,6 +713,37 @@ class RideRecorder extends ChangeNotifier {
   /// Null nie jest tu brakiem danych, tylko informacją: serwer na jego widok
   /// KASUJE manewr u widzów. Inaczej po dojechaniu do mety publiczna strona
   /// zostałaby ze strzałką w lewo, której na kierownicy już dawno nie ma.
+  Future<void> _loadHistory() async {
+    try {
+      _history = RiderHistoryProfile.fromRides(await storage.list());
+    } catch (_) {
+      // Brak historii to nie awaria jazdy. Insighty, które jej wymagają,
+      // po prostu milczą.
+    }
+  }
+
+  /// Insighty dla obserwujących.
+  ///
+  /// Liczone z tego samego kontekstu co panel na kierownicy, żeby widz
+  /// czytał dokładnie to samo zdanie co rowerzysta — a nie swój wariant
+  /// złożony z liczb. Zdania o ciele odpadają w [RideIntelligence.shareable]
+  /// i nie opuszczają telefonu.
+  List<Map<String, dynamic>> _shareableInsights() {
+    final context = RideContext(
+      metrics: _metrics,
+      profile: _history,
+      remainingMeters: _progress?.remainingMeters,
+      upcomingClimb: climbs.upcomingClimb,
+      metersToUpcomingClimb: climbs.metersToUpcoming,
+      activeClimb: climbProgress?.climb,
+      climbRemainingMeters: climbProgress?.remainingMeters,
+      weather: weather.current,
+      batteryPercent: battery?.percent,
+      gpsAccuracyMeters: _metrics.gpsAccuracyMeters,
+    );
+    return RideIntelligence.shareable(RideIntelligence.during(context));
+  }
+
   Map<String, dynamic>? _navTelemetry() {
     final progress = _progress;
     if (progress == null) return null;
@@ -965,6 +1019,21 @@ class RideRecorder extends ChangeNotifier {
     );
   }
 
+  /// Jedna próbka wysiłku na sekundę zegara, wyłącznie w ruchu.
+  ///
+  /// Pauza, postój na światłach i jazda bez pasa nie mówią nic o rozjeździe,
+  /// więc nie trafiają do próbki. Moc, jeśli jest, jest lepsza od prędkości:
+  /// nie zależy od wiatru ani od tego, czy akurat jedziemy z górki.
+  void _sampleEffort() {
+    if (_state != RideState.recording || isAutoPaused) return;
+    _decoupling.add(
+      movingTime: _metrics.movingTime,
+      speedKmh: _metrics.speedKmh,
+      heartRate: _metrics.heartRate,
+      watts: _metrics.power?.current?.toDouble(),
+    );
+  }
+
   void _publish() {
     _metrics = _accumulator.build(
       elapsed: elapsed,
@@ -973,6 +1042,7 @@ class RideRecorder extends ChangeNotifier {
       pointCount: _points.length,
       hasFix: _position != null,
     );
+    _sampleEffort();
     unawaited(
       liveActivity.update(
         metrics: _metrics,

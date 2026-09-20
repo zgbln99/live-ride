@@ -6,6 +6,7 @@ import 'package:live_ride/core/api_client.dart';
 import 'package:live_ride/core/geo.dart';
 import 'package:live_ride/models/route/route_preferences.dart';
 import 'package:live_ride/models/route/route_waypoint.dart';
+import 'package:live_ride/models/weather.dart';
 import 'package:live_ride/services/route_generator.dart';
 import 'package:live_ride/services/route_intent.dart';
 import 'package:live_ride/services/routing_service.dart';
@@ -266,6 +267,162 @@ void main() {
         movingAverageKmh: 120,
       );
       expect(meters, closeTo(20000, 1));
+    });
+  });
+
+  _windAndRecommendation();
+}
+
+/// Wiatr i rekomendacja.
+///
+/// Dwie rzeczy łatwo tu udać: obiecać „z wiatrem na powrocie" bez patrzenia
+/// w kierunek wiatru i wskazać „polecaną" bez żadnego powodu. Oba są tu
+/// zablokowane testem.
+void _windAndRecommendation() {
+  WeatherSnapshot wind({
+    required double fromDegrees,
+    required double speedKmh,
+  }) => WeatherSnapshot(
+    temperatureCelsius: 18,
+    apparentTemperatureCelsius: 18,
+    windSpeedKmh: speedKmh,
+    windDirectionDegrees: fromDegrees,
+    condition: WeatherCondition.clear,
+    isDay: true,
+    observedAt: DateTime.utc(2026, 5, 1, 9),
+  );
+
+  const start = GeoPoint(lat: 52.2297, lon: 21.0122);
+
+  group('wiatr', () {
+    test('wyjazd prosto pod wiatr to pełne dopasowanie', () {
+      expect(
+        RouteGenerator.windAlignment(bearing: 270, windFromDegrees: 270),
+        closeTo(1, 0.001),
+      );
+    });
+
+    test('wyjazd z wiatrem w plecy to dopasowanie ujemne', () {
+      expect(
+        RouteGenerator.windAlignment(bearing: 90, windFromDegrees: 270),
+        closeTo(-1, 0.001),
+      );
+    });
+
+    test('słaby wiatr nie zmienia planu', () {
+      expect(RouteGenerator.windMatters(wind(fromDegrees: 270, speedKmh: 8)),
+          isFalse);
+      expect(RouteGenerator.windMatters(null), isFalse);
+      expect(RouteGenerator.windMatters(wind(fromDegrees: 270, speedKmh: 24)),
+          isTrue);
+    });
+
+    test('przy silnym wietrze pierwszy wariant wyjeżdża pod wiatr', () async {
+      final router = _WindingRouter();
+      final routes = await RouteGenerator(router).loops(
+        start: start,
+        targetMeters: 40000,
+        preferences: const RoutePreferences(),
+        weather: wind(fromDegrees: 270, speedKmh: 28),
+      );
+      expect(routes, isNotEmpty);
+      // Wachlarz jest obrócony na zachód, więc jeden z wariantów naprawdę
+      // startuje pod wiatr — nie deklaratywnie, tylko w bearingu.
+      expect(
+        routes.any(
+          (route) =>
+              route.bearing != null &&
+              RouteGenerator.windAlignment(
+                    bearing: route.bearing!,
+                    windFromDegrees: 270,
+                  ) >
+                  0.9,
+        ),
+        isTrue,
+      );
+    });
+
+    test('bez wiatru nikt nie obiecuje wiatru na powrocie', () async {
+      final router = _WindingRouter();
+      final routes = await RouteGenerator(router).loops(
+        start: start,
+        targetMeters: 40000,
+        preferences: const RoutePreferences(),
+        weather: wind(fromDegrees: 270, speedKmh: 6),
+      );
+      for (final route in routes) {
+        for (final reason in route.reasons) {
+          expect(reason.toLowerCase(), isNot(contains('wiatr')));
+        }
+      }
+    });
+
+    test('wariant pod wiatr mówi o tym wprost', () async {
+      final router = _WindingRouter();
+      final routes = await RouteGenerator(router).loops(
+        start: start,
+        targetMeters: 40000,
+        preferences: const RoutePreferences(),
+        weather: wind(fromDegrees: 270, speedKmh: 28),
+      );
+      final upwind = routes.firstWhere(
+        (route) =>
+            route.bearing != null &&
+            RouteGenerator.windAlignment(
+                  bearing: route.bearing!,
+                  windFromDegrees: 270,
+                ) >
+                0.9,
+      );
+      expect(
+        upwind.reasons.any((r) => r.contains('z wiatrem na powrocie')),
+        isTrue,
+      );
+      expect(upwind.reasons.any((r) => r.contains('28 km/h')), isTrue);
+    });
+  });
+
+  group('rekomendacja', () {
+    test('polecana jest najwyżej jedna', () async {
+      final routes = await RouteGenerator(_WindingRouter()).loops(
+        start: start,
+        targetMeters: 40000,
+        preferences: const RoutePreferences(),
+        weather: wind(fromDegrees: 270, speedKmh: 28),
+      );
+      expect(routes.where((route) => route.recommended).length,
+          lessThanOrEqualTo(1));
+    });
+
+    test('polecana zawsze umie powiedzieć dlaczego', () async {
+      final routes = await RouteGenerator(_WindingRouter()).loops(
+        start: start,
+        targetMeters: 40000,
+        preferences: const RoutePreferences(),
+        weather: wind(fromDegrees: 270, speedKmh: 28),
+      );
+      for (final route in routes.where((route) => route.recommended)) {
+        expect(route.reasons, isNotEmpty);
+      }
+    });
+
+    test('trafiony dystans jest wymieniony jako powód', () async {
+      final routes = await RouteGenerator(_WindingRouter()).loops(
+        start: start,
+        targetMeters: 40000,
+        preferences: const RoutePreferences(),
+      );
+      final onTarget = routes.where(
+        (route) => (route.distanceMeters - 40000).abs() / 40000 <= 0.05,
+      );
+      expect(onTarget, isNotEmpty);
+      for (final route in onTarget) {
+        expect(
+          route.reasons.any((r) => r.contains('ile prosiłeś')),
+          isTrue,
+          reason: 'wariant ${route.distanceMeters} m nie tłumaczy dystansu',
+        );
+      }
     });
   });
 }

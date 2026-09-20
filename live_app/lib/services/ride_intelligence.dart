@@ -3,6 +3,7 @@ import 'dart:math' as math;
 import '../models/ride_metrics.dart';
 import '../models/ride_record.dart';
 import '../models/route/route_analysis.dart';
+import '../models/training.dart';
 import '../models/weather.dart';
 
 /// Jak pewna jest liczba, którą pokazujemy.
@@ -17,7 +18,20 @@ enum InsightConfidence {
   solid,
 }
 
-enum InsightKind { pace, climb, wind, weather, eta, battery, gps, fuel, plan }
+enum InsightKind {
+  pace,
+  climb,
+  wind,
+  weather,
+  eta,
+  battery,
+  gps,
+  fuel,
+  plan,
+  zone,
+  power,
+  effort,
+}
 
 enum InsightPriority { info, notable, urgent }
 
@@ -127,6 +141,100 @@ class RiderHistoryProfile {
   }
 }
 
+/// Punkt na trasie, o który zawodnik pytał: sklep, przełęcz, dworzec.
+class RideCheckpoint {
+  const RideCheckpoint({
+    required this.name,
+    required this.distanceMeters,
+    this.ascentAheadMeters,
+  });
+
+  final String name;
+
+  /// Dystans od startu trasy, nie od aktualnej pozycji.
+  final double distanceMeters;
+
+  /// Przewyższenie między aktualną pozycją a tym punktem, jeśli je znamy.
+  final double? ascentAheadMeters;
+}
+
+/// Rozjazd tętna i tempa (Pw:Hr) liczony na bieżąco.
+///
+/// Idea jest prosta: w równym wysiłku stosunek tempa do tętna trzyma się
+/// płasko. Kiedy w drugiej połowie trzeba tego samego tętna na wolniejszą
+/// jazdę, organizm pracuje drożej niż na starcie. To OBSERWACJA, nie
+/// diagnoza — nie wiemy, czy to upał, odwodnienie, czy po prostu długa
+/// jazda, i tak to nazywamy.
+///
+/// Próbki zbieramy tylko w ruchu i tylko z sensownym tętnem, bo postój na
+/// światłach z tętnem 70 wypaczyłby każdą średnią.
+class DecouplingTracker {
+  DecouplingTracker({this.minimumSamplesPerHalf = 60});
+
+  /// Ile próbek musi mieć KAŻDA połowa, żeby wynik cokolwiek znaczył.
+  final int minimumSamplesPerHalf;
+
+  final List<_EffortSample> _samples = [];
+
+  /// Dokłada próbkę. [speedKmh] można zastąpić mocą — wzór jest ten sam.
+  void add({
+    required Duration movingTime,
+    required double speedKmh,
+    required int? heartRate,
+    double? watts,
+  }) {
+    final bpm = heartRate;
+    if (bpm == null || bpm < 60) return;
+    final output = watts ?? speedKmh;
+    if (output <= 0) return;
+    _samples.add(
+      _EffortSample(at: movingTime, output: output, heartRate: bpm),
+    );
+  }
+
+  void reset() => _samples.clear();
+
+  int get sampleCount => _samples.length;
+
+  /// Dodatni wynik = w drugiej połowie to samo tętno daje mniej.
+  ///
+  /// Null, dopóki obie połowy nie mają dość próbek — lepiej nie powiedzieć
+  /// nic niż policzyć rozjazd z czterech pomiarów.
+  double? get percent {
+    if (_samples.length < minimumSamplesPerHalf * 2) return null;
+    final half = _samples.length ~/ 2;
+    final first = _ratio(_samples.take(half));
+    final second = _ratio(_samples.skip(half));
+    if (first == null || second == null || first <= 0) return null;
+    return (first - second) / first * 100;
+  }
+
+  static double? _ratio(Iterable<_EffortSample> samples) {
+    var output = 0.0;
+    var heartRate = 0.0;
+    var count = 0;
+    for (final sample in samples) {
+      output += sample.output;
+      heartRate += sample.heartRate;
+      count++;
+    }
+    if (count == 0 || heartRate == 0) return null;
+    return (output / count) / (heartRate / count);
+  }
+}
+
+class _EffortSample {
+  const _EffortSample({
+    required this.at,
+    required this.output,
+    required this.heartRate,
+  });
+
+  final Duration at;
+  final double output;
+  final int heartRate;
+}
+
 /// Wszystko, czego Ride Intelligence potrzebuje, żeby coś powiedzieć.
 class RideContext {
   const RideContext({
@@ -143,6 +251,9 @@ class RideContext {
     this.gpsAccuracyMeters,
     this.plannedDistanceMeters,
     this.plannedDuration,
+    this.training,
+    this.decouplingPercent,
+    this.checkpoints = const [],
     this.now,
   });
 
@@ -162,6 +273,16 @@ class RideContext {
   final double? gpsAccuracyMeters;
   final double? plannedDistanceMeters;
   final Duration? plannedDuration;
+
+  /// Strefy tętna i mocy zawodnika. Bez nich nie mówimy o strefach wcale.
+  final TrainingProfile? training;
+
+  /// Rozjazd tętna i tempa, policzony przez [DecouplingTracker].
+  final double? decouplingPercent;
+
+  /// Punkty kontrolne na trasie, z dystansem liczonym od startu.
+  final List<RideCheckpoint> checkpoints;
+
   final DateTime? now;
 
   DateTime get moment => now ?? DateTime.now();
@@ -191,6 +312,17 @@ class RideIntelligence {
   /// Powyżej tej dokładności GPS przestajemy ufać pozycji.
   static const double poorGpsAccuracyMeters = 25;
 
+  /// Co ile czasu w ruchu przypominamy o piciu i jedzeniu.
+  static const Duration drinkEvery = Duration(minutes: 20);
+  static const Duration eatEvery = Duration(minutes: 45);
+
+  /// Jak długo przypomnienie o paliwie zostaje na panelu.
+  static const Duration fuelWindow = Duration(minutes: 3);
+
+  /// Od ilu procent rozjazd tętna i tempa jest wart wspomnienia.
+  static const double decouplingNotable = 5;
+  static const double decouplingHigh = 10;
+
   /// Przewidywany czas przyjazdu.
   ///
   /// Liczony z tempa CAŁEJ jazdy, nie z prędkości chwilowej: ETA skaczące
@@ -198,8 +330,39 @@ class RideIntelligence {
   /// gorsze niż jego brak. Przedział bierze się z tego, ile jeszcze
   /// przewyższenia zostało — teren przed nami jest największym źródłem
   /// niepewności, jakie znamy.
-  static EtaEstimate eta(RideContext context) {
-    final remaining = context.remainingMeters;
+  static EtaEstimate eta(RideContext context) => _etaFor(
+    context,
+    remainingMeters: context.remainingMeters,
+    ascentAheadMeters: context.routeAscentAheadMeters,
+  );
+
+  /// ETA do najbliższego podjazdu — ta sama matematyka, krótszy odcinek.
+  ///
+  /// Przed podjazdem nie ma przewyższenia do doliczenia, więc kara terenowa
+  /// wynosi zero i przedział jest węższy niż przy ETA do mety.
+  static EtaEstimate etaToClimb(RideContext context) => _etaFor(
+    context,
+    remainingMeters: context.metersToUpcomingClimb,
+    ascentAheadMeters: 0,
+  );
+
+  /// ETA do punktu kontrolnego. Dystans liczony od aktualnej pozycji.
+  static EtaEstimate etaToCheckpoint(
+    RideContext context,
+    RideCheckpoint checkpoint,
+  ) => _etaFor(
+    context,
+    remainingMeters:
+        checkpoint.distanceMeters - context.metrics.distanceMeters,
+    ascentAheadMeters: checkpoint.ascentAheadMeters,
+  );
+
+  static EtaEstimate _etaFor(
+    RideContext context, {
+    required double? remainingMeters,
+    required double? ascentAheadMeters,
+  }) {
+    final remaining = remainingMeters;
     if (remaining == null || remaining <= 0) {
       return const EtaEstimate(confidence: InsightConfidence.calibrating);
     }
@@ -219,7 +382,7 @@ class RideIntelligence {
     final seconds = remaining / 1000 / paceKmh * 3600;
     // Przewyższenie przed nami spowalnia: każde sto metrów w pionie to
     // mniej więcej dodatkowa minuta i kilkanaście sekund.
-    final ascent = context.routeAscentAheadMeters ?? 0;
+    final ascent = ascentAheadMeters ?? 0;
     final penalty = ascent / 100 * 75;
     final total = seconds + penalty;
 
@@ -265,10 +428,15 @@ class RideIntelligence {
     final insights = <RideInsight>[
       ...?_gps(context),
       ...?_climb(context),
+      ...?_fuel(context),
+      ...?_effort(context),
+      ...?_zone(context),
+      ...?_power(context),
       ...?_pace(context),
       ...?_weather(context),
       ...?_plan(context),
       ...?_battery(context),
+      ...?_checkpoint(context),
     ];
     insights.sort((a, b) => b.priority.index.compareTo(a.priority.index));
     return insights;
@@ -456,6 +624,189 @@ class RideIntelligence {
             : InsightPriority.notable,
       ),
     ];
+  }
+
+  /// Jedzenie i picie.
+  ///
+  /// Bez licznika w pamięci: kubełek liczymy z czasu w ruchu, więc to samo
+  /// przypomnienie nigdy nie wyskoczy dwa razy, a po pauzie nie wraca od
+  /// nowa. Picie co [drinkEvery], jedzenie co [eatEvery] — i jedno i drugie
+  /// pokazywane tylko przez [fuelWindow] od progu, żeby nie wisiało na
+  /// panelu przez pół godziny.
+  static List<RideInsight>? _fuel(RideContext context) {
+    final moving = context.metrics.movingTime;
+    if (moving < drinkEvery) return null;
+
+    final eatBucket = moving.inSeconds ~/ eatEvery.inSeconds;
+    final sinceEat = moving - eatEvery * eatBucket;
+    if (eatBucket >= 1 && sinceEat < fuelWindow) {
+      return [
+        RideInsight(
+          kind: InsightKind.fuel,
+          title: 'JEDZENIE',
+          body: '${_minutes(eatEvery * eatBucket)} w ruchu. '
+              'Pora coś zjeść.',
+          priority: InsightPriority.notable,
+        ),
+      ];
+    }
+
+    final drinkBucket = moving.inSeconds ~/ drinkEvery.inSeconds;
+    final sinceDrink = moving - drinkEvery * drinkBucket;
+    if (drinkBucket >= 1 && sinceDrink < fuelWindow) {
+      final hot = (context.weather?.temperatureCelsius ?? 0) >= 25;
+      return [
+        RideInsight(
+          kind: InsightKind.fuel,
+          title: 'PICIE',
+          body: hot
+              ? 'Gorąco — pij częściej niż zwykle.'
+              : 'Napij się.',
+          priority: hot ? InsightPriority.notable : InsightPriority.info,
+        ),
+      ];
+    }
+    return null;
+  }
+
+  /// Rozjazd tętna i tempa.
+  ///
+  /// Mówimy, co widzimy w liczbach, i nie idziemy ani kroku dalej. To nie
+  /// jest diagnoza i nie ma tu ani słowa o zdrowiu.
+  static List<RideInsight>? _effort(RideContext context) {
+    final decoupling = context.decouplingPercent;
+    if (decoupling == null) return null;
+    if (context.metrics.movingTime < const Duration(minutes: 40)) return null;
+    if (decoupling < decouplingNotable) return null;
+    return [
+      RideInsight(
+        kind: InsightKind.effort,
+        title: 'WYSIŁEK',
+        body: 'Tętno trzyma się wyżej przy tym samym tempie niż na początku '
+            '(${decoupling.round()}%). Zwykle znaczy zmęczenie, upał albo '
+            'odwodnienie.',
+        priority: decoupling >= decouplingHigh
+            ? InsightPriority.notable
+            : InsightPriority.info,
+      ),
+    ];
+  }
+
+  /// W której strefie tętna jedziemy.
+  ///
+  /// Tylko jeśli zawodnik podał tętno maksymalne albo własne granice — bez
+  /// tego strefa jest zgadywana, a zgadywana strefa jest gorsza niż żadna.
+  static List<RideInsight>? _zone(RideContext context) {
+    final training = context.training;
+    final bpm = context.metrics.heartRate;
+    if (training == null || bpm == null) return null;
+    final index = training.heartRateZoneFor(bpm);
+    if (index == null) return null;
+    final zones = training.heartRateZones;
+    if (index < 1 || index > zones.length) return null;
+    final zone = zones[index - 1];
+    return [
+      RideInsight(
+        kind: InsightKind.zone,
+        title: 'STREFA $index',
+        body: '${zone.name}, $bpm bpm',
+        priority: index >= 5 ? InsightPriority.notable : InsightPriority.info,
+      ),
+    ];
+  }
+
+  /// Moc: obciążenie jazdy, a nie chwilowe waty.
+  ///
+  /// Waty z tej sekundy widać na polu danych. Tu ma sens tylko to, czego na
+  /// polu nie ma: znormalizowana moc i intensywność względem FTP.
+  static List<RideInsight>? _power(RideContext context) {
+    final power = context.metrics.power;
+    final training = context.training;
+    if (power == null || training == null) return null;
+    final ftp = training.functionalThresholdPower;
+    final normalized = power.normalized;
+    if (ftp == null || ftp <= 0 || normalized == null) return null;
+    if (context.metrics.movingTime < const Duration(minutes: 20)) return null;
+
+    final intensity = normalized / ftp;
+    final label = intensity >= 0.95
+        ? 'tempo wyścigowe'
+        : intensity >= 0.85
+        ? 'mocne tempo'
+        : intensity >= 0.70
+        ? 'równe tempo'
+        : 'spokojna jazda';
+    return [
+      RideInsight(
+        kind: InsightKind.power,
+        title: 'MOC',
+        body: '$normalized W znorm., IF ${intensity.toStringAsFixed(2)} '
+            '— $label.',
+        priority: intensity >= 1.0
+            ? InsightPriority.notable
+            : InsightPriority.info,
+      ),
+    ];
+  }
+
+  /// Najbliższy punkt kontrolny i realna godzina dojazdu do niego.
+  static List<RideInsight>? _checkpoint(RideContext context) {
+    final ridden = context.metrics.distanceMeters;
+    RideCheckpoint? next;
+    for (final checkpoint in context.checkpoints) {
+      if (checkpoint.distanceMeters <= ridden) continue;
+      if (next == null || checkpoint.distanceMeters < next.distanceMeters) {
+        next = checkpoint;
+      }
+    }
+    if (next == null) return null;
+    final away = next.distanceMeters - ridden;
+    final estimate = etaToCheckpoint(context, next);
+    return [
+      RideInsight(
+        kind: InsightKind.eta,
+        title: next.name.toUpperCase(),
+        body: estimate.isUsable
+            ? '${_km(away)}, około ${_clock(estimate.at!)}'
+            : _km(away),
+      ),
+    ];
+  }
+
+  /// Rodzaje insightów, które NIGDY nie opuszczają telefonu.
+  ///
+  /// Strefa tętna, rozjazd tętna i tempa oraz przypomnienia o jedzeniu
+  /// mówią o CIELE zawodnika, a nie o jeździe. Żaden przełącznik
+  /// udostępniania ich nie otwiera — nie ma takiego przełącznika i nie
+  /// będzie. Raz opublikowanego zdania o czyimś tętnie nie da się cofnąć.
+  static const Set<InsightKind> privateKinds = {
+    InsightKind.zone,
+    InsightKind.effort,
+    InsightKind.fuel,
+  };
+
+  /// Insighty w postaci, w jakiej wolno je wysłać obserwującym.
+  ///
+  /// To pierwszy z dwóch filtrów. Drugi stoi na serwerze i robi dokładnie
+  /// to samo — celowo, bo filtr wyłącznie w aplikacji znaczyłby, że
+  /// wystarczy jeden błąd w jednym miejscu, żeby zdanie o czyimś tętnie
+  /// wyszło na publiczny link.
+  static List<Map<String, dynamic>> shareable(
+    List<RideInsight> insights, {
+    int limit = 3,
+  }) {
+    final out = <Map<String, dynamic>>[];
+    for (final insight in insights) {
+      if (out.length >= limit) break;
+      if (privateKinds.contains(insight.kind)) continue;
+      out.add({
+        'kind': insight.kind.name,
+        'title': insight.title,
+        'body': insight.body,
+        'priority': insight.priority.name,
+      });
+    }
+    return out;
   }
 
   // ------------------------------------------------------------- po jeździe

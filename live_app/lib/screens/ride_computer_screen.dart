@@ -725,6 +725,8 @@ class _RideComputerScreenState extends State<RideComputerScreen> {
     weather: _services.weather.current,
     batteryPercent: _services.battery.percent,
     gpsAccuracyMeters: recorder.metrics.gpsAccuracyMeters,
+    training: _services.profile.trainingProfile,
+    decouplingPercent: recorder.decouplingPercent,
   );
 
   Future<void> _openLiveSheet() async {

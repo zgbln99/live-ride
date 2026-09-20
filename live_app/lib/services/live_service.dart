@@ -372,6 +372,10 @@ class LiveSessionController extends ChangeNotifier {
     /// Aktualny podjazd liczony tym samym ClimbPro, co na kierownicy.
     Map<String, dynamic>? climb,
 
+    /// Insighty Ride Intelligence, gotowymi zdaniami. Wysyłamy wyłącznie
+    /// te bezpieczne — patrz [liveSafeInsights].
+    List<Map<String, dynamic>>? insights,
+
     /// Prędkość i dystans z czujnika koła, gdy jest podpięty.
     double? sensorSpeedKmh,
     double? sensorDistanceMeters,
@@ -450,6 +454,12 @@ class LiveSessionController extends ChangeNotifier {
         'gradient_percent': _privacy.sharePosition ? gradientPercent : 0,
         'nav': _privacy.sharePosition ? nav : null,
         'climb': _privacy.sharePosition ? climb : null,
+        // Insighty przechodzą przez ten sam filtr co surowe pola, a serwer
+        // filtruje je jeszcze raz. Dwa niezależne filtry to nie nadmiar:
+        // pierwszy pilnuje, żeby zdanie o ciele nie opuściło telefonu,
+        // drugi — żeby nie opuściło serwera, gdyby kiedyś jednak opuściło
+        // telefon.
+        'insights': insights ?? const <Map<String, dynamic>>[],
         // Numer rosnący w obrębie sesji. Bez niego paczka, która przyszła
         // z opóźnieniem po wyjeździe z tunelu, cofałaby zawodnika na
         // publicznej stronie o tyle, ile trwał tunel.
