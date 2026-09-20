@@ -27,6 +27,9 @@
         riders,
         selectedId,
         routeCoordinates,
+        routeCumulative = [],
+        alongMeters = null,
+        checkpoints = [],
         tracks,
         trackVersion,
         meetup,
@@ -35,6 +38,11 @@
         riders: MapRider[];
         selectedId: string | null;
         routeCoordinates: LngLat[];
+        /** Narastający dystans wzdłuż planu — dzieli go na przejechany i resztę. */
+        routeCumulative?: number[];
+        /** Gdzie na planie jest wybrany zawodnik. */
+        alongMeters?: number | null;
+        checkpoints?: { name: string; lat?: number; lon?: number }[];
         tracks: Map<string, LngLat[]>;
         trackVersion: number;
         meetup: { latitude: number; longitude: number; label: string } | null;
@@ -61,6 +69,10 @@
     let meetupMarker: M.Marker | null = null;
     let startMarker: M.Marker | null = null;
     let finishMarker: M.Marker | null = null;
+    const checkpointMarkers: M.Marker[] = [];
+
+    /** Mapa na cały ekran — do oglądania jazdy, a nie tylko zerkania. */
+    let fullscreen = $state(false);
 
     function pinElement(kind: "start" | "finish" | "meetup", label: string) {
         const element = document.createElement("div");
@@ -73,12 +85,45 @@
         return element;
     }
 
+    /**
+     * Plan podzielony na przejechany i pozostały.
+     *
+     * Bez tego podziału widz widzi jedną kreskę i musi porównywać ją ze
+     * znacznikiem, żeby zgadnąć, ile zostało. Przejechany fragment planu to
+     * NIE to samo co ślad: ślad pokazuje, którędy ktoś pojechał naprawdę,
+     * a przejechany plan — dokąd doszedł względem zamiaru. Przy objeździe te
+     * dwie linie się rozchodzą i właśnie to jest wtedy najciekawsze.
+     */
+    function splitRoute(): [LngLat[], LngLat[]] {
+        const along = alongMeters;
+        if (along === null || routeCumulative.length !== routeCoordinates.length) {
+            return [[], routeCoordinates];
+        }
+        let index = 0;
+        while (index < routeCumulative.length && routeCumulative[index] <= along) index++;
+        if (index <= 1) return [[], routeCoordinates];
+        if (index >= routeCoordinates.length) return [routeCoordinates, []];
+        // Punkt styku należy do obu linii, żeby nie było między nimi dziury.
+        return [routeCoordinates.slice(0, index), routeCoordinates.slice(index - 1)];
+    }
+
     function syncRoute() {
         if (!map || !styleReady || routeCoordinates.length < 2) return;
-        const data: GeoJSON.Feature<GeoJSON.LineString> = {
-            type: "Feature",
-            properties: {},
-            geometry: { type: "LineString", coordinates: routeCoordinates },
+        const [covered, remaining] = splitRoute();
+        const data: GeoJSON.FeatureCollection<GeoJSON.LineString> = {
+            type: "FeatureCollection",
+            features: [
+                {
+                    type: "Feature",
+                    properties: { part: "remaining" },
+                    geometry: { type: "LineString", coordinates: remaining },
+                },
+                {
+                    type: "Feature",
+                    properties: { part: "covered" },
+                    geometry: { type: "LineString", coordinates: covered },
+                },
+            ].filter((feature) => feature.geometry.coordinates.length > 1) as GeoJSON.Feature<GeoJSON.LineString>[],
         };
         const existing = map.getSource("live-route") as M.GeoJSONSource | undefined;
         if (existing) {
@@ -98,6 +143,7 @@
                 id: "live-route-line",
                 type: "line",
                 source: "live-route",
+                filter: ["==", ["get", "part"], "remaining"],
                 layout: { "line-cap": "round", "line-join": "round" },
                 paint: {
                     "line-color": "#47555f",
@@ -106,8 +152,43 @@
                     "line-dasharray": [1.8, 1.6],
                 },
             });
+            // Przejechany fragment planu: ciągły i wyraźniejszy, ale nadal
+            // ciemny — kolor zawodnika należy do jego ŚLADU i nie wolno go
+            // pożyczyć planowi, bo wtedy znikłaby różnica między jednym
+            // a drugim.
+            map.addLayer({
+                id: "live-route-covered",
+                type: "line",
+                source: "live-route",
+                filter: ["==", ["get", "part"], "covered"],
+                layout: { "line-cap": "round", "line-join": "round" },
+                paint: {
+                    "line-color": "#0b1116",
+                    "line-width": 3.5,
+                    "line-opacity": 0.45,
+                },
+            });
         }
         syncRouteEnds();
+        syncCheckpoints();
+    }
+
+    /** Nazwane punkty pośrednie trasy, tak jak nazwał je zawodnik. */
+    function syncCheckpoints() {
+        if (!map) return;
+        for (const marker of checkpointMarkers.splice(0)) marker.remove();
+        for (const checkpoint of checkpoints) {
+            if (!Number.isFinite(checkpoint.lat) || !Number.isFinite(checkpoint.lon)) continue;
+            const element = document.createElement("div");
+            element.className = "lr-pin lr-pin-checkpoint";
+            element.title = checkpoint.name;
+            element.innerHTML = "<span>•</span>";
+            checkpointMarkers.push(
+                new M.Marker({ element, anchor: "center" })
+                    .setLngLat([checkpoint.lon!, checkpoint.lat!])
+                    .addTo(map),
+            );
+        }
     }
 
     function syncRouteEnds() {
@@ -336,7 +417,15 @@
     });
     $effect(() => {
         void routeCoordinates;
+        void alongMeters;
+        void checkpoints;
         syncRoute();
+    });
+    // Zmiana rozmiaru kontenera nie dociera do MapLibre sama — bez tego
+    // pełny ekran rysowałby mapę w starym kadrze.
+    $effect(() => {
+        void fullscreen;
+        map?.resize();
     });
     $effect(() => {
         void trackVersion;
@@ -396,7 +485,7 @@
     });
 </script>
 
-<div class="wrap">
+<div class="wrap" class:fullscreen>
     <div id="live-map" class="canvas"></div>
 
     {#if error}
@@ -404,6 +493,13 @@
     {/if}
 
     <div class="controls">
+        <button
+            type="button"
+            class="lr-button round"
+            title={fullscreen ? "Zamknij pełny ekran" : "Mapa na pełnym ekranie"}
+            aria-label={fullscreen ? "Zamknij pełny ekran" : "Mapa na pełnym ekranie"}
+            onclick={() => (fullscreen = !fullscreen)}>{fullscreen ? "×" : "⛶"}</button
+        >
         {#if !following}
             <button
                 type="button"
@@ -433,6 +529,21 @@
     .canvas {
         height: var(--lr-map-height);
         min-height: 240px;
+    }
+
+    /* Pełny ekran zostaje w drzewie strony zamiast wołać Fullscreen API:
+       na iOS w Safari tamto nie działa dla elementów innych niż wideo, więc
+       przycisk nie robiłby nic dokładnie tam, gdzie ta strona jest oglądana
+       najczęściej. */
+    .fullscreen {
+        position: fixed;
+        inset: 0;
+        z-index: 40;
+        border-bottom: none;
+    }
+
+    .fullscreen .canvas {
+        height: 100%;
     }
 
     .controls {
@@ -525,6 +636,16 @@
         border: 1px solid var(--lr-ink, #0b1116);
         color: var(--lr-ink, #0b1116);
         box-shadow: 0 1px 3px rgba(11, 17, 22, 0.3);
+    }
+
+    :global(.lr-pin-checkpoint) {
+        width: 18px;
+        height: 18px;
+        padding: 0;
+        border-radius: 50%;
+        font-size: 13px;
+        line-height: 1;
+        color: var(--lr-accent-deep, #0090a8);
     }
 
     :global(.lr-pin-finish) {

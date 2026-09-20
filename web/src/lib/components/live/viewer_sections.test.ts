@@ -395,3 +395,141 @@ describe("po mecie", () => {
         expect(body).not.toContain("Podjazdy");
     });
 });
+
+describe("nawigacja, przebieg i punkty na trasie", () => {
+    it("manewr jedzie do HTML-a razem z ulicą i dystansem", async () => {
+        const NavigationCard = (await import("./NavigationCard.svelte")).default;
+        const { body } = render(NavigationCard, {
+            props: {
+                nav: {
+                    instruction: "Skręć w lewo w Burgenlandstraße",
+                    street: "Burgenlandstraße",
+                    maneuver_type: 15,
+                    distance_m: 310,
+                    remaining_m: 17800,
+                    eta_seconds: 2760,
+                    off_route: false,
+                },
+                etaAt: null,
+            },
+        });
+        expect(body).toContain("Skręć w lewo w Burgenlandstraße");
+        expect(body).toContain("Burgenlandstraße");
+        expect(body).toContain("za 300 m");
+        expect(body).toContain("17,8 km");
+    });
+
+    it("poza trasą manewr znika, bo dotyczy skrzyżowania, którego nie widać", async () => {
+        const NavigationCard = (await import("./NavigationCard.svelte")).default;
+        const { body } = render(NavigationCard, {
+            props: {
+                nav: {
+                    instruction: "Skręć w lewo w Burgenlandstraße",
+                    street: "Burgenlandstraße",
+                    distance_m: 310,
+                    off_route: true,
+                    off_route_m: 320,
+                },
+            },
+        });
+        expect(body).toContain("Poza trasą");
+        expect(body).toContain("320 m");
+        expect(body).not.toContain("Burgenlandstraße");
+    });
+
+    it("przebieg pokazuje zdarzenia po polsku, od najnowszego", async () => {
+        const Timeline = (await import("./Timeline.svelte")).default;
+        const { body } = render(Timeline, {
+            props: {
+                events: [
+                    { seq: 3, kind: "back_on_route" as const, at: "2026-05-01T11:40:00Z" },
+                    {
+                        seq: 2,
+                        kind: "off_route" as const,
+                        at: "2026-05-01T11:36:00Z",
+                        distance_m: 18400,
+                    },
+                    { seq: 1, kind: "start" as const, at: "2026-05-01T11:00:00Z" },
+                ],
+            },
+        });
+        expect(body).toContain("Powrót na trasę");
+        expect(body).toContain("Poza trasą");
+        expect(body).toContain("18,4 km");
+        expect(body.indexOf("Powrót na trasę")).toBeLessThan(body.indexOf("Start"));
+    });
+
+    it("pusta oś czasu nie zostawia nagłówka bez treści", async () => {
+        const Timeline = (await import("./Timeline.svelte")).default;
+        const { body } = render(Timeline, { props: { events: [] } });
+        expect(body).not.toContain("Przebieg");
+    });
+
+    it("punkty na trasie niosą dystans i godzinę, a minięte tylko nazwę", async () => {
+        const Checkpoints = (await import("./Checkpoints.svelte")).default;
+        const { body } = render(Checkpoints, {
+            props: {
+                checkpoints: [
+                    {
+                        name: "Wannsee",
+                        distance_m: 12400,
+                        remainingMeters: 0,
+                        reached: true,
+                        etaAt: null,
+                    },
+                    {
+                        name: "Potsdam",
+                        distance_m: 31700,
+                        remainingMeters: 5900,
+                        reached: false,
+                        etaAt: new Date("2026-05-01T12:38:00Z"),
+                    },
+                ],
+            },
+        });
+        expect(body).toContain("Wannsee");
+        expect(body).toContain("minięty");
+        expect(body).toContain("Potsdam");
+        expect(body).toContain("5,90 km");
+    });
+
+    it("rozbicie czasów rozróżnia postój od pauzy ręcznej", async () => {
+        const RideTimesSection = (await import("./RideTimes.svelte")).default;
+        const { body } = render(RideTimesSection, {
+            props: {
+                times: {
+                    elapsedSeconds: 6201,
+                    movingSeconds: 5464,
+                    pausedSeconds: 737,
+                    autoPausedSeconds: 483,
+                    manualPausedSeconds: 254,
+                },
+            },
+        });
+        expect(body).toContain("1:43:21");
+        expect(body).toContain("1:31:04");
+        expect(body).toContain("8:03");
+        expect(body).toContain("4:14");
+        // Dwa różne rodzaje zatrzymania, dwie różne etykiety. „Stoi cztery
+        // minuty" to światła; „zapauzował dwadzieścia" to decyzja.
+        expect(body).toContain("auto-pauza");
+        expect(body).toContain("zatrzymana ręcznie");
+    });
+
+    it("nachylenie i tętno znikają razem ze swoją świeżością", () => {
+        const { body } = render(SensorMetrics, {
+            props: {
+                heartRate: undefined,
+                power: 242,
+                cadence: 89,
+                batteryPercent: undefined,
+                maxSpeedKmh: undefined,
+                gradientPercent: 8.2,
+            },
+        });
+        expect(body).toContain("242");
+        expect(body).toContain("8,2");
+        // Odpadły pas nie zostawia po sobie kreski udającej pomiar.
+        expect(body).not.toContain("Tętno");
+    });
+});

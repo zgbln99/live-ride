@@ -20,19 +20,25 @@
     import MeetupCard from "$lib/components/live/MeetupCard.svelte";
     import LiveMessages from "$lib/components/live/LiveMessages.svelte";
     import RideSummary from "$lib/components/live/RideSummary.svelte";
+    import Timeline from "$lib/components/live/Timeline.svelte";
+    import Checkpoints from "$lib/components/live/Checkpoints.svelte";
+    import NearProfile from "$lib/components/live/NearProfile.svelte";
 
     import {
         RIDER_COLOURS,
         cumulativeDistances,
+        freshValue,
         hasPosition,
         haversine,
         liveOnly,
         paceKmh,
+        placeCheckpoints,
         projectOnRoute,
         relativeGap,
         rideTimes,
         riderStatus,
         routeProgress,
+        type LiveEvent,
         type LngLat,
         type Projection,
         type Rider,
@@ -67,6 +73,8 @@
     const TRACK_REFRESH_MS = 9000;
     /** Prognoza godzinowa zmienia się rzadko; serwer i tak ją buforuje. */
     const WEATHER_REFRESH_MS = 600000;
+    /** Odpytywanie, gdy strumień działa — już tylko jako siatka bezpieczeństwa. */
+    const STREAM_FALLBACK_REFRESH_MS = 30000;
 
     type RiderView = Rider & {
         colour: string;
@@ -90,10 +98,13 @@
     let route = $state<RouteSnapshot | null>(null);
     let weather = $state<WeatherSnapshot | null>(null);
     let messages = $state<Message[]>([]);
+    let events = $state<LiveEvent[]>([]);
     let offline = $state(false);
     let selectedRiderId = $state<string | null>(null);
     let allClimbs = $state(false);
     let mapComponent = $state<LiveMap | null>(null);
+    /** Czy strumień zdarzeń jest podłączony. Polling działa niezależnie. */
+    let streaming = $state(false);
 
     /**
      * Przesunięcie zegara widza względem serwera, w milisekundach.
@@ -106,8 +117,31 @@
     let now = $state(Date.now());
 
     let routeCoordinates = $state<LngLat[]>([]);
-    let routeCumulative: number[] = [];
+    let routeCumulative = $state<number[]>([]);
     let routeLengthMeters = $state(0);
+
+    /**
+     * Nazwa i długość planu z pierwszej odpowiedzi HTML.
+     *
+     * Ustępuje pobranej trasie, gdy tylko ta dojedzie — ale do tego czasu
+     * nagłówek i sekcja trasy mają co pokazać zamiast pustej ramki.
+     */
+    const routeName = $derived(route?.name ?? data.routeMeta?.name ?? "");
+    const routeTotalMeters = $derived(
+        route?.distance_m || routeLengthMeters || data.routeMeta?.distance_m || 0,
+    );
+
+    /**
+     * Numer wersji planu, który mamy narysowany.
+     *
+     * Trasa potrafi się zmienić w trakcie jazdy — zawodnik przelicza ją po
+     * zjechaniu albo przestawia punkt. Pobieranie całej geometrii co kilka
+     * sekund „na wszelki wypadek" byłoby najdroższą rzeczą na tej stronie,
+     * więc porównujemy liczbę z migawki i pobieramy tylko wtedy, gdy urosła.
+     */
+    let routeRevision = -1;
+    /** Najwyższy numer zdarzenia, który już mamy na osi czasu. */
+    let eventSeq = -1;
 
     /** Przejechany ślad każdego zawodnika, dosypywany przyrostami. */
     const tracks = new Map<string, LngLat[]>();
@@ -181,11 +215,33 @@
     const liveSpeed = $derived(
         selected ? liveOnly(selected.speed_kmh, tone) : undefined,
     );
+    /**
+     * Odczyty czujników, każdy z własnym terminem ważności.
+     *
+     * Świeżość całej transmisji nie wystarcza: GPS potrafi nadawać co
+     * sekundę, gdy pas HR zsunął się z klatki cztery minuty wcześniej.
+     * Wtedy „♥ 143" jest nie tyle nieaktualne, co nieprawdziwe — a wygląda
+     * dokładnie tak samo jak pomiar sprzed sekundy.
+     */
     const liveHeartRate = $derived(
-        selected ? liveOnly(selected.heart_rate_bpm, tone) : undefined,
+        selected
+            ? freshValue(liveOnly(selected.heart_rate_bpm, tone), selected.hr_updated_at, serverNow)
+            : undefined,
     );
-    const livePower = $derived(selected ? liveOnly(selected.power_watts, tone) : undefined);
-    const liveCadence = $derived(selected ? liveOnly(selected.cadence_rpm, tone) : undefined);
+    const livePower = $derived(
+        selected
+            ? freshValue(liveOnly(selected.power_watts, tone), selected.power_updated_at, serverNow)
+            : undefined,
+    );
+    const liveCadence = $derived(
+        selected
+            ? freshValue(
+                  liveOnly(selected.cadence_rpm, tone),
+                  selected.cadence_updated_at,
+                  serverNow,
+              )
+            : undefined,
+    );
 
     const times = $derived(
         rideTimes(selected, snapshot?.started_at, snapshot?.ended_at, serverNow),
@@ -244,6 +300,19 @@
     const surfaces = $derived(surfaceShares(route?.surfaces));
 
     const pace = $derived(selected ? paceKmh(selected) : null);
+    const checkpoints = $derived(
+        placeCheckpoints(route?.checkpoints, alongMeters, pace, serverNow),
+    );
+
+    /**
+     * Czy strona ma przestawić priorytety na podjazd.
+     *
+     * Na podjeździe liczy się nachylenie, to, ile zostało, i tętno — mapa
+     * pokazuje wtedy głównie to, że ktoś jedzie wolno. Sekcje zmieniają
+     * kolejność, ale żadna nie znika: układ, który coś chowa, zmusza widza
+     * do zapamiętania, gdzie to było.
+     */
+    const climbFocus = $derived(climbNow !== null && !ended);
     const forecasts = $derived(forecastAlongRoute(weather, serverNow, pace));
     const alert = $derived(weatherAlert(forecasts));
     const sunset = $derived(
@@ -334,15 +403,39 @@
         clockSkewMs = server - Date.now();
     }
 
+    /**
+     * Przyjmuje migawkę niezależnie od tego, czy przyszła strumieniem, czy
+     * odpytaniem.
+     *
+     * Jedno miejsce dla obu dróg, bo inaczej strumień i polling z czasem
+     * zaczęłyby robić trochę co innego — a różnica ujawniłaby się dopiero
+     * u kogoś, komu pośrednik uciął SSE.
+     */
+    function applySnapshot(next: Snapshot) {
+        fetched = next;
+        applyServerTime(next.server_time);
+        now = Date.now();
+        offline = false;
+
+        // Geometria pobierana tylko wtedy, gdy naprawdę się zmieniła.
+        const revision = next.route_revision ?? 0;
+        if (revision !== routeRevision) {
+            routeRevision = revision;
+            void loadRoute();
+        }
+        // Oś czasu dociągana tylko wtedy, gdy przybyło zdarzeń.
+        const seq = next.event_seq ?? 0;
+        if (seq !== eventSeq) {
+            eventSeq = seq;
+            void loadEvents();
+        }
+    }
+
     async function refresh() {
         try {
             const response = await fetch(api(""), { cache: "no-store" });
             if (!response.ok) throw new Error(`HTTP ${response.status}`);
-            const next = (await response.json()) as Snapshot;
-            fetched = next;
-            applyServerTime(next.server_time);
-            now = Date.now();
-            offline = false;
+            applySnapshot((await response.json()) as Snapshot);
         } catch {
             // Utrata sieci u WIDZA nie zmienia stanu zawodnika. Zostawiamy
             // ostatnią znaną migawkę i mówimy wprost, że to my nie mamy
@@ -364,6 +457,17 @@
         } catch {
             // LIVE bez zaplanowanej trasy jest w pełni poprawny: znaczniki,
             // telemetria i mapa działają bez niej.
+        }
+    }
+
+    async function loadEvents() {
+        try {
+            const response = await fetch(api("/events"), { cache: "no-store" });
+            if (!response.ok) return;
+            const payload = (await response.json()) as { events?: LiveEvent[] };
+            events = payload.events ?? [];
+        } catch {
+            // Oś czasu jest opowieścią o jeździe, nie warunkiem jej oglądania.
         }
     }
 
@@ -418,6 +522,61 @@
         }
     }
 
+    /**
+     * Strumień zmian.
+     *
+     * Odpytywanie co trzy sekundy znaczy, że widz dowiaduje się o skręcie
+     * średnio półtorej sekundy po tym, jak zawodnik go zrobił. Dla dystansu
+     * bez znaczenia; dla manewru i dla „zjechał z trasy" to różnica między
+     * oglądaniem jazdy a oglądaniem jej nagrania.
+     *
+     * Polling zostaje włączony przez cały czas jako zapas — tyle że rzadszy.
+     * Pośrednik, który utnie długie połączenie, nie ma prawa zatrzymać
+     * strony; zwolni ją najwyżej do tempa sprzed tej zmiany.
+     */
+    function connectStream(): () => void {
+        if (typeof EventSource === "undefined") return () => {};
+        let source: EventSource | null = null;
+        let retry = 0;
+        let retryTimer = 0;
+        let closed = false;
+
+        const open = () => {
+            if (closed) return;
+            source = new EventSource(api("/stream"));
+            source.addEventListener("snapshot", (message) => {
+                retry = 0;
+                streaming = true;
+                try {
+                    applySnapshot(JSON.parse((message as MessageEvent).data) as Snapshot);
+                } catch {
+                    // Uszkodzona wiadomość nie ma prawa wywrócić strony —
+                    // najbliższe odpytanie i tak przyniesie pełny stan.
+                }
+            });
+            source.addEventListener("status", () => {
+                void refresh();
+            });
+            source.onerror = () => {
+                streaming = false;
+                source?.close();
+                source = null;
+                if (closed) return;
+                // Odstępy rosną, ale nigdy ponad minutę: zerwany strumień to
+                // zwykle pośrednik, a nie awaria, i warto próbować dalej.
+                retry = Math.min(retry + 1, 6);
+                retryTimer = window.setTimeout(open, Math.min(60000, 2 ** retry * 1000));
+            };
+        };
+        open();
+
+        return () => {
+            closed = true;
+            window.clearTimeout(retryTimer);
+            source?.close();
+        };
+    }
+
     function selectRider(id: string) {
         selectedRiderId = id;
         mapComponent?.recentre();
@@ -432,11 +591,11 @@
             return;
         }
 
-        void loadRoute();
         void refresh();
         void loadTrack();
         void loadWeather();
         void loadMessages();
+        const closeStream = connectStream();
 
         let snapshotTimer = 0;
         let trackTimer = 0;
@@ -451,7 +610,14 @@
             if (ended) return;
             // Karta w tle dostaje rzadsze odświeżanie: przeglądarka i tak
             // dławi timery, a bateria telefonu widza nie jest za darmo.
-            const period = document.hidden ? BACKGROUND_REFRESH_MS : REFRESH_MS;
+            // Przy działającym strumieniu odpytywanie jest tylko siatką
+            // bezpieczeństwa na zgubioną wiadomość, więc schodzi z trzech
+            // sekund na trzydzieści.
+            const period = document.hidden
+                ? BACKGROUND_REFRESH_MS
+                : streaming
+                  ? STREAM_FALLBACK_REFRESH_MS
+                  : REFRESH_MS;
             snapshotTimer = window.setInterval(() => void refresh(), period);
             trackTimer = window.setInterval(
                 () => void loadTrack(),
@@ -476,7 +642,12 @@
         // Osobny zegar, żeby „12 s temu" nie kłamało między migawkami.
         const tick = window.setInterval(() => (now = Date.now()), 1000);
 
+        // Zmiana stanu strumienia przestawia tempo odpytywania.
+        const streamWatch = window.setInterval(schedule, 15000);
+
         return () => {
+            closeStream();
+            window.clearInterval(streamWatch);
             window.clearInterval(snapshotTimer);
             window.clearInterval(trackTimer);
             window.clearInterval(messageTimer);
@@ -510,7 +681,7 @@
         title={snapshot?.title || "Live Ride"}
         statusLabel={headerStatus.label}
         statusTone={headerStatus.tone}
-        subtitle={route?.name && route.name !== snapshot?.title ? route.name : ""}
+        subtitle={routeName && routeName !== snapshot?.title ? routeName : ""}
     />
 
     {#if linkDead}
@@ -525,18 +696,22 @@
             </p>
         </div>
     {:else}
-        <LiveMap
-            bind:this={mapComponent}
-            riders={mapRiders}
-            selectedId={selected?.id ?? null}
-            {routeCoordinates}
-            {tracks}
-            {trackVersion}
-            meetup={snapshot?.meetup ?? null}
-            onselect={selectRider}
-        />
+        <div class="stage">
+            <LiveMap
+                bind:this={mapComponent}
+                riders={mapRiders}
+                selectedId={selected?.id ?? null}
+                {routeCoordinates}
+                {routeCumulative}
+                {alongMeters}
+                checkpoints={route?.checkpoints ?? []}
+                {tracks}
+                {trackVersion}
+                meetup={snapshot?.meetup ?? null}
+                onselect={selectRider}
+            />
 
-        <main class="body">
+            <main class="body">
             {#if offline}
                 <p class="notice">
                     Brak połączenia z serwerem. Pokazujemy ostatnie znane dane.
@@ -583,15 +758,30 @@
 
             {#if routeLengthMeters > 0 && !ended}
                 <RouteProgressSection
-                    routeName={route?.name ?? ""}
-                    totalMeters={route?.distance_m || routeLengthMeters}
+                    {routeName}
+                    totalMeters={routeTotalMeters}
                     progress={selected?.progress ?? null}
                     {offRouteMeters}
                 />
             {/if}
 
+            <!-- Na podjeździe kolejność się odwraca: najpierw podjazd
+                 i czujniki, dopiero potem profil i pogoda. Nic nie znika —
+                 układ, który coś chowa, zmusza widza do zapamiętania,
+                 gdzie to było. -->
             {#if climbNow && !ended}
                 <ClimbCard climb={climbNow} />
+            {/if}
+
+            {#if climbFocus && !ended}
+                <SensorMetrics
+                    heartRate={liveHeartRate}
+                    power={livePower}
+                    cadence={liveCadence}
+                    batteryPercent={selected?.battery_percent}
+                    maxSpeedKmh={selected?.max_speed_kmh}
+                    gradientPercent={liveGradient}
+                />
             {/if}
 
             {#if elevation}
@@ -602,6 +792,10 @@
                 />
             {/if}
 
+            {#if !ended}
+                <NearProfile profile={route?.elevation_profile ?? []} {alongMeters} />
+            {/if}
+
             {#if climbsAhead.length && !ended}
                 <UpcomingClimbs
                     climbs={climbsAhead}
@@ -610,11 +804,15 @@
                 />
             {/if}
 
+            {#if !ended}
+                <Checkpoints {checkpoints} />
+            {/if}
+
             {#if forecasts.length && !ended}
                 <RouteWeather {forecasts} {alert} {sunset} />
             {/if}
 
-            {#if !ended}
+            {#if !ended && !climbFocus}
                 <SensorMetrics
                     heartRate={liveHeartRate}
                     power={livePower}
@@ -623,13 +821,16 @@
                     maxSpeedKmh={selected?.max_speed_kmh}
                     gradientPercent={liveGradient}
                 />
+            {/if}
+
+            {#if !ended}
                 <RideTimesSection {times} />
             {/if}
 
             {#if routeLengthMeters > 0}
                 <RouteBriefing
-                    totalMeters={route?.distance_m || routeLengthMeters}
-                    ascentMeters={route?.ascent_m}
+                    totalMeters={routeTotalMeters}
+                    ascentMeters={route?.ascent_m ?? data.routeMeta?.ascent_m}
                     maxElevationMeters={elevation?.maxMeters ?? null}
                     climbs={climbTotals}
                     {surfaces}
@@ -656,10 +857,13 @@
                 <LiveMessages {messages} />
             {/if}
 
+            <Timeline {events} />
+
             <p class="foot">
                 Live Ride · śledzenie na żywo bez konta i bez aplikacji
             </p>
-        </main>
+            </main>
+        </div>
     {/if}
 </div>
 
@@ -732,43 +936,37 @@
     /* ----------------------------------------------------------- desktop */
     @media (min-width: 1040px) {
         .page {
-            /* Mapa po lewej na całą wysokość okna, dane przewijają się obok.
-               To wciąż ta sama aplikacja, tylko z miejscem na obie rzeczy
-               naraz — a nie pulpit z dwunastoma kafelkami. */
-            display: grid;
-            grid-template-columns: minmax(0, 1fr) 460px;
-            grid-template-rows: auto 1fr;
             height: 100vh;
             height: 100dvh;
             overflow: hidden;
         }
 
-        .page > :global(header) {
-            grid-column: 1 / -1;
+        /* Mapa po lewej na całą wysokość okna, dane przewijają się obok.
+           To wciąż ta sama aplikacja, tylko z miejscem na obie rzeczy naraz
+           — a nie pulpit z dwunastoma kafelkami. Kolejność sekcji zostaje
+           identyczna jak na telefonie: widz, który zna jedną, zna obie. */
+        .stage {
+            flex: 1;
+            min-height: 0;
+            display: grid;
+            grid-template-columns: minmax(0, 1fr) 460px;
         }
 
-        .page > :global(.wrap) {
-            grid-column: 1;
-            grid-row: 2;
+        .stage > :global(.wrap) {
             height: 100%;
             border-bottom: none;
             border-right: 1px solid var(--lr-line);
         }
 
-        .page > :global(.wrap) :global(.canvas) {
+        .stage > :global(.wrap) :global(.canvas) {
             height: 100%;
         }
 
         .body {
-            grid-column: 2;
-            grid-row: 2;
             overflow-y: auto;
             max-width: none;
             padding: 16px 18px 40px;
         }
-
-        .dead {
-            grid-column: 1 / -1;
-        }
     }
+
 </style>

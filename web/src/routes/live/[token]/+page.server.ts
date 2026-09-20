@@ -1,6 +1,6 @@
 import { error } from "@sveltejs/kit";
 import { env } from "$env/dynamic/private";
-import type { Snapshot } from "$lib/live/live_viewer";
+import type { RouteSnapshot, Snapshot } from "$lib/live/live_viewer";
 import type { PageServerLoad } from "./$types";
 
 /**
@@ -33,6 +33,14 @@ export const load: PageServerLoad = async ({ params, fetch, setHeaders, url }) =
         snapshot = null;
     }
 
+    // Metadane planu w PIERWSZEJ odpowiedzi.
+    //
+    // Bez nich znajomy, który otworzył link w ruchu, widzi „Live Ride" i pustą
+    // ramkę, a nazwa trasy i jej długość dojeżdżają dopiero po rundzie do API.
+    // Geometrii tu nie ma z premedytacją: polilinia stukilometrowej trasy waży
+    // więcej niż cała reszta strony, a mapa i tak hydratuje się później.
+    const routeMeta = await loadRouteMeta(fetch, token, snapshot);
+
     const indexable = snapshot?.visibility === "public" && snapshot?.status === "active";
     setHeaders({
         // Migawka jest nieświeża sekundę później.
@@ -48,10 +56,42 @@ export const load: PageServerLoad = async ({ params, fetch, setHeaders, url }) =
     return {
         token,
         snapshot,
+        routeMeta,
         indexable,
         meta: buildMeta({ snapshot, riderName, riders, origin, token }),
     };
 };
+
+/** Nazwa, długość i przewyższenie planu — bez geometrii. */
+type RouteMeta = Pick<
+    RouteSnapshot,
+    "name" | "distance_m" | "ascent_m" | "descent_m" | "revision"
+> | null;
+
+async function loadRouteMeta(
+    fetch: typeof globalThis.fetch,
+    token: string,
+    snapshot: Snapshot | null,
+): Promise<RouteMeta> {
+    if (!snapshot?.has_route) return null;
+    try {
+        const response = await fetch(`/api/v1/live/${encodeURIComponent(token)}/route`);
+        if (!response.ok) return null;
+        const route = (await response.json()) as RouteSnapshot;
+        if (!route?.polyline) return null;
+        return {
+            name: route.name,
+            distance_m: route.distance_m,
+            ascent_m: route.ascent_m,
+            descent_m: route.descent_m,
+            revision: route.revision,
+        };
+    } catch {
+        // Jazda bez planu jest w pełni poprawna i tak samo wygląda jazda,
+        // której planu chwilowo nie udało się odczytać.
+        return null;
+    }
+}
 
 /**
  * „Marek" → „Marka".

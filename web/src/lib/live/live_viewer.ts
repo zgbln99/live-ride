@@ -65,6 +65,31 @@ export type Rider = {
     gradient_percent?: number;
     nav?: RiderNav;
     climb?: RiderClimb;
+    /** Prędkość z czujnika koła, gdy jest — inny pomiar niż GPS-owy. */
+    sensor_speed_kmh?: number;
+    sensor_distance_m?: number;
+    avg_heart_rate_bpm?: number;
+    max_heart_rate_bpm?: number;
+    avg_power_watts?: number;
+    max_power_watts?: number;
+    avg_cadence_rpm?: number;
+    hr_source?: string;
+    power_source?: string;
+    cadence_source?: string;
+    speed_source?: string;
+    /** Kiedy dana wielkość ostatnio przyszła. Osobno, bo osobno się psują. */
+    gps_updated_at?: string;
+    hr_updated_at?: string;
+    power_updated_at?: string;
+    cadence_updated_at?: string;
+    batteries?: Batteries;
+    /** Serwer celowo nie podał pozycji — ukryta okolica startu albo mety. */
+    location_hidden?: boolean;
+    /** Pozycja zaokrąglona na życzenie zawodnika. */
+    location_coarse?: boolean;
+    /** Pozycja jest opóźniona; `position_at` mówi, z której chwili pochodzi. */
+    location_delayed?: boolean;
+    position_at?: string;
 };
 
 /**
@@ -102,6 +127,49 @@ export type RiderClimb = {
     category?: string;
 };
 
+/** Baterie telefonu i czujników, każda osobno. */
+export type Batteries = {
+    phone?: number;
+    heart_rate?: number;
+    power?: number;
+    cadence?: number;
+    speed?: number;
+};
+
+/** Jedno zdarzenie z osi czasu przejazdu. */
+export type LiveEventKind =
+    | "start"
+    | "stop"
+    | "resume"
+    | "pause"
+    | "auto_pause"
+    | "climb_start"
+    | "climb_end"
+    | "off_route"
+    | "back_on_route"
+    | "reroute"
+    | "checkpoint"
+    | "finish"
+    | "sos";
+
+export type LiveEvent = {
+    seq: number;
+    kind: LiveEventKind;
+    at: string;
+    label?: string;
+    distance_m?: number;
+    participant?: string;
+};
+
+/** Punkt pośredni trasy, nazwany przez zawodnika. */
+export type Checkpoint = {
+    name: string;
+    distance_m?: number;
+    lat?: number;
+    lon?: number;
+    kind?: string;
+};
+
 export type Meetup = { latitude: number; longitude: number; label: string };
 
 export type SummaryRider = {
@@ -137,6 +205,10 @@ export type Snapshot = {
     ended_at?: string;
     expires_at?: string;
     server_time: string;
+    /** Rośnie przy każdej zmianie geometrii planu. */
+    route_revision?: number;
+    /** Najwyższy numer zdarzenia — strona dociąga oś czasu, gdy urośnie. */
+    event_seq?: number;
     riders: Rider[];
     meetup?: Meetup;
     summary?: Summary;
@@ -166,6 +238,8 @@ export type RouteSnapshot = {
     elevation_profile?: { d: number; e: number }[];
     climbs?: Climb[];
     surfaces?: Surface[];
+    checkpoints?: Checkpoint[];
+    revision?: number;
 };
 
 export type TrackSlice = {
@@ -593,4 +667,110 @@ export function maneuverDistance(meters: number | undefined): string {
     if (meters < 100) return `za ${Math.round(meters / 10) * 10} m`;
     if (meters < 1000) return `za ${Math.round(meters / 50) * 50} m`;
     return `za ${distance(meters)}`;
+}
+
+/**
+ * Po ilu sekundach odczyt czujnika przestaje być bieżący.
+ *
+ * Inny próg niż dla całego zawodnika: pas HR nadaje co sekundę, więc
+ * dwudziestosekundowa cisza znaczy, że odpadł, a nie że jest wolno. GPS ma
+ * szerszy margines w tunelu i pod drzewami, ale tam i tak rozstrzyga
+ * `OFFLINE_AFTER_SECONDS` dla całej transmisji.
+ */
+export const SENSOR_STALE_AFTER_SECONDS = 25;
+
+/** Wiek odczytu w sekundach albo null, gdy serwer nie podał znacznika. */
+export function sensorAge(updatedAt: string | undefined, serverNow: number): number | null {
+    if (!updatedAt) return null;
+    const moment = new Date(updatedAt).getTime();
+    if (Number.isNaN(moment)) return null;
+    return Math.max(0, (serverNow - moment) / 1000);
+}
+
+/**
+ * Odczyt czujnika, o ile wciąż jest odczytem.
+ *
+ * Bez tego „♥ 143" wisiało na stronie długo po tym, jak pas zsunął się
+ * z klatki — a obserwujący nie ma jak odróżnić tętna sprzed sekundy od tętna
+ * sprzed czterech minut, skoro obie liczby wyglądają tak samo.
+ */
+export function freshValue<T>(
+    value: T | undefined,
+    updatedAt: string | undefined,
+    serverNow: number,
+): T | undefined {
+    if (value === undefined) return undefined;
+    const age = sensorAge(updatedAt, serverNow);
+    // Brak znacznika znaczy „telefon starej wersji": wtedy rozstrzyga
+    // świeżość całej transmisji, tak jak dotąd.
+    if (age === null) return value;
+    return age > SENSOR_STALE_AFTER_SECONDS ? undefined : value;
+}
+
+/** Polska nazwa zdarzenia z osi czasu. */
+export function eventLabel(event: LiveEvent): string {
+    switch (event.kind) {
+        case "start":
+            return "Start";
+        case "stop":
+        case "auto_pause":
+            return "Postój";
+        case "pause":
+            return "Pauza";
+        case "resume":
+            return "Wznowiono";
+        case "climb_start":
+            return event.label ? `Podjazd ${event.label}` : "Początek podjazdu";
+        case "climb_end":
+            return "Szczyt podjazdu";
+        case "off_route":
+            return "Poza trasą";
+        case "back_on_route":
+            return "Powrót na trasę";
+        case "reroute":
+            return "Nowa trasa";
+        case "checkpoint":
+            return event.label || "Punkt pośredni";
+        case "finish":
+            return "Meta";
+        case "sos":
+            return "Alert bezpieczeństwa";
+        default:
+            return "";
+    }
+}
+
+/**
+ * Checkpointy z dystansem, ETA i informacją, czy już minięte.
+ *
+ * ETA liczymy tym samym tempem co dla mety — jednym, a nie osobnym dla
+ * każdego punktu: dwa różne oszacowania na jednej stronie zawsze wyglądają
+ * jak błąd, nawet gdy oba są poprawne.
+ */
+export type PlacedCheckpoint = Checkpoint & {
+    remainingMeters: number;
+    reached: boolean;
+    etaAt: Date | null;
+};
+
+export function placeCheckpoints(
+    checkpoints: Checkpoint[] | undefined,
+    alongMeters: number | null,
+    paceKmhValue: number | null,
+    now: number,
+): PlacedCheckpoint[] {
+    if (!checkpoints?.length) return [];
+    const along = alongMeters ?? 0;
+    return checkpoints
+        .filter((checkpoint) => Number.isFinite(checkpoint.distance_m))
+        .sort((a, b) => (a.distance_m ?? 0) - (b.distance_m ?? 0))
+        .map((checkpoint) => {
+            const remainingMeters = Math.max(0, (checkpoint.distance_m ?? 0) - along);
+            const reached = alongMeters !== null && (checkpoint.distance_m ?? 0) <= along;
+            const etaAt =
+                reached || paceKmhValue === null || paceKmhValue <= 0
+                    ? null
+                    : new Date(now + (remainingMeters / 1000 / paceKmhValue) * 3600 * 1000);
+            return { ...checkpoint, remainingMeters, reached, etaAt };
+        });
 }

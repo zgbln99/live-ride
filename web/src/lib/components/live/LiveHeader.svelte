@@ -1,6 +1,14 @@
 <script lang="ts">
     import StatusBadge from "./StatusBadge.svelte";
     import type { StatusTone } from "$lib/live/live_viewer";
+    import { onMount } from "svelte";
+    import {
+        applyTheme,
+        nextTheme,
+        readTheme,
+        themeLabel,
+        type ThemeChoice,
+    } from "$lib/live/theme";
 
     /**
      * Pasek u góry, wzorowany na AppBarze aplikacji: marka, stan, tytuł.
@@ -19,12 +27,29 @@
         statusTone: StatusTone;
         subtitle?: string;
     } = $props();
+
+    let theme = $state<ThemeChoice>("system");
+    onMount(() => (theme = readTheme()));
+
+    function cycleTheme() {
+        theme = nextTheme(theme);
+        applyTheme(theme);
+    }
 </script>
 
 <header class="head">
     <div class="top">
         <span class="wordmark">LIVE<span>RIDE</span></span>
-        <StatusBadge label={statusLabel} tone={statusTone} />
+        <div class="right">
+            <StatusBadge label={statusLabel} tone={statusTone} />
+            <button
+                type="button"
+                class="theme"
+                onclick={cycleTheme}
+                title="Motyw: system, noc, dzień"
+                aria-label="Zmień motyw">{themeLabel(theme)}</button
+            >
+        </div>
     </div>
     <h1>{title}</h1>
     {#if subtitle}<p class="sub">{subtitle}</p>{/if}
@@ -45,6 +70,26 @@
         align-items: center;
         justify-content: space-between;
         gap: 12px;
+    }
+
+    .right {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+    }
+
+    .theme {
+        appearance: none;
+        background: none;
+        border: 1px solid var(--lr-line-strong);
+        border-radius: var(--lr-radius);
+        color: var(--lr-muted);
+        font: inherit;
+        font-size: 10px;
+        font-weight: 900;
+        letter-spacing: 1px;
+        padding: 3px 6px;
+        cursor: pointer;
     }
 
     .wordmark {

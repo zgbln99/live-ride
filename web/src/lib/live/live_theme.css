@@ -7,6 +7,10 @@
  *
  * Reguły, które z tego wynikają i których nie wolno tu złamać:
  *   – jasno; ciemny jest tylko nagłówek i mapa nocą,
+ *   – tryb ciemny jest przyciemnieniem tej samej strony, a nie drugim
+ *     motywem: te same kreski, ten sam cyjan, te same promienie. Neon na
+ *     czarnym tle wygląda jak inna aplikacja i przy jeździe nocą męczy
+ *     bardziej niż zwykła szarość,
  *   – włosowe kreski zamiast cieni,
  *   – promień 6 px, nigdy 24,
  *   – cyjan wyłącznie jako akcent, nigdy jako tło powierzchni,
@@ -288,4 +292,51 @@
     height: 100%;
     background: var(--lr-accent-deep);
     border-radius: 3px;
+}
+
+
+/* ------------------------------------------------------------- tryb ciemny
+ *
+ * Domyślnie idziemy za systemem. Wybór widza (przycisk w nagłówku) ustawia
+ * `data-lr-theme` na elemencie <html> i wtedy wygrywa nad systemem —
+ * dlatego reguła systemowa jest zawężona do „nie wybrano jasnego".
+ *
+ * To jest przyciemnienie, nie drugi motyw: akcent, promienie, grubości kresek
+ * i typografia zostają bez zmian. Zmieniają się wyłącznie powierzchnie
+ * i kontrast, bo tylko o to chodzi komuś, kto ogląda jazdę po zmroku.
+ */
+
+:root:not([data-lr-theme="light"]) .lr {
+    color-scheme: dark;
+}
+
+@media (prefers-color-scheme: dark) {
+    :root:not([data-lr-theme="light"]) .lr {
+        --lr-ink: #e8eef3;
+        --lr-ink-soft: #a5b4bf;
+        --lr-muted: #7b8a95;
+        --lr-line: #1d2c38;
+        --lr-line-strong: #2b3e4d;
+        --lr-surface: #0e1a24;
+        --lr-canvas: #07101a;
+        --lr-panel: #0b1620;
+        --lr-accent-deep: #2ad2e8;
+    }
+}
+
+:root[data-lr-theme="dark"] .lr {
+    color-scheme: dark;
+    --lr-ink: #e8eef3;
+    --lr-ink-soft: #a5b4bf;
+    --lr-muted: #7b8a95;
+    --lr-line: #1d2c38;
+    --lr-line-strong: #2b3e4d;
+    --lr-surface: #0e1a24;
+    --lr-canvas: #07101a;
+    --lr-panel: #0b1620;
+    --lr-accent-deep: #2ad2e8;
+}
+
+:root[data-lr-theme="light"] .lr {
+    color-scheme: light;
 }
