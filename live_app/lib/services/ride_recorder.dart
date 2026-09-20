@@ -454,6 +454,23 @@ class RideRecorder extends ChangeNotifier {
     notifyListeners();
   }
 
+  /// Prędkość zgłoszona przez odbiornik albo null, gdy jej nie zna.
+  ///
+  /// CoreLocation sygnalizuje nieznaną prędkość wartością UJEMNĄ (zwykle −1),
+  /// a nie zerem ani NaN-em. Przepuszczona dalej wyglądała jak pomiar i
+  /// spychała wykrywanie postoju na tor „nie mam prędkości, mierzę samo
+  /// przemieszczenie", gdzie potwierdzenie trwa dwadzieścia pięć sekund
+  /// zamiast trzech. `speedAccuracy` poniżej zera znaczy to samo.
+  ///
+  /// Null mówi prawdę: odbiornik nie wie. Zero byłoby twierdzeniem, że stoi.
+  static double? _reportedSpeed(Position position) {
+    final speed = position.speed;
+    if (!speed.isFinite || speed < 0) return null;
+    final accuracy = position.speedAccuracy;
+    if (accuracy.isFinite && accuracy < 0) return null;
+    return speed;
+  }
+
   void _onPosition(Position position) {
     _lastFix = position;
     final sample = RideSample(
@@ -461,7 +478,7 @@ class RideRecorder extends ChangeNotifier {
       lon: position.longitude,
       timestamp: position.timestamp,
       altitude: position.altitude.isFinite ? position.altitude : null,
-      speedMps: position.speed.isFinite ? position.speed : null,
+      speedMps: _reportedSpeed(position),
       accuracyMeters: position.accuracy.isFinite ? position.accuracy : null,
       headingDegrees: position.heading.isFinite && position.heading >= 0
           ? position.heading

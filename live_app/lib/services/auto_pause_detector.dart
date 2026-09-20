@@ -266,6 +266,11 @@ class AutoPauseDetector {
   }
 
   /// Czy ta próbka jest dowodem ruchu przy zadanym progu prędkości.
+  ///
+  /// [anchored] mówi, czy trwa już okno postoju. Ma znaczenie, bo pojedynczy
+  /// przeskok pozycji znaczy co innego w każdym z tych dwóch przypadków:
+  /// w trakcie jazdy to prawdopodobnie ruch, a na postoju to prawie na pewno
+  /// szum odbiornika stojącego pod drzewami.
   bool _isMoving(
     AutoPauseSample sample,
     AutoPauseSample? previous, {
@@ -285,14 +290,28 @@ class AutoPauseDetector {
     if (gps != null && gps.isFinite && gps >= 0) {
       _evidence = AutoPauseEvidence.gpsSpeed;
       if (gps >= threshold) return true;
-      // Odbiornik mówi „stoję", ale pozycja ucieka szybciej niż szum — wtedy
-      // wierzymy pozycji. Tak wygląda telefon, który zgubił doppler.
-      return _displacementSaysMoving(sample, previous);
+
+      // Odbiornik mówi „stoję". Zanim mu nie uwierzymy, pozycja musi uciekać
+      // KONSEKWENTNIE, a nie raz podskoczyć: telefon leżący pod drzewami
+      // potrafi skoczyć o kilkanaście metrów i wrócić, nadal raportując
+      // zero. Wcześniej taki jeden skok kasował całe okno postoju i pauza
+      // nigdy nie dojrzewała — dokładnie tak wygląda postój w mieście.
+      return _sustainedDisplacement(sample);
     }
 
     // 3. Bez prędkości zostaje samo przemieszczenie.
     _evidence = AutoPauseEvidence.displacement;
     return _displacementSaysMoving(sample, previous);
+  }
+
+  /// Czy pozycja ucieka w sposób, którego nie da się wytłumaczyć szumem.
+  ///
+  /// Mierzone wyłącznie od kotwicy i wyłącznie jako NARASTANIE odległości.
+  /// Gdy kotwicy jeszcze nie ma, odpowiedź brzmi „nie": pierwsza próbka
+  /// kandydująca na postój ma go rozpocząć, a nie rozstrzygnąć.
+  bool _sustainedDisplacement(AutoPauseSample sample) {
+    if (_anchor == null) return false;
+    return _displacementSaysMoving(sample, null);
   }
 
   double? _freshSensorSpeed(AutoPauseSample sample) {

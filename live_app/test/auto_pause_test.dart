@@ -403,4 +403,124 @@ void main() {
       expect(detector.evidence, AutoPauseEvidence.displacement);
     });
   });
+
+  // ------------------------------------------------------------------------
+  // Scenariusze z fizycznego iPhone'a.
+  //
+  // Zgłoszenie brzmiało: „uruchomiłem przejazd, ani razu się nie ruszyłem,
+  // minęło 1:30, auto-pauza nigdy się nie włączyła". Przyczyny były trzy
+  // i każda z nich ma tu swój test.
+  // ------------------------------------------------------------------------
+
+  group('iPhone — postój od pierwszej sekundy', () {
+    test('A: zero prędkości i ta sama pozycja zatrzymują licznik', () {
+      // Tak wygląda telefon położony na kierownicy roweru opartego o ścianę:
+      // odbiornik ma dobry fiks, raportuje zero i pozycję z dokładnością
+      // do szumu.
+      final ride = _Ride();
+      for (var i = 0; i < 6; i++) {
+        ride.second(0, advanceMeters: 0);
+      }
+
+      expect(ride.pausedAtLeastOnce, isTrue, reason: 'licznik miał stanąć');
+      // Trzy sekundy potwierdzania i nie więcej niż pięć — tyle trwa
+      // zatrzymanie, którego rowerzysta jeszcze nie uzna za zawieszenie.
+      final at = ride.actions.indexOf(AutoPauseAction.pause) + 1;
+      expect(at, greaterThanOrEqualTo(3));
+      expect(at, lessThanOrEqualTo(5));
+    });
+
+    test('A: postój bez ruszenia z miejsca nie odwiesza się sam', () {
+      final ride = _Ride();
+      for (var i = 0; i < 90; i++) {
+        ride.second(0, advanceMeters: 0);
+      }
+      expect(ride.paused, isTrue);
+      expect(ride.resumedAtLeastOnce, isFalse);
+    });
+
+    test('A: odbiornik bez dopplera nadal pauzuje, tylko wolniej', () {
+      // CoreLocation zgłasza nieznaną prędkość wartością ujemną. Rejestrator
+      // zamienia ją na null; tu sprawdzamy, że null to nie jest to samo co
+      // zero i że sam brak przemieszczenia potrzebuje dłuższego okna.
+      final ride = _Ride();
+      for (var i = 0; i < 10; i++) {
+        ride.second(null, advanceMeters: 0);
+      }
+      expect(ride.pausedAtLeastOnce, isFalse, reason: 'za wcześnie');
+
+      for (var i = 0; i < 20; i++) {
+        ride.second(null, advanceMeters: 0);
+      }
+      expect(ride.pausedAtLeastOnce, isTrue);
+    });
+
+    test('B: pełzanie 1,5–2 km/h nigdy nie jest postojem', () {
+      final ride = _Ride();
+      for (var i = 0; i < 120; i++) {
+        // Na przemian 1,5 i 2,0 km/h — tak wygląda podjazd na granicy
+        // utrzymania równowagi.
+        ride.second(i.isEven ? 1.5 : 2.0);
+      }
+      expect(ride.pausedAtLeastOnce, isFalse);
+      expect(ride.paused, isFalse);
+    });
+
+    test('D: dryf 5–15 m przy zerowej prędkości nie miga licznikiem', () {
+      final ride = _Ride();
+      // Pozycja skacze w obie strony wokół jednego miejsca, a odbiornik
+      // konsekwentnie mówi zero. Tak wygląda postój między blokami.
+      const drift = [0.0, 6.0, -4.0, 15.0, 2.0, -11.0, 8.0, 0.0, -6.0, 13.0];
+      for (var i = 0; i < 40; i++) {
+        ride.second(
+          0,
+          absolutePosition: drift[i % drift.length],
+          accuracy: 12,
+        );
+      }
+
+      expect(ride.pausedAtLeastOnce, isTrue, reason: 'dryf nie blokuje pauzy');
+      expect(
+        ride.resumedAtLeastOnce,
+        isFalse,
+        reason: 'i nie wznawia jej z powrotem',
+      );
+      // Jedno przejście, nie seria — mruganie liczyłoby się tu jako wiele.
+      expect(
+        ride.actions.where((a) => a == AutoPauseAction.pause).length,
+        1,
+      );
+    });
+
+    test('D: po pauzie dryf w miejscu nadal nie wznawia', () {
+      final ride = _Ride();
+      for (var i = 0; i < 6; i++) {
+        ride.second(0, advanceMeters: 0);
+      }
+      expect(ride.paused, isTrue);
+
+      for (var i = 0; i < 60; i++) {
+        ride.second(
+          0,
+          absolutePosition: (i % 5) * 3.0 - 6.0,
+          accuracy: 10,
+        );
+      }
+      expect(ride.resumedAtLeastOnce, isFalse);
+    });
+
+    test('ruszenie po postoju zdejmuje pauzę samo', () {
+      final ride = _Ride();
+      for (var i = 0; i < 6; i++) {
+        ride.second(0, advanceMeters: 0);
+      }
+      expect(ride.paused, isTrue);
+
+      // Rowerzysta odjeżdża: prędkość rośnie i pozycja ucieka razem z nią.
+      for (var i = 0; i < 6 && ride.paused; i++) {
+        ride.second(4.0 + i * 2);
+      }
+      expect(ride.paused, isFalse);
+    });
+  });
 }

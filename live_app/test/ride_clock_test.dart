@@ -128,6 +128,25 @@ void main() {
     });
   });
 
+  group('C — ruch po ręcznej pauzie', () {
+    test('sto sekund ruchu nie zdejmuje pauzy wciśniętej palcem', () {
+      // Scenariusz z fizycznego telefonu: wciskam pauzę, wkładam telefon do
+      // kieszeni i idę. Detektor postoju widzi ruch przy każdej próbce i
+      // przy każdej dostaje odmowę.
+      clock.start();
+      advance(const Duration(minutes: 5));
+      clock.pause(automatic: false);
+
+      for (var i = 0; i < 100; i++) {
+        advance(const Duration(seconds: 1));
+        expect(clock.resume(automatic: true), isFalse);
+      }
+
+      expect(clock.isManuallyPaused, isTrue);
+      expect(clock.recording, const Duration(minutes: 5));
+    });
+  });
+
   group('sytuacje brzegowe', () {
     test('druga pauza z rzędu niczego nie nadpisuje', () {
       clock.start();

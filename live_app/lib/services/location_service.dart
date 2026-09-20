@@ -20,6 +20,16 @@ class LocationUnavailable implements Exception {
 
 /// Location permissions and the platform-tuned position stream.
 class LocationService {
+  /// Filtr odległości dla strumienia jazdy. Zero = „mów za każdym razem".
+  ///
+  /// Wystawiony jako stała, żeby test mógł sprawdzić, że nikt go po cichu
+  /// nie podniesie: każda wartość powyżej zera wyłącza wykrywanie postoju
+  /// i nie widać tego w żadnym istniejącym teście.
+  static const int rideDistanceFilterMeters = 0;
+
+  /// Docelowy odstęp między próbkami na Androidzie.
+  static const Duration rideInterval = Duration(seconds: 1);
+
   /// Requests whatever is missing and throws [LocationUnavailable] with an
   /// actionable message if the rider cannot be located.
   Future<void> ensurePermission() async {
@@ -82,19 +92,35 @@ class LocationService {
     }
   }
 
-  /// A navigation-grade position stream.
+  /// Strumień pozycji dla trwającego przejazdu.
   ///
-  /// [background] asks the platform to keep delivering updates with the screen
-  /// locked. The rider still has to grant "Always"/background location for
-  /// that to hold; if they do not, recording simply pauses with the screen off,
-  /// which is why nothing in the app assumes it.
+  /// [background] prosi system o dalsze aktualizacje przy zgaszonym ekranie.
+  /// Zawodnik musi jeszcze przyznać lokalizację „zawsze"; bez tego nagrywanie
+  /// po prostu zatrzymuje się z ekranem w kieszeni, i dlatego nic w aplikacji
+  /// tego nie zakłada.
+  ///
+  /// `distanceFilter` jest ZEROWY i to nie jest przeoczenie. Filtr odległości
+  /// znaczy „odezwij się, gdy przesuniesz się o tyle metrów", więc telefon
+  /// leżący nieruchomo na światłach nie odzywa się w ogóle. Przy filtrze
+  /// trzech metrów wykrywanie postoju nie dostawało ANI JEDNEJ próbki
+  /// potwierdzającej, że rower stoi — a że brak danych nigdy nie zatrzymuje
+  /// licznika (bo tak samo wygląda utrata zasięgu przy 25 km/h), auto-pauza
+  /// nie włączała się nawet po półtorej godziny stania w miejscu.
+  ///
+  /// Zero kosztuje trochę baterii, bo odbiornik raportuje mniej więcej co
+  /// sekundę także na postoju. To jest dokładnie ta cena, za którą kupujemy
+  /// działające wykrywanie postoju — i płacimy ją wyłącznie w trakcie jazdy,
+  /// bo poza nią nikt tego strumienia nie otwiera.
   Stream<Position> positionStream({bool background = true}) {
     if (Platform.isIOS || Platform.isMacOS) {
       return Geolocator.getPositionStream(
         locationSettings: AppleSettings(
           accuracy: LocationAccuracy.bestForNavigation,
           activityType: ActivityType.fitness,
-          distanceFilter: 3,
+          distanceFilter: rideDistanceFilterMeters,
+          // System potrafi sam wstrzymać aktualizacje, gdy uzna, że
+          // użytkownik się nie rusza — i właśnie wtedy potrzebujemy ich
+          // najbardziej, żeby stwierdzić postój.
           pauseLocationUpdatesAutomatically: false,
           showBackgroundLocationIndicator: background,
           allowBackgroundLocationUpdates: background,
@@ -105,8 +131,11 @@ class LocationService {
       return Geolocator.getPositionStream(
         locationSettings: AndroidSettings(
           accuracy: LocationAccuracy.bestForNavigation,
-          distanceFilter: 3,
-          intervalDuration: const Duration(seconds: 1),
+          distanceFilter: rideDistanceFilterMeters,
+          intervalDuration: rideInterval,
+          // Bez tego Android potrafi rozciągnąć odstępy przy oszczędzaniu
+          // energii i postój znów przestałby być widoczny.
+          forceLocationManager: false,
           foregroundNotificationConfig: background
               ? const ForegroundNotificationConfig(
                   notificationTitle: 'Live Ride',
@@ -125,7 +154,7 @@ class LocationService {
     return Geolocator.getPositionStream(
       locationSettings: const LocationSettings(
         accuracy: LocationAccuracy.bestForNavigation,
-        distanceFilter: 3,
+        distanceFilter: rideDistanceFilterMeters,
       ),
     );
   }
