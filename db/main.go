@@ -216,6 +216,7 @@ func registerRoutes(se *core.ServeEvent, client meilisearch.ServiceManager) {
 	se.Router.GET("/live/{token}/route", routes.LiveRidePublicRoute)
 	// Ślad przejazdu: raz w całości, potem tylko przyrosty po ?since=.
 	se.Router.GET("/live/{token}/track", routes.LiveRidePublicTrack)
+	se.Router.GET("/live/{token}/weather", routes.LiveRideWeather)
 
 	// Synchronizacja: telefon jest źródłem prawdy, serwer trzyma kopię.
 	se.Router.POST("/live-rides/sync/rides", routes.LiveRideSyncRides).Bind(apis.RequireAuth())

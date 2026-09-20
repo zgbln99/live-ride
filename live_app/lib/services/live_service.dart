@@ -298,13 +298,24 @@ class LiveSessionController extends ChangeNotifier {
     int movingSeconds = 0,
     double maxSpeedKmh = 0,
     int batteryPercent = 0,
+    int autoPausedSeconds = 0,
+    int manualPausedSeconds = 0,
+
+    /// Pomija odczekanie między próbkami.
+    ///
+    /// Używa tego wyłącznie pierwsza telemetria po udostępnieniu linku:
+    /// znajomy, który otworzył go sekundę później, ma zobaczyć zawodnika
+    /// od razu, a nie po upływie zwykłego okresu nadawania.
+    bool force = false,
   }) async {
     final active = _session;
     if (active == null) return true;
 
     final now = DateTime.now();
     final last = _lastSentAt;
-    if (last != null && now.difference(last) < telemetryInterval) return true;
+    if (!force && last != null && now.difference(last) < telemetryInterval) {
+      return true;
+    }
     _lastSentAt = now;
 
     try {
@@ -346,6 +357,8 @@ class LiveSessionController extends ChangeNotifier {
         // pozwolił — serwer i tak filtruje, ale nieudostępnione pole nie ma
         // powodu opuszczać urządzenia.
         'battery_percent': _privacy.shareBattery ? batteryPercent : 0,
+        'auto_paused_seconds': autoPausedSeconds,
+        'manual_paused_seconds': manualPausedSeconds,
       });
       _lastAcceptedAt = now;
       _lastPushFailed = false;

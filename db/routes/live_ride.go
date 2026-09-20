@@ -34,6 +34,13 @@ type liveRideTelemetryPoint struct {
 	MovingSeconds  int     `json:"moving_seconds"`
 	MaxSpeedKmh    float64 `json:"max_speed_kmh"`
 	BatteryPercent int     `json:"battery_percent"`
+
+	// Postoje rozbite tak, jak rozbija je licznik: automatyczne (rower stał)
+	// i ręczne (rowerzysta zatrzymał pomiar). Bez tego strona umiałaby podać
+	// tylko różnicę „całkowity minus w ruchu", a w niej siedzą także sekundy
+	// krótsze od progu auto-pauzy.
+	AutoPausedSeconds   int `json:"auto_paused_seconds"`
+	ManualPausedSeconds int `json:"manual_paused_seconds"`
 }
 
 // normalizeLiveRideState przyjmuje tylko nazwy, które strona umie pokazać.
@@ -285,6 +292,14 @@ func LiveRideTelemetry(e *core.RequestEvent) error {
 		if newest.MovingSeconds > 0 {
 			participant.Set("moving_seconds", newest.MovingSeconds)
 		}
+		// Sumy postojów tylko rosną. Telefon po restarcie aplikacji przysyła
+		// je od zera i nie ma prawa skasować tego, co już przejechane.
+		if newest.AutoPausedSeconds > participant.GetInt("auto_paused_seconds") {
+			participant.Set("auto_paused_seconds", newest.AutoPausedSeconds)
+		}
+		if newest.ManualPausedSeconds > participant.GetInt("manual_paused_seconds") {
+			participant.Set("manual_paused_seconds", newest.ManualPausedSeconds)
+		}
 		// Rekord prędkości nigdy nie maleje w trakcie jazdy — telefon, który
 		// po restarcie przysłał niższą wartość, nie może skasować maksimum.
 		if newest.MaxSpeedKmh > participant.GetFloat("max_speed_kmh") {
@@ -421,6 +436,9 @@ func ensureLiveRideParticipant(e *core.RequestEvent, session *core.Record, displ
 	participant.Set("session", session.Id)
 	participant.Set("user", e.Auth.Id)
 	participant.Set("display_name", displayName)
+	// Chwila dołączenia, nie chwila pierwszego fiksa. Publiczna strona liczy
+	// z niej, jak długo zawodnik jest w jeździe, także zanim GPS odpowie.
+	participant.Set("joined_at", time.Now().UTC())
 	if err := e.App.Save(participant); err != nil {
 		return nil, err
 	}

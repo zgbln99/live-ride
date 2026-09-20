@@ -1,5 +1,6 @@
 import 'package:dio/dio.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:geolocator/geolocator.dart';
 import 'package:live_ride/core/api_client.dart';
 import 'package:live_ride/models/live_privacy.dart';
 import 'package:live_ride/services/live_service.dart';
@@ -239,6 +240,100 @@ void main() {
       );
       // Brak pola w starym zapisie znaczy „nie udostępniam".
       expect(LivePrivacy.fromJson(const {}).shareBattery, isFalse);
+    });
+  });
+
+  group('pierwsza telemetria po udostępnieniu', () {
+    /// Same żądania telemetryczne — `create` wysyła też prywatność.
+    List<RequestOptions> telemetry(_RecordingAdapter adapter) => adapter.requests
+        .where((request) => request.path.endsWith('/telemetry'))
+        .toList();
+
+    Map<dynamic, dynamic> lastPoint(_RecordingAdapter adapter) {
+      final body = telemetry(adapter).last.data as Map;
+      return (body['points'] as List).last as Map;
+    }
+
+    /// Pozycja udawana tak, jak przychodzi z systemu.
+    Position fix({double lat = 52.23, double lon = 21.01}) => Position(
+      latitude: lat,
+      longitude: lon,
+      timestamp: DateTime.utc(2026, 5, 1, 9),
+      accuracy: 5,
+      altitude: 110,
+      altitudeAccuracy: 3,
+      heading: 92,
+      headingAccuracy: 5,
+      speed: 0,
+      speedAccuracy: 1,
+    );
+
+    test('force omija odczekanie między próbkami', () async {
+      final adapter = _RecordingAdapter(
+        '{"id":"s1","participant_id":"p1","share_token":"tok","join_token":"J"}',
+      );
+      final live = _controller(_api(adapter));
+      await live.create();
+      // `create` dosyła jeszcze ustawienia prywatności w tle; interesują nas
+      // wyłącznie żądania telemetryczne.
+      await pumpEventQueue();
+
+      // Zwykła próbka przechodzi…
+      await live.pushPosition(fix(), distanceMeters: 0);
+      // …a druga, tuż po niej, zostaje zdławiona.
+      await live.pushPosition(fix(), distanceMeters: 0);
+      expect(telemetry(adapter).length, 1);
+
+      // Chyba że to ta jedna, która ma dolecieć natychmiast.
+      await live.pushPosition(fix(), distanceMeters: 0, force: true);
+      expect(telemetry(adapter).length, 2);
+    });
+
+    test('stojący zawodnik wysyła pozycję, choć nie przejechał metra', () async {
+      final adapter = _RecordingAdapter(
+        '{"id":"s1","participant_id":"p1","share_token":"tok","join_token":"J"}',
+      );
+      final live = _controller(_api(adapter));
+      await live.create();
+      // `create` dosyła jeszcze ustawienia prywatności w tle; interesują nas
+      // wyłącznie żądania telemetryczne.
+      await pumpEventQueue();
+
+      await live.pushPosition(
+        fix(),
+        distanceMeters: 0,
+        state: 'stopped',
+        force: true,
+      );
+
+      final point = lastPoint(adapter);
+      expect(point['latitude'], 52.23);
+      expect(point['longitude'], 21.01);
+      expect(point['state'], 'stopped');
+      expect(point['distance_m'], 0);
+    });
+
+    test('postoje jadą razem z próbką, rozbite na dwa rodzaje', () async {
+      final adapter = _RecordingAdapter(
+        '{"id":"s1","participant_id":"p1","share_token":"tok","join_token":"J"}',
+      );
+      final live = _controller(_api(adapter));
+      await live.create();
+      // `create` dosyła jeszcze ustawienia prywatności w tle; interesują nas
+      // wyłącznie żądania telemetryczne.
+      await pumpEventQueue();
+
+      await live.pushPosition(
+        fix(),
+        distanceMeters: 1200,
+        autoPausedSeconds: 130,
+        manualPausedSeconds: 45,
+        force: true,
+      );
+
+      final point = lastPoint(adapter);
+      expect(point['auto_paused_seconds'], 130);
+      expect(point['manual_paused_seconds'], 45);
     });
   });
 }

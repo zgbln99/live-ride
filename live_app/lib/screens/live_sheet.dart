@@ -258,6 +258,12 @@ class _LiveSheetState extends State<_LiveSheet> {
       final route = widget.services.recorder.route;
       await widget.services.live.create(routeClientId: route?.id);
       if (mounted) setState(() {});
+      // Link bez zawodnika na mapie jest linkiem do pustej strony. Pierwsza
+      // telemetria idzie natychmiast, jeszcze zanim ktokolwiek ruszy —
+      // zawodnik, który udostępnia jazdę stojąc przed domem, ma być widoczny
+      // w chwili, w której znajomy otworzy wiadomość.
+      await widget.services.recorder.publishLiveNow();
+      if (mounted) setState(() {});
     } on ApiException catch (e) {
       if (mounted) showLrMessage(context, e.message, error: true);
     } catch (_) {
@@ -305,6 +311,10 @@ class _LiveSheetState extends State<_LiveSheet> {
     setState(() => _busy = true);
     try {
       await widget.services.live.join(code);
+      if (mounted) setState(() {});
+      // Tak samo jak przy własnej jeździe: grupa ma zobaczyć dołączającego
+      // od razu, a nie dopiero wtedy, gdy ten ruszy.
+      await widget.services.recorder.publishLiveNow();
       if (mounted) setState(() {});
     } on ApiException catch (e) {
       if (mounted) showLrMessage(context, e.message, error: true);

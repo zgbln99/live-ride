@@ -46,6 +46,9 @@ enum RideState { idle, preparing, recording, paused, saving }
 /// rebuild, a tab switch or a navigation push can never drop an active ride.
 /// Screens only read [metrics], [state] and [progress].
 class RideRecorder extends ChangeNotifier {
+  /// Co ile odpytujemy system o pozycję, gdy LIVE trwa bez jazdy.
+  static const Duration liveHeartbeatInterval = Duration(seconds: 20);
+
   RideRecorder({
     required this.location,
     required this.storage,
@@ -107,6 +110,15 @@ class RideRecorder extends ChangeNotifier {
   RideState _state = RideState.idle;
   RideMetrics _metrics = RideMetrics.empty;
   GeoPoint? _position;
+
+  /// Ostatni surowy fiks, taki jak przyszedł z systemu.
+  ///
+  /// [_position] wystarcza do rysowania, ale telemetria LIVE potrzebuje
+  /// jeszcze prędkości, kursu i dokładności — a te niesie tylko oryginał.
+  Position? _lastFix;
+
+  /// Odpytywanie pozycji dla LIVE bez rozpoczętej jazdy.
+  Timer? _liveHeartbeat;
 
   /// Cały podział czasu na jazdę i postoje — razem z zasadą, że ręcznej
   /// pauzy nie zdejmuje nikt poza rowerzystą.
@@ -185,6 +197,9 @@ class RideRecorder extends ChangeNotifier {
     _rawSpeedKmh = null;
     _lastRawSample = null;
     alerts.reset();
+    // Od tej chwili pozycje niesie strumień jazdy.
+    _liveHeartbeat?.cancel();
+    _liveHeartbeat = null;
     _state = RideState.recording;
     _metrics = _accumulator.build(
       elapsed: Duration.zero,
@@ -440,6 +455,7 @@ class RideRecorder extends ChangeNotifier {
   }
 
   void _onPosition(Position position) {
+    _lastFix = position;
     final sample = RideSample(
       lat: position.latitude,
       lon: position.longitude,
@@ -466,6 +482,11 @@ class RideRecorder extends ChangeNotifier {
 
     if (_state == RideState.paused) {
       _publish();
+      // Telemetria leci dalej, właśnie dlatego, że licznik stoi. Bez tego
+      // obserwujący po siedemdziesięciu pięciu sekundach czytałby „brak
+      // aktualnych danych" o kimś, kto po prostu czeka na światłach —
+      // a stan „POSTÓJ" niesie ta sama próbka, która milczała.
+      unawaited(_pushTelemetry(position));
       return;
     }
 
@@ -543,8 +564,61 @@ class RideRecorder extends ChangeNotifier {
     _progress = plan.progressAt(point, fromIndex: _progress?.shapeIndex ?? 0);
   }
 
-  Future<void> _pushTelemetry(Position position) async {
-    if (!live.isActive) return;
+  /// Wysyła telemetrię natychmiast, nie czekając na kolejny fiks ani na
+  /// upływ zwykłego okresu nadawania.
+  ///
+  /// Wołane w chwili udostępnienia linku. Bez tego znajomy, który otworzy go
+  /// od razu, widziałby pustą mapę do momentu, aż zawodnik RUSZY — a ten
+  /// właśnie stoi przed domem i wysyła mu ten link. Pierwsza rzecz, jaką
+  /// robi publiczna strona, to pokazanie, gdzie ktoś jest; czekanie na ruch
+  /// zamienia ją w zagadkę.
+  ///
+  /// Zwraca false, gdy nie ma czego wysłać — wtedy strona pokazuje
+  /// „oczekiwanie na GPS" razem z całą resztą danych, które już zna.
+  Future<bool> publishLiveNow() async {
+    if (!live.isActive) return false;
+    // Najpierw fiks, który już mamy. Dopiero gdy licznik jeszcze nie chodzi,
+    // pytamy system — to jedyna ścieżka, która może potrwać.
+    final position = _lastFix ?? await location.currentPosition();
+    _startLiveHeartbeat();
+    if (position == null) return false;
+    _lastFix ??= position;
+    _position ??= GeoPoint(lat: position.latitude, lon: position.longitude);
+    notifyListeners();
+    return _pushTelemetry(position, force: true);
+  }
+
+  /// Podtrzymuje LIVE, gdy transmisja trwa, a licznik jeszcze nie nagrywa.
+  ///
+  /// Zawodnik potrafi udostępnić link przed startem — i wtedy nic nie
+  /// nasłuchuje pozycji, więc po siedemdziesięciu pięciu sekundach publiczna
+  /// strona uznałaby go za nieobecnego. Tętno bierze ŚWIEŻY fiks z systemu,
+  /// a nie powtarza ostatniego: powtórzona pozycja ze świeżą godziną
+  /// wyglądałaby jak pomiar, którego nikt nie wykonał.
+  ///
+  /// Rzadziej niż telemetria jazdy, bo stojący telefon nie ma czego nadawać
+  /// co trzy sekundy, a bateria startuje razem z zawodnikiem.
+  void _startLiveHeartbeat() {
+    if (_liveHeartbeat != null) return;
+    _liveHeartbeat = Timer.periodic(liveHeartbeatInterval, (timer) async {
+      // Jazda przejmuje nadawanie — własny strumień pozycji jest częstszy
+      // i dokładniejszy od odpytywania.
+      if (!live.isActive || isActive) {
+        timer.cancel();
+        _liveHeartbeat = null;
+        return;
+      }
+      final position = await location.currentPosition();
+      if (position == null) return;
+      _lastFix = position;
+      _position = GeoPoint(lat: position.latitude, lon: position.longitude);
+      notifyListeners();
+      unawaited(_pushTelemetry(position, force: true));
+    });
+  }
+
+  Future<bool> _pushTelemetry(Position position, {bool force = false}) async {
+    if (!live.isActive) return false;
     final ok = await live.pushPosition(
       position,
       distanceMeters: _accumulator.distanceMeters,
@@ -553,12 +627,16 @@ class RideRecorder extends ChangeNotifier {
       movingSeconds: _metrics.movingTime.inSeconds,
       maxSpeedKmh: _metrics.maxSpeedKmh,
       batteryPercent: battery?.percent ?? 0,
+      autoPausedSeconds: autoPausedTotal.inSeconds,
+      manualPausedSeconds: manualPausedTotal.inSeconds,
+      force: force,
     );
     final failed = !ok;
     if (_liveTelemetryFailed != failed) {
       _liveTelemetryFailed = failed;
       notifyListeners();
     }
+    return ok;
   }
 
   void _onSensors() {
@@ -746,6 +824,7 @@ class RideRecorder extends ChangeNotifier {
 
   @override
   void dispose() {
+    _liveHeartbeat?.cancel();
     _positionSub?.cancel();
     _heartRateSub?.cancel();
     sensors.removeListener(_onSensors);

@@ -95,6 +95,9 @@ func newLiveRideFixture(t *testing.T) *liveRideFixture {
 		&core.SelectField{Name: "state", Values: []string{"riding", "paused", "stopped"}, MaxSelect: 1},
 		&core.SelectField{Name: "role", Values: []string{"rider", "leader"}, MaxSelect: 1},
 		&core.DateField{Name: "last_seen_at"},
+		&core.DateField{Name: "joined_at"},
+		&core.NumberField{Name: "auto_paused_seconds", OnlyInt: true},
+		&core.NumberField{Name: "manual_paused_seconds", OnlyInt: true},
 	)
 	if err := app.Save(participants); err != nil {
 		t.Fatal(err)
@@ -155,6 +158,7 @@ func (f *liveRideFixture) addRider(t *testing.T, name string, seenSecondsAgo int
 	rider.Set("state", "riding")
 	rider.Set("share_position", true)
 	rider.Set("share_speed", true)
+	rider.Set("joined_at", time.Now().UTC().Add(-2*time.Hour))
 	rider.Set("last_seen_at", time.Now().UTC().Add(-time.Duration(seenSecondsAgo)*time.Second))
 	if mutate != nil {
 		mutate(rider)
@@ -485,19 +489,160 @@ func TestLiveRideRiderStates(t *testing.T) {
 	}
 }
 
-func TestLiveRideRiderWithoutTelemetryIsOffline(t *testing.T) {
+// Zawodnik, od którego jeszcze nic nie przyszło, CZEKA — nie zniknął.
+//
+// To są dwie różne wiadomości dla obserwującego. „Brak aktualnych danych"
+// czyta się jak awarię i skłania do telefonu; „oczekiwanie na GPS" mówi, że
+// wszystko jest w porządku i za chwilę coś się pojawi. Różnicę widać
+// najostrzej w tej jednej sekundzie, w której znajomy otwiera link wysłany
+// przed chwilą.
+func TestLiveRideRiderWithoutTelemetryIsWaiting(t *testing.T) {
 	f := newLiveRideFixture(t)
 	rider := core.NewRecord(f.participant)
 	rider.Set("session", f.session.Id)
 	rider.Set("display_name", "Nikt")
 
 	state, age := liveRideRiderState(rider, time.Now().UTC(), false)
-	if state != "offline" {
-		t.Errorf("state = %q, want offline", state)
+	if state != "waiting" {
+		t.Errorf("state = %q, want waiting", state)
 	}
 	// Brak jakiejkolwiek telemetrii to nieskończony wiek, a nie zero sekund.
 	if age <= liveRideOfflineAfterSeconds {
 		t.Errorf("age = %v, want a very large value", age)
+	}
+
+	// Ale po zakończeniu jazdy stan zamknięcia wygrywa ze wszystkim.
+	if state, _ := liveRideRiderState(rider, time.Now().UTC(), true); state != "ended" {
+		t.Errorf("state po mecie = %q, want ended", state)
+	}
+}
+
+// Najważniejsza obietnica publicznej strony: zawodnik jest w migawce od
+// chwili udostępnienia linku, a nie od pierwszego przejechanego metra.
+func TestLiveRideRiderVisibleBeforeAnyMovement(t *testing.T) {
+	f := newLiveRideFixture(t)
+	joined := time.Now().UTC().Add(-20 * time.Second)
+	rider := core.NewRecord(f.participant)
+	rider.Set("session", f.session.Id)
+	rider.Set("display_name", "Marek")
+	rider.Set("joined_at", joined)
+	rider.Set("share_position", true)
+	rider.Set("share_speed", true)
+	if err := f.app.Save(rider); err != nil {
+		t.Fatal(err)
+	}
+
+	_, body, _ := f.snapshot(t, f.session.GetString("share_token"))
+	list := riders(body)
+	if len(list) != 1 {
+		t.Fatalf("migawka ma %d zawodników, chciano 1", len(list))
+	}
+	entry := list[0]
+
+	if entry["display_name"] != "Marek" {
+		t.Errorf("display_name = %v, want Marek", entry["display_name"])
+	}
+	if entry["state"] != "waiting" {
+		t.Errorf("state = %v, want waiting", entry["state"])
+	}
+	if entry["has_fix"] != false {
+		t.Errorf("has_fix = %v, want false", entry["has_fix"])
+	}
+	if entry["joined_at"] == nil {
+		t.Error("chwila dołączenia musi być znana, zanim przyjdzie pierwszy fiks")
+	}
+	// Zero to poprawna szerokość geograficzna. Wysłane jako „brak pozycji"
+	// postawiłoby znacznik na Atlantyku.
+	if _, present := entry["latitude"]; present {
+		t.Error("nieistniejąca pozycja nie ma prawa trafić do migawki")
+	}
+	if _, present := entry["longitude"]; present {
+		t.Error("nieistniejąca pozycja nie ma prawa trafić do migawki")
+	}
+}
+
+// Pierwszy fiks wystarcza; ruch nie jest do niczego potrzebny.
+func TestLiveRideFirstFixAppearsWithoutMovement(t *testing.T) {
+	f := newLiveRideFixture(t)
+	rider := f.addRider(t, "Marek", 2, func(record *core.Record) {
+		// Stoi przed domem: zero przejechanych metrów, zero prędkości.
+		record.Set("distance_m", 0.0)
+		record.Set("speed_kmh", 0.0)
+		record.Set("moving_seconds", 0)
+		record.Set("state", "stopped")
+	})
+	_ = rider
+
+	_, body, _ := f.snapshot(t, f.session.GetString("share_token"))
+	entry := riders(body)[0]
+
+	if entry["state"] != "stopped" {
+		t.Errorf("state = %v, want stopped", entry["state"])
+	}
+	if entry["has_fix"] != true {
+		t.Errorf("has_fix = %v, want true", entry["has_fix"])
+	}
+	if entry["latitude"] == nil || entry["longitude"] == nil {
+		t.Error("pozycja stojącego zawodnika musi być widoczna")
+	}
+	if entry["distance_m"] != 0.0 {
+		t.Errorf("distance_m = %v, want 0", entry["distance_m"])
+	}
+}
+
+// Postoje wychodzą rozbite na dwa rodzaje i tylko wtedy, gdy istnieją.
+func TestLiveRideSnapshotCarriesPauseBreakdown(t *testing.T) {
+	f := newLiveRideFixture(t)
+	f.addRider(t, "Marek", 3, func(record *core.Record) {
+		record.Set("auto_paused_seconds", 640)
+		record.Set("manual_paused_seconds", 300)
+	})
+	f.addRider(t, "Paweł", 3, nil)
+
+	_, body, _ := f.snapshot(t, f.session.GetString("share_token"))
+	list := riders(body)
+
+	var marek, pawel map[string]any
+	for _, entry := range list {
+		switch entry["display_name"] {
+		case "Marek":
+			marek = entry
+		case "Paweł":
+			pawel = entry
+		}
+	}
+	if marek == nil || pawel == nil {
+		t.Fatalf("brakuje zawodników w migawce: %v", list)
+	}
+	if marek["auto_paused_seconds"] != 640.0 {
+		t.Errorf("auto_paused_seconds = %v, want 640", marek["auto_paused_seconds"])
+	}
+	if marek["manual_paused_seconds"] != 300.0 {
+		t.Errorf("manual_paused_seconds = %v, want 300", marek["manual_paused_seconds"])
+	}
+	// Zero postojów to brak pola, a nie „zero sekund na przystanku": strona
+	// ma wtedy w ogóle nie pokazywać tego wiersza.
+	if _, present := pawel["auto_paused_seconds"]; present {
+		t.Error("zerowe postoje nie mają prawa trafić do migawki")
+	}
+}
+
+// Postoje to część telemetrii pozycyjnej i dzielą jej ustawienie prywatności.
+func TestLiveRidePauseBreakdownFollowsPositionPrivacy(t *testing.T) {
+	f := newLiveRideFixture(t)
+	f.addRider(t, "Marek", 3, func(record *core.Record) {
+		record.Set("share_position", false)
+		record.Set("auto_paused_seconds", 640)
+		record.Set("manual_paused_seconds", 300)
+	})
+
+	_, body, _ := f.snapshot(t, f.session.GetString("share_token"))
+	entry := riders(body)[0]
+
+	for _, field := range []string{"auto_paused_seconds", "manual_paused_seconds"} {
+		if _, present := entry[field]; present {
+			t.Errorf("%s wyciekło mimo wyłączonego udostępniania pozycji", field)
+		}
 	}
 }
 

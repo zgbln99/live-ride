@@ -44,6 +44,9 @@ const (
 
 var liveRidePolylineCodec = polyline.Codec{Dim: 2, Scale: 1e6}
 
+// Kolekcja `trails` starego Wanderera koduje polilinie w precyzji 5.
+var polylinePrecision5 = polyline.Codec{Dim: 2, Scale: 1e5}
+
 // liveRideAccess mówi, czy link nadal działa i dlaczego nie.
 type liveRideAccess struct {
 	session *core.Record
@@ -378,6 +381,19 @@ func LiveRideSetShare(e *core.RequestEvent) error {
 
 // ------------------------------------------------------------- pomocnicze
 
+// liveRideHasFix mówi, czy od zawodnika przyszła kiedykolwiek pozycja.
+//
+// Sam zapisany wiersz uczestnika nie wystarcza: powstaje w chwili utworzenia
+// jazdy, z zerami w kolumnach współrzędnych.
+func liveRideHasFix(participant *core.Record) bool {
+	lat := participant.GetFloat("latitude")
+	lon := participant.GetFloat("longitude")
+	if lat == 0 && lon == 0 {
+		return false
+	}
+	return lat >= -90 && lat <= 90 && lon >= -180 && lon <= 180
+}
+
 // liveRideShares mówi, czy zawodnik zgodził się pokazać dane pole.
 func liveRideShares(participant *core.Record, field string) bool {
 	// Uczestnik zapisany, zanim te pola istniały, ma wszystkie na false, co
@@ -393,6 +409,11 @@ func liveRideShares(participant *core.Record, field string) bool {
 //
 // „Offline" wygrywa ze wszystkim: dopóki nie wiemy, co się dzieje, nie wolno
 // twierdzić, że ktoś jedzie, tylko dlatego że ostatnia próbka tak mówiła.
+//
+// Wyjątkiem jest „waiting": zawodnik, od którego jeszcze NIC nie przyszło, nie
+// zgubił sygnału — on go dopiero szuka. Znajomy, który otworzył link sekundę
+// po jego wysłaniu, ma przeczytać „oczekiwanie na GPS", a nie „brak
+// aktualnych danych", bo to drugie brzmi jak awaria.
 func liveRideRiderState(participant *core.Record, now time.Time, sessionEnded bool) (string, float64) {
 	lastSeen := participant.GetDateTime("last_seen_at").Time()
 	age := math.Inf(1)
@@ -405,6 +426,9 @@ func liveRideRiderState(participant *core.Record, now time.Time, sessionEnded bo
 
 	if sessionEnded {
 		return "ended", age
+	}
+	if lastSeen.IsZero() {
+		return "waiting", age
 	}
 	if math.IsInf(age, 1) || age > liveRideOfflineAfterSeconds {
 		return "offline", age
@@ -433,27 +457,50 @@ func liveRideRiderState(participant *core.Record, now time.Time, sessionEnded bo
 // uwzględnić, bez przepisywania wierszy zapisanych wcześniej.
 func liveRideRiderJSON(participant *core.Record, now time.Time, sessionEnded bool) map[string]any {
 	state, age := liveRideRiderState(participant, now, sessionEnded)
+	hasFix := liveRideHasFix(participant)
 
+	// Tożsamość jest niezależna od telemetrii i istnieje od chwili dołączenia.
+	// Dzięki temu publiczna strona zna zawodnika, zanim przyjdzie od niego
+	// pierwszy fiks — a nie pokazuje pustego miejsca do czasu, aż ruszy.
 	rider := map[string]any{
 		"id":           participant.Id,
 		"display_name": participant.GetString("display_name"),
 		"last_seen_at": participant.GetDateTime("last_seen_at"),
 		"role":         participant.GetString("role"),
 		"state":        state,
+		"has_fix":      hasFix,
+	}
+	if joined := participant.GetDateTime("joined_at").Time(); !joined.IsZero() {
+		rider["joined_at"] = joined
 	}
 	if !math.IsInf(age, 1) {
 		rider["age_seconds"] = math.Round(age)
 	}
 
 	if liveRideShares(participant, "share_position") {
-		rider["latitude"] = participant.GetFloat("latitude")
-		rider["longitude"] = participant.GetFloat("longitude")
-		rider["altitude_m"] = participant.GetFloat("altitude_m")
-		rider["heading_deg"] = participant.GetFloat("heading_deg")
-		rider["accuracy_m"] = participant.GetFloat("accuracy_m")
+		// Współrzędne idą tylko wtedy, gdy naprawdę istnieją. Zero jest
+		// prawidłową szerokością geograficzną — punkt (0, 0) leży w Zatoce
+		// Gwinejskiej — więc wysyłanie zer jako „brak pozycji" oznaczałoby
+		// znacznik na Atlantyku u każdego, kto jeszcze nie złapał GPS-a.
+		if hasFix {
+			rider["latitude"] = participant.GetFloat("latitude")
+			rider["longitude"] = participant.GetFloat("longitude")
+			rider["altitude_m"] = participant.GetFloat("altitude_m")
+			rider["heading_deg"] = participant.GetFloat("heading_deg")
+			rider["accuracy_m"] = participant.GetFloat("accuracy_m")
+		}
 		rider["distance_m"] = participant.GetFloat("distance_m")
 		rider["elevation_gain_m"] = participant.GetFloat("elevation_gain_m")
 		rider["moving_seconds"] = participant.GetInt("moving_seconds")
+		// Postoje osobno od czasu w ruchu: różnica „całkowity minus w ruchu"
+		// zawiera też sekundy poniżej progu auto-pauzy i nie jest czasem
+		// spędzonym na przystanku.
+		if auto := participant.GetInt("auto_paused_seconds"); auto > 0 {
+			rider["auto_paused_seconds"] = auto
+		}
+		if manual := participant.GetInt("manual_paused_seconds"); manual > 0 {
+			rider["manual_paused_seconds"] = manual
+		}
 	}
 	if liveRideShares(participant, "share_speed") {
 		rider["speed_kmh"] = participant.GetFloat("speed_kmh")
@@ -581,5 +628,9 @@ func liveRideRouteJSONForViewer(record *core.Record) map[string]any {
 		"descent_m":         record.GetFloat("descent_m"),
 		"elevation_profile": record.Get("elevation_profile"),
 		"climbs":            record.Get("climbs"),
+		// Nawierzchnia pochodzi z routingu, nie ze zgadywania po geometrii.
+		// Gdy trasa jej nie niesie (import GPX, stary zapis), pole jest puste
+		// i strona po prostu nie pokazuje tej sekcji.
+		"surfaces": record.Get("surfaces"),
 	}
 }
