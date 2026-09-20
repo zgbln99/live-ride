@@ -567,6 +567,34 @@ class Strings {
   String get heartRateSourceTitle => 'ŹRÓDŁO TĘTNA';
   String get heartRateSourceAuto => 'Automatycznie';
   String get heartRateNoSource => 'Brak podłączonego pomiaru tętna.';
+
+  // --- kreator tras „powiedz gdzie" --------------------------------------
+  String get whereTitle => 'GDZIE CHCESZ JECHAĆ?';
+  String get whereHint => 'Potsdam · 50 km pętla · do jeziora i z powrotem';
+  String get whereExamples =>
+      'Wpisz miejsce, dystans albo czas. Punkty na mapie możesz poprawić '
+      'później.';
+  String get howFar => 'ILE CHCESZ PRZEJECHAĆ?';
+  String get howLong => 'ILE MASZ CZASU?';
+  String get findRoutes => 'ZNAJDŹ TRASY';
+  String get planAgain => 'SZUKAJ PONOWNIE';
+  String get rideIt => 'JEDŹ';
+  String get plannerNoStart =>
+      'Nie znamy jeszcze Twojej pozycji. Poczekaj na GPS albo zbuduj trasę '
+      'ręcznie.';
+  String get plannerUnknownPlace =>
+      'Nie znamy takiego miejsca. Spróbuj innej nazwy.';
+  String get plannerNoRoute => 'Nie udało się teraz wyznaczyć trasy.';
+  String get plannerOffline =>
+      'Brak połączenia z serwerem tras. Spróbuj ponownie za chwilę.';
+  String get plannerSearching => 'Szukam tras…';
+  String plannerResultCount(int count) =>
+      count == 1 ? '1 propozycja' : '$count propozycje';
+
+  // --- Ride Intelligence --------------------------------------------------
+  String get rideIntelligence => 'RIDE INTELLIGENCE';
+  String get etaCalibrating => 'ETA jeszcze się kalibruje';
+  String get intelligenceQuiet => 'Nic, co wymagałoby teraz uwagi.';
   String get healthReady => 'Gotowe do zapisu';
   String get healthDenied => 'Brak zgody na zapis';
   String get healthNotInstalled =>

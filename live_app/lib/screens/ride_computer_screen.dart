@@ -15,6 +15,7 @@ import '../models/ride_record.dart';
 import '../models/ride_route.dart';
 import '../services/app_services.dart';
 import '../services/location_service.dart';
+import '../services/ride_intelligence.dart';
 import '../services/ride_recorder.dart';
 import '../widgets/chrome_fade.dart';
 import '../widgets/climb_pro_panel.dart';
@@ -29,6 +30,7 @@ import '../widgets/segment_banner.dart';
 import '../widgets/sos_overlay.dart';
 import '../widgets/workout_banner.dart';
 import '../widgets/ride_map.dart';
+import '../widgets/intelligence_card.dart';
 import '../widgets/weather_field.dart';
 import 'data_field_editor.dart';
 import 'pace_partner_sheet.dart';
@@ -76,6 +78,7 @@ class _RideComputerScreenState extends State<RideComputerScreen> {
   void initState() {
     super.initState();
     WidgetsBinding.instance.addPostFrameCallback((_) => _boot());
+    unawaited(_loadHistory());
   }
 
   bool get _chromeVisible => _chrome.visible;
@@ -247,6 +250,28 @@ class _RideComputerScreenState extends State<RideComputerScreen> {
                                         recorder.route?.analysis.profile ??
                                         const [],
                                     metric: profile.metricUnits,
+                                  ),
+                                // Ride Intelligence wchodzi tylko wtedy, gdy
+                                // ma coś do powiedzenia, i tylko przy
+                                // widocznym chromie. Panel, który wisi pusty,
+                                // zabiera mapie piksele za nic.
+                                if (_chromeVisible)
+                                  Padding(
+                                    padding: const EdgeInsets.fromLTRB(
+                                      10,
+                                      0,
+                                      10,
+                                      6,
+                                    ),
+                                    child: IntelligenceCard(
+                                      insights: RideIntelligence.during(
+                                        _intelligenceContext(recorder),
+                                      ),
+                                      eta: RideIntelligence.eta(
+                                        _intelligenceContext(recorder),
+                                      ),
+                                      limit: 2,
+                                    ),
                                   ),
                                 // Pasek pauzy stoi nad powiadomieniami: gdy
                                 // licznik stoi, to jest najważniejsza rzecz
@@ -674,6 +699,33 @@ class _RideComputerScreenState extends State<RideComputerScreen> {
     await _holdChrome(() => showMusicSheet(context, _services));
     if (mounted) setState(() {});
   }
+
+  /// Profil z historii, policzony raz na wejście na ekran.
+  ///
+  /// „Szybciej niż zwykle" wymaga wiedzy o tym, co jest zwykłe. Liczenie
+  /// tego przy każdej klatce byłoby odczytem całej bazy sześćdziesiąt razy
+  /// na sekundę.
+  RiderHistoryProfile _history = RiderHistoryProfile.empty;
+
+  Future<void> _loadHistory() async {
+    final rides = await _services.rides.list();
+    if (!mounted) return;
+    setState(() => _history = RiderHistoryProfile.fromRides(rides));
+  }
+
+  /// Wszystko, czego Ride Intelligence potrzebuje, w jednym miejscu.
+  RideContext _intelligenceContext(RideRecorder recorder) => RideContext(
+    metrics: recorder.metrics,
+    profile: _history,
+    remainingMeters: recorder.progress?.remainingMeters,
+    upcomingClimb: recorder.climbs.upcomingClimb,
+    metersToUpcomingClimb: recorder.climbs.metersToUpcoming,
+    activeClimb: recorder.climbProgress?.climb,
+    climbRemainingMeters: recorder.climbProgress?.remainingMeters,
+    weather: _services.weather.current,
+    batteryPercent: _services.battery.percent,
+    gpsAccuracyMeters: recorder.metrics.gpsAccuracyMeters,
+  );
 
   Future<void> _openLiveSheet() async {
     // Źródło jedzie jawnie: arkusz ma wiedzieć, że pod nim trwa jazda,

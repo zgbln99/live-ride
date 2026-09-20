@@ -11,6 +11,8 @@
 /// zostaje wtedy zwykłym wyszukiwaniem miejsca.
 library;
 
+import '../models/route/route_preferences.dart';
+
 /// Kształt trasy.
 enum RouteShape {
   /// Z punktu A do punktu B.
@@ -23,11 +25,12 @@ enum RouteShape {
   outAndBack,
 }
 
-enum SurfacePreference { any, paved, mixed, gravel }
-
+/// Czy trasa ma być płaska, pofalowana, czy bez znaczenia.
+///
+/// Osobne od [RoutePreferences.avoidHills], bo „chcę podjazdy" nie jest
+/// przeciwieństwem „unikaj wzniesień" — router umie tylko to drugie, a nas
+/// interesuje też wybór spośród kilku wygenerowanych wariantów.
 enum ElevationPreference { any, flat, hilly }
-
-enum TrafficPreference { any, quiet, fastest }
 
 /// Czego trasa ma unikać. Tylko to, co router naprawdę umie omijać.
 enum RouteAvoid { ferries, mainRoads, unpaved }
@@ -41,9 +44,9 @@ class RouteIntent {
     this.distanceMeters,
     this.duration,
     this.shape = RouteShape.destination,
-    this.surface = SurfacePreference.any,
+    this.surface,
     this.elevation = ElevationPreference.any,
-    this.traffic = TrafficPreference.any,
+    this.mood,
     this.avoid = const {},
   });
 
@@ -59,10 +62,30 @@ class RouteIntent {
   final double? distanceMeters;
   final Duration? duration;
   final RouteShape shape;
-  final SurfacePreference surface;
+
+  /// Null znaczy „bez znaczenia" — wtedy zostaje ustawienie z profilu.
+  final SurfacePreference? surface;
+
   final ElevationPreference elevation;
-  final TrafficPreference traffic;
+
+  /// Null znaczy „bez znaczenia".
+  final RouteMood? mood;
+
   final Set<RouteAvoid> avoid;
+
+  /// Nakłada polecenie na ustawienia zawodnika.
+  ///
+  /// Preferencje z profilu są podkładem, a nie konkurencją: zdanie mówi
+  /// o TEJ jeździe i zmienia tylko to, co w nim padło.
+  RoutePreferences applyTo(RoutePreferences base) => base.copyWith(
+    surface: surface ?? base.surface,
+    mood: mood ?? base.mood,
+    avoidHills: elevation == ElevationPreference.flat ? true : base.avoidHills,
+    avoidFerries: avoid.contains(RouteAvoid.ferries) ? true : base.avoidFerries,
+    avoidBusyRoads:
+        avoid.contains(RouteAvoid.mainRoads) ? true : base.avoidBusyRoads,
+    returnToStart: returnsHome ? true : base.returnToStart,
+  );
 
   /// Czy z tego polecenia da się cokolwiek zbudować.
   bool get isUsable =>
@@ -127,7 +150,7 @@ RouteIntent parseRouteIntent(String input) {
     shape: shape,
     surface: _surface(lower),
     elevation: _elevation(lower),
-    traffic: _traffic(lower),
+    mood: _mood(lower),
     avoid: _avoid(lower),
   );
 }
@@ -181,16 +204,16 @@ RouteShape _shape(String lower) {
   return RouteShape.destination;
 }
 
-SurfacePreference _surface(String lower) {
+SurfacePreference? _surface(String lower) {
   if (lower.contains('gravel') ||
       lower.contains('szuter') ||
       lower.contains('żwir') ||
       lower.contains('szutr')) {
-    return SurfacePreference.gravel;
+    return SurfacePreference.unpaved;
   }
   if (lower.contains('asfalt')) return SurfacePreference.paved;
   if (lower.contains('mieszan')) return SurfacePreference.mixed;
-  return SurfacePreference.any;
+  return null;
 }
 
 ElevationPreference _elevation(String lower) {
@@ -210,16 +233,16 @@ ElevationPreference _elevation(String lower) {
   return ElevationPreference.any;
 }
 
-TrafficPreference _traffic(String lower) {
+RouteMood? _mood(String lower) {
   if (lower.contains('spokojn') ||
       lower.contains('mało ruchu') ||
       lower.contains('bez ruchu')) {
-    return TrafficPreference.quiet;
+    return RouteMood.quiet;
   }
   if (lower.contains('najszybciej') || lower.contains('najkrócej')) {
-    return TrafficPreference.fastest;
+    return RouteMood.fast;
   }
-  return TrafficPreference.any;
+  return null;
 }
 
 Set<RouteAvoid> _avoid(String lower) {

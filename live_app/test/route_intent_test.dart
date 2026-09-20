@@ -1,4 +1,5 @@
 import 'package:flutter_test/flutter_test.dart';
+import 'package:live_ride/models/route/route_preferences.dart';
 import 'package:live_ride/services/route_intent.dart';
 
 /// Polecenia, jakimi ludzie naprawdę mówią o jeździe.
@@ -115,7 +116,7 @@ void main() {
     test('„60 km gravel"', () {
       final intent = parseRouteIntent('60 km gravel');
       expect(intent.distanceMeters, 60000);
-      expect(intent.surface, SurfacePreference.gravel);
+      expect(intent.surface, SurfacePreference.unpaved);
     });
 
     test('„80 km asfalt"', () {
@@ -144,7 +145,7 @@ void main() {
 
     test('spokojne drogi i unikanie promów', () {
       final intent = parseRouteIntent('50 km spokojnymi drogami bez promów');
-      expect(intent.traffic, TrafficPreference.quiet);
+      expect(intent.mood, RouteMood.quiet);
       expect(intent.avoid, contains(RouteAvoid.ferries));
     });
   });
@@ -158,6 +159,24 @@ void main() {
 
     test('samo „asfalt" nie jest miejscem', () {
       expect(parseRouteIntent('asfalt').destination, isNull);
+    });
+
+    test('preferencje nakładają się na profil, a nie kasują go', () {
+      // Zdanie mówi o TEJ jeździe. Wszystko, czego nie wymieniło, zostaje
+      // takie, jak zawodnik ustawił sobie na stałe.
+      const base = RoutePreferences(
+        surface: SurfacePreference.paved,
+        mood: RouteMood.balanced,
+        avoidFerries: false,
+      );
+      final applied = parseRouteIntent('60 km gravel').applyTo(base);
+      expect(applied.surface, SurfacePreference.unpaved);
+      expect(applied.mood, RouteMood.balanced);
+      expect(applied.avoidFerries, isFalse);
+
+      final loop = parseRouteIntent('50 km pętla').applyTo(base);
+      expect(loop.returnToStart, isTrue);
+      expect(loop.surface, SurfacePreference.paved);
     });
   });
 }

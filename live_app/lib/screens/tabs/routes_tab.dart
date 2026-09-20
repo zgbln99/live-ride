@@ -12,6 +12,7 @@ import '../../widgets/lr_common.dart';
 import '../../widgets/track_preview.dart';
 import '../ride_computer_screen.dart';
 import '../route_builder_screen.dart';
+import '../route_wizard_screen.dart';
 import '../route_detail_screen.dart';
 
 /// The route library: imported GPX files, ready to ride.
@@ -80,7 +81,9 @@ class _RoutesTabState extends State<RoutesTab> {
               SizedBox(
                 height: 44,
                 child: FilledButton.icon(
-                  onPressed: _openBuilder,
+                  // Planowanie zaczyna się od zdania, nie od klikania punktów
+                  // na mapie w kasku przed wyjazdem.
+                  onPressed: _openWizard,
                   style: FilledButton.styleFrom(
                     minimumSize: const Size(0, 44),
                     padding: const EdgeInsets.symmetric(horizontal: 12),
@@ -271,6 +274,15 @@ class _RoutesTabState extends State<RoutesTab> {
       case 'delete':
         await _delete(route);
     }
+  }
+
+  Future<void> _openWizard() async {
+    final created = await Navigator.of(context).push<RouteSummary>(
+      MaterialPageRoute(builder: (_) => const RouteWizardScreen()),
+    );
+    if (!mounted) return;
+    setState(() {});
+    if (created != null) await _open(created);
   }
 
   Future<void> _openBuilder({RouteSummary? existing}) async {
