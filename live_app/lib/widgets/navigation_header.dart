@@ -155,7 +155,10 @@ class NavigationHeader extends StatelessWidget {
     if (next == null) {
       return mapMatched ? S.stayOnRoute : S.followTheTrack;
     }
-    if (next.instruction.isNotEmpty) return next.instruction;
+    // Zawsze przez polską warstwę: surowy tekst z routera potrafi przyjść
+    // po angielsku mimo prośby o pl-PL.
+    final instruction = next.instructionPl;
+    if (instruction.isNotEmpty) return instruction;
     return next.isDestination ? S.arriveAtDestination : S.continueAhead;
   }
 

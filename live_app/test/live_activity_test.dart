@@ -23,9 +23,12 @@ NavigationPlan plan() => NavigationPlan.fromJson({
   'maneuvers': [
     {'instruction': 'Head east', 'begin_shape_index': 0, 'type': 1},
     {
+      // Tak wygląda odpowiedź Valhalli, gdy nie oddała polskiego tekstu:
+      // angielskie zdanie plus nazwa ulicy w osobnym polu.
       'instruction': 'Turn left onto Seestrasse',
       'begin_shape_index': 2,
       'type': 15,
+      'street_names': ['Seestrasse'],
     },
   ],
   'summary': {'time': 600},
@@ -77,7 +80,10 @@ void main() {
         progress: plan().progressAt(const GeoPoint(lat: 52.0, lon: 13.002)),
       );
 
-      expect(payload['maneuver'], 'Turn left onto Seestrasse');
+      // Ekran blokady dostaje POLSKĄ instrukcję, tę samą co ekran jazdy.
+      // Nazwa ulicy zostaje w oryginale — rowerzysta szuka jej na tabliczce.
+      expect(payload['maneuver'], 'Skręć w lewo w Seestrasse');
+      expect(payload['maneuverStreet'], 'Seestrasse');
       expect(payload['maneuverSymbol'], 'arrow.turn.left.up');
       expect(payload['maneuverDistance'], isNot(isEmpty));
       expect(payload['offRoute'], isFalse);

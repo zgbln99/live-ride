@@ -163,7 +163,10 @@ class LiveActivityService {
           ? ''
           : (automaticPause ? S.autoPauseShort : S.manualPauseShort),
       'live': live,
-      'maneuver': maneuver?.instruction ?? '',
+      // Ta sama polska warstwa co na ekranie. Ekran blokady mówiący po
+      // angielsku o tym samym zakręcie byłby gorszy niż brak ekranu blokady.
+      'maneuver': maneuver?.instructionPl ?? '',
+      'maneuverStreet': maneuver?.streetName ?? '',
       'maneuverDistance': maneuver == null
           ? ''
           : '${Fmt.turnDistance(progress!.distanceToManeuver, metric: metric)} '

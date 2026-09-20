@@ -3,6 +3,7 @@ import 'dart:math' as math;
 import 'package:flutter/material.dart';
 
 import '../core/geo.dart';
+import '../i18n/maneuver_pl.dart';
 import 'ride_route.dart';
 
 /// A single turn instruction, normalised from the Valhalla maneuver list.
@@ -31,7 +32,28 @@ class NavManeuver {
 
   String get streetName => streetNames.isEmpty ? '' : streetNames.first;
 
-  bool get isDestination => type == 4 || type == 5 || type == 6;
+  /// Instrukcja po polsku — jedyna, którą wolno pokazać rowerzyście.
+  ///
+  /// [instruction] jest surowym tekstem z routera i bywa angielski, mimo że
+  /// prosimy o `pl-PL`. Tutaj zapada decyzja, czy da się go użyć, czy trzeba
+  /// złożyć zdanie z samego typu manewru. Wszystkie cztery miejsca, które
+  /// pokazują manewr — ekran jazdy, nagłówek, Dynamic Island i ekran blokady
+  /// — czytają TO pole, więc nie mogą się rozjechać.
+  String get instructionPl => maneuverInstructionPl(
+    type: type,
+    streetNames: streetNames,
+    roundaboutExit: roundaboutExit,
+    routerInstruction: instruction,
+  );
+
+  /// Krótka forma bez nazwy ulicy, do wąskich miejsc.
+  String get shortInstructionPl =>
+      maneuverShortPl(type: type, roundaboutExit: roundaboutExit);
+
+  bool get isDestination =>
+      type == ValhallaManeuver.destination ||
+      type == ValhallaManeuver.destinationRight ||
+      type == ValhallaManeuver.destinationLeft;
 
   /// Valhalla maneuver type to a cycling-computer arrow.
   IconData get icon => switch (type) {

@@ -101,7 +101,8 @@ void main() {
       ),
     );
 
-    expect(find.text('Turn left onto Seestrasse'), findsOneWidget);
+    // Nagłówek nawigacji mówi po polsku także wtedy, gdy router nie.
+    expect(find.text('Skręć w lewo w Seestrasse'), findsOneWidget);
     expect(find.text('Seestrasse'), findsOneWidget);
     expect(find.text('Lake loop'), findsOneWidget);
     expect(find.byIcon(Icons.turn_left), findsOneWidget);
