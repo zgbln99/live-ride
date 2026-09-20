@@ -1,6 +1,7 @@
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:live_ride/core/geo.dart';
+import 'package:live_ride/core/route_preview.dart';
 import 'package:live_ride/models/navigation_plan.dart';
 import 'package:live_ride/models/ride_metrics.dart';
 import 'package:live_ride/services/live_activity_service.dart';
@@ -218,6 +219,158 @@ void main() {
         metric: true,
       );
       await orphan.end();
+    });
+  });
+
+  group('Dynamic Island nie skacze', () {
+    String compact(double kmh, {bool metric = true}) =>
+        LiveActivityService().buildPayload(
+              metrics: RideMetrics(speedKmh: kmh),
+              paused: false,
+              live: false,
+              metric: metric,
+            )['speedCompact']!
+            as String;
+
+    test('prędkość na wyspie nie ma części dziesiętnej', () {
+      // „9.8", „31.4" i „0.0" to za każdym razem inna liczba znaków, a wyspa
+      // ma kilkadziesiąt punktów szerokości — każda taka zmiana przesuwała
+      // cały układ i wyglądała jak usterka.
+      for (final speed in [0.0, 9.4, 9.8, 31.4, 99.6]) {
+        expect(compact(speed), isNot(contains('.')));
+        expect(compact(speed), isNot(contains(',')));
+      }
+    });
+
+    test('szerokość pola zmienia się tylko przy przekroczeniu dziesiątki', () {
+      expect(compact(0).length, 1);
+      expect(compact(9.4).length, 1);
+      expect(compact(31.4).length, 2);
+      expect(compact(99.6).length, 3);
+    });
+
+    test('nierealna prędkość nie rozsadza pola', () {
+      // Zepsuty odczyt nie ma prawa rozciągnąć wyspy na pół ekranu.
+      expect(compact(99999).length, lessThanOrEqualTo(3));
+      expect(compact(double.infinity), '0');
+      expect(compact(double.nan), '0');
+      expect(compact(-5), '0');
+    });
+
+    test('w milach też bez części dziesiętnej', () {
+      expect(compact(32.2, metric: false), '20');
+    });
+  });
+
+  group('priorytet aktualizacji', () {
+    /// Kanał, który zapamiętuje każde wywołanie.
+    ({LiveActivityService service, List<MethodCall> calls}) wired() {
+      final calls = <MethodCall>[];
+      const channel = MethodChannel('live_ride/live_activity');
+      TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
+          .setMockMethodCallHandler(channel, (call) async {
+            calls.add(call);
+            if (call.method == 'isSupported') return true;
+            return null;
+          });
+      return (
+        service: LiveActivityService(platformSupported: true),
+        calls: calls,
+      );
+    }
+
+    setUp(() => TestWidgetsFlutterBinding.ensureInitialized());
+
+    tearDown(() {
+      TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
+          .setMockMethodCallHandler(
+            const MethodChannel('live_ride/live_activity'),
+            null,
+          );
+    });
+
+    test('zmiana stanu nie czeka na okno, zmiana liczb czeka', () async {
+      final wiring = wired();
+      final service = wiring.service;
+      await service.start(riderName: 'Marek', title: 'Test', navigating: false);
+
+      Future<void> push({
+        required bool paused,
+        required double speed,
+      }) => service.update(
+        metrics: RideMetrics(speedKmh: speed),
+        paused: paused,
+        live: false,
+        metric: true,
+      );
+
+      await push(paused: false, speed: 20);
+      final afterFirst = wiring.calls.length;
+
+      // Sama prędkość: zdławione, bo minęło mniej niż sekunda.
+      await push(paused: false, speed: 21);
+      expect(wiring.calls.length, afterFirst);
+
+      // Postój: przechodzi natychmiast, bo to zmiana stanu.
+      await push(paused: true, speed: 0);
+      expect(wiring.calls.length, afterFirst + 1);
+      final last = wiring.calls.last.arguments as Map;
+      expect(last['priority'], isTrue);
+      expect(last['pauseLabel'], isNotEmpty);
+    });
+
+    test('geometria trasy idzie osobnym wywołaniem i tylko raz', () async {
+      final wiring = wired();
+      final service = wiring.service;
+      await service.start(riderName: 'Marek', title: 'Test', navigating: true);
+
+      final preview = RoutePreview.fromRoute([
+        for (var i = 0; i < 30; i++)
+          GeoPoint(lat: 52.0 + i * 0.001, lon: 21.0 + i * 0.001),
+      ]);
+
+      await service.setRoute(preview);
+      await service.setRoute(preview);
+
+      final routeCalls =
+          wiring.calls.where((call) => call.method == 'route').toList();
+      expect(routeCalls.length, 1, reason: 'ten sam kształt drugi raz nie leci');
+      final payload = routeCalls.single.arguments as Map;
+      expect(payload['routeShape'], isNotEmpty);
+      expect(payload['routeAspect'], isA<double>());
+
+      // A metryki nie niosą geometrii ze sobą.
+      await service.update(
+        metrics: const RideMetrics(speedKmh: 20),
+        paused: false,
+        live: false,
+        metric: true,
+      );
+      final update =
+          wiring.calls.lastWhere((call) => call.method == 'update').arguments
+              as Map;
+      expect(update.containsKey('routeShape'), isFalse);
+    });
+
+    test('nowy kształt po przeliczeniu trasy jednak leci', () async {
+      final wiring = wired();
+      final service = wiring.service;
+      await service.start(riderName: 'Marek', title: 'Test', navigating: true);
+
+      await service.setRoute(
+        RoutePreview.fromRoute([
+          for (var i = 0; i < 20; i++)
+            GeoPoint(lat: 52.0 + i * 0.001, lon: 21.0),
+        ]),
+      );
+      await service.setRoute(
+        RoutePreview.fromRoute([
+          for (var i = 0; i < 20; i++)
+            GeoPoint(lat: 52.0, lon: 21.0 + i * 0.001),
+        ]),
+      );
+
+      expect(wiring.calls.where((c) => c.method == 'route').length, 2);
     });
   });
 }

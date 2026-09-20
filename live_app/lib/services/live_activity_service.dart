@@ -1,10 +1,12 @@
 import 'dart:async';
 import 'dart:io';
+import 'dart:math' as math;
 
 import 'package:flutter/foundation.dart';
 import 'package:flutter/services.dart';
 
 import '../core/formatters.dart';
+import '../core/route_preview.dart';
 import '../i18n/strings.dart';
 import '../models/navigation_plan.dart';
 import '../models/ride_metrics.dart';
@@ -35,6 +37,9 @@ class LiveActivityService {
   DateTime _lastPush = DateTime.fromMillisecondsSinceEpoch(0);
   String? _lastSignature;
   String? _lastError;
+
+  /// Ostatni wysłany kształt trasy — żeby nie wysyłać go po raz drugi.
+  String? _lastRouteShape;
 
   bool get isActive => _active;
   String? get lastError => _lastError;
@@ -72,6 +77,8 @@ class LiveActivityService {
       });
       _active = true;
       _lastSignature = null;
+      _lastRouteShape = null;
+      _lastUrgentFields = null;
       _lastError = null;
     } on PlatformException catch (e) {
       // A rider who has Live Activities switched off in Settings must not see
@@ -105,12 +112,49 @@ class LiveActivityService {
     final signature = payload.values.join('|');
     final now = DateTime.now();
     if (signature == _lastSignature) return;
-    if (now.difference(_lastPush) < minimumInterval) return;
+
+    // Zmiana STANU idzie natychmiast, zmiana LICZB czeka na swoje okno.
+    //
+    // Rowerzysta, który właśnie stanął, ma zobaczyć „POSTÓJ" od razu, a nie
+    // za sekundę; prędkość, która zmieniła się z 31 na 32, może poczekać.
+    // Tak samo zakręt i zjechanie z trasy — to są rzeczy, na które się
+    // reaguje, a nie takie, które się ogląda.
+    final urgent = _isUrgent(payload);
+    if (!urgent && now.difference(_lastPush) < minimumInterval) return;
 
     _lastPush = now;
     _lastSignature = signature;
     try {
-      await _channel.invokeMethod<void>('update', payload);
+      await _channel.invokeMethod<void>('update', {
+        ...payload,
+        'priority': urgent,
+      });
+    } on PlatformException catch (e) {
+      _lastError = e.message;
+    } on MissingPluginException {
+      _active = false;
+    }
+  }
+
+  /// Wysyła kształt trasy do ekranu blokady.
+  ///
+  /// Osobno od metryk i z rozmysłem: geometria zmienia się przy starcie i przy
+  /// przeliczeniu trasy, a prędkość co sekundę. Gdyby jechały razem, każda
+  /// zmiana prędkości kosztowałaby kilkaset bajtów budżetu ActivityKit na
+  /// przesłanie tego samego kształtu jeszcze raz.
+  ///
+  /// Strona natywna pamięta ostatni kształt i dokłada go do kolejnych
+  /// aktualizacji, więc widget nigdy nie zostaje bez trasy.
+  Future<void> setRoute(RoutePreview preview) async {
+    if (!_active) return;
+    final encoded = preview.encode();
+    if (encoded == _lastRouteShape) return;
+    _lastRouteShape = encoded;
+    try {
+      await _channel.invokeMethod<void>('route', {
+        'routeShape': encoded,
+        'routeAspect': preview.aspect,
+      });
     } on PlatformException catch (e) {
       _lastError = e.message;
     } on MissingPluginException {
@@ -122,6 +166,7 @@ class LiveActivityService {
     if (!_active) return;
     _active = false;
     _lastSignature = null;
+    _lastRouteShape = null;
     try {
       await _channel.invokeMethod<void>('end');
     } on PlatformException catch (e) {
@@ -175,8 +220,54 @@ class LiveActivityService {
       // maneuver codes itself.
       'maneuverSymbol': _symbolFor(maneuver?.type),
       'offRoute': progress?.offRoute ?? false,
+      // Prędkość dla Dynamic Island: liczba całkowita i nic więcej.
+      //
+      // Wyspa ma kilkadziesiąt punktów szerokości, a „9.8" i „31.4" to różna
+      // liczba znaków — przy każdej zmianie układ przeskakiwał. Bez części
+      // dziesiętnej szerokość zmienia się tylko przy przejściu przez dziesięć
+      // i sto, a i wtedy pole ma z góry zarezerwowane miejsce na dwie cyfry.
+      'speedCompact': _compactSpeed(metrics.speedKmh, metric: metric),
+      // Postęp na trasie w zakresie 0–1: tyle wystarczy, żeby narysować
+      // przejechaną część ścieżki i postawić znacznik zawodnika.
+      'routeProgress': progress == null ? 0.0 : progress.fraction,
+      'remainingDistance': progress == null
+          ? ''
+          : Fmt.distance(progress.remainingMeters, metric: metric),
+      'navigating': progress != null,
     };
   }
+
+  /// Prędkość bez części dziesiętnej, zaokrąglona i ograniczona do trzech cyfr.
+  ///
+  /// Trzy cyfry, bo powyżej 999 km/h nie jedzie żaden rower, a pole o stałej
+  /// szerokości musi mieć górną granicę.
+  static String _compactSpeed(double kmh, {required bool metric}) {
+    final value = metric ? kmh : kmh * 0.621371;
+    if (!value.isFinite || value <= 0) return '0';
+    return math.min(value.round(), 999).toString();
+  }
+
+  /// Czy ta zmiana nie może poczekać na kolejne okno.
+  ///
+  /// Porównujemy z poprzednio wysłanym ładunkiem, a nie z bieżącym stanem
+  /// licznika: znaczenie ma to, co widz ekranu blokady widzi TERAZ, a nie to,
+  /// co dzieje się w aplikacji.
+  bool _isUrgent(Map<String, Object?> payload) {
+    final previous = _lastUrgentFields;
+    final current = _urgentFields(payload);
+    _lastUrgentFields = current;
+    return previous == null || previous != current;
+  }
+
+  static String _urgentFields(Map<String, Object?> payload) => [
+    payload['paused'],
+    payload['pauseLabel'],
+    payload['offRoute'],
+    payload['maneuver'],
+    payload['live'],
+  ].join('|');
+
+  String? _lastUrgentFields;
 
   /// Valhalla maneuver type to an SF Symbol the widget can render directly.
   String _symbolFor(int? type) => switch (type) {

@@ -18,6 +18,13 @@ final class LiveRideActivityBridge: NSObject {
     /// annotation, and Activity<…> only exists on iOS 16.2+.
     private var boxedActivity: Any?
 
+    /// Kolejka aktualizacji. Jedna na aktywność i jedyna droga do niej.
+    ///
+    /// Wcześniej każda aktualizacja szła własnym `Task {}`, a te kończą się
+    /// w dowolnej kolejności — migawka sprzed sekundy potrafiła nadpisać
+    /// świeższą i wyspa pokazywała cofnięty dystans.
+    private var boxedUpdater: Any?
+
     @discardableResult
     static func register(with messenger: FlutterBinaryMessenger) -> LiveRideActivityBridge {
         let bridge = LiveRideActivityBridge()
@@ -35,6 +42,11 @@ final class LiveRideActivityBridge: NSObject {
         case "start":
             start(arguments: call.arguments as? [String: Any] ?? [:], result: result)
         case "update":
+            update(arguments: call.arguments as? [String: Any] ?? [:], result: result)
+        case "route":
+            // Geometria przychodzi osobno i rzadko: przy starcie i przy
+            // przeliczeniu trasy. Kolejka pamięta ją i dokłada do kolejnych
+            // aktualizacji metryk, żeby nie jechała po sieci co sekundę.
             update(arguments: call.arguments as? [String: Any] ?? [:], result: result)
         case "end":
             end(result: result)
@@ -86,6 +98,10 @@ final class LiveRideActivityBridge: NSObject {
                     pushType: nil
                 )
                 boxedActivity = activity
+                boxedUpdater = LiveRideActivityUpdater(
+                    activity: activity,
+                    initial: state
+                )
                 result(nil)
             } catch {
                 result(
@@ -111,16 +127,15 @@ final class LiveRideActivityBridge: NSObject {
     private func update(arguments: [String: Any], result: @escaping FlutterResult) {
         #if canImport(ActivityKit)
         if #available(iOS 16.2, *) {
-            guard let activity = boxedActivity as? Activity<RideActivityAttributes> else {
+            guard let updater = boxedUpdater as? LiveRideActivityUpdater else {
                 result(nil)
                 return
             }
-            let state = RideActivityAttributes.ContentState(payload: arguments)
-            Task {
-                await activity.update(
-                    ActivityContent(state: state, staleDate: staleDate())
-                )
-            }
+            // Zmiany stanu — pauza, manewr, zjazd z trasy — nie czekają na
+            // okno; metryki czekają. Rozstrzyga o tym strona Dart, bo tylko
+            // ona wie, co się właśnie zmieniło względem poprzedniej wysyłki.
+            let urgent = arguments["priority"] as? Bool ?? false
+            Task { await updater.submit(payload: arguments, urgent: urgent) }
             result(nil)
             return
         }
@@ -133,6 +148,7 @@ final class LiveRideActivityBridge: NSObject {
         if #available(iOS 16.2, *) {
             let activity = boxedActivity as? Activity<RideActivityAttributes>
             boxedActivity = nil
+            boxedUpdater = nil
             Task {
                 if let activity = activity {
                     await activity.end(nil, dismissalPolicy: .immediate)

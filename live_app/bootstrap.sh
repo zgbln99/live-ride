@@ -197,6 +197,10 @@ if native.exists():
                 Path('ios/Runner/RideActivityAttributes.swift'))
     shutil.copy(native / 'Runner' / 'LiveRideActivityBridge.swift',
                 Path('ios/Runner/LiveRideActivityBridge.swift'))
+    # Kolejka aktualizacji należy do aplikacji, nie do rozszerzenia: to
+    # aplikacja tworzy aktywność i to ona ją aktualizuje.
+    shutil.copy(native / 'Runner' / 'LiveRideActivityUpdater.swift',
+                Path('ios/Runner/LiveRideActivityUpdater.swift'))
 
 # --- register the bridge in AppDelegate ---------------------------------
 delegate_path = Path('ios/Runner/AppDelegate.swift')

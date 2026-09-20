@@ -1,4 +1,5 @@
 import ActivityKit
+import CoreGraphics
 import Foundation
 
 /// The contract between the Live Ride app and its Lock Screen widget.
@@ -28,7 +29,29 @@ public struct RideActivityAttributes: ActivityAttributes {
         public var maneuver: String
         public var maneuverDistance: String
         public var maneuverSymbol: String
+        public var maneuverStreet: String
         public var offRoute: Bool
+
+        /// Prędkość bez części dziesiętnej, dla Dynamic Island.
+        ///
+        /// Wyspa ma kilkadziesiąt punktów szerokości. „9.8" i „31.4" to różna
+        /// liczba znaków, więc przy każdej zmianie układ przeskakiwał —
+        /// stąd osobne, krótkie pole zamiast skracania `speed` na miejscu.
+        public var speedCompact: String
+
+        /// Kształt trasy w kwadracie jednostkowym: „x,y;x,y" w tysięcznych.
+        ///
+        /// Przychodzi osobnym wywołaniem i tylko przy zmianie trasy; most
+        /// dokłada go do każdej kolejnej aktualizacji, żeby widget nigdy nie
+        /// został bez geometrii.
+        public var routeShape: String
+        public var routeAspect: Double
+
+        /// Postęp na trasie, 0–1. Tyle wystarczy, żeby narysować przejechaną
+        /// część ścieżki i postawić znacznik zawodnika.
+        public var routeProgress: Double
+        public var remainingDistance: String
+        public var navigating: Bool
 
         public init(
             speed: String = "0.0",
@@ -45,6 +68,13 @@ public struct RideActivityAttributes: ActivityAttributes {
             maneuver: String = "",
             maneuverDistance: String = "",
             maneuverSymbol: String = "location.north.line",
+            maneuverStreet: String = "",
+            speedCompact: String = "0",
+            routeShape: String = "",
+            routeAspect: Double = 1,
+            routeProgress: Double = 0,
+            remainingDistance: String = "",
+            navigating: Bool = false,
             offRoute: Bool = false
         ) {
             self.speed = speed
@@ -61,6 +91,13 @@ public struct RideActivityAttributes: ActivityAttributes {
             self.maneuver = maneuver
             self.maneuverDistance = maneuverDistance
             self.maneuverSymbol = maneuverSymbol
+            self.maneuverStreet = maneuverStreet
+            self.speedCompact = speedCompact
+            self.routeShape = routeShape
+            self.routeAspect = routeAspect
+            self.routeProgress = routeProgress
+            self.remainingDistance = remainingDistance
+            self.navigating = navigating
             self.offRoute = offRoute
         }
 
@@ -84,6 +121,13 @@ public struct RideActivityAttributes: ActivityAttributes {
                 maneuverDistance: payload["maneuverDistance"] as? String ?? "",
                 maneuverSymbol: payload["maneuverSymbol"] as? String
                     ?? "location.north.line",
+                maneuverStreet: payload["maneuverStreet"] as? String ?? "",
+                speedCompact: payload["speedCompact"] as? String ?? "0",
+                routeShape: payload["routeShape"] as? String ?? "",
+                routeAspect: payload["routeAspect"] as? Double ?? 1,
+                routeProgress: payload["routeProgress"] as? Double ?? 0,
+                remainingDistance: payload["remainingDistance"] as? String ?? "",
+                navigating: payload["navigating"] as? Bool ?? false,
                 offRoute: payload["offRoute"] as? Bool ?? false
             )
         }
@@ -98,6 +142,42 @@ public struct RideActivityAttributes: ActivityAttributes {
         /// True when there is a turn worth showing instead of the ride stats.
         public var hasManeuver: Bool {
             !maneuver.isEmpty && !maneuverDistance.isEmpty
+        }
+
+        /// Ikona dla zwiniętej wyspy i trybu minimalnego.
+        ///
+        /// Ikona, a nie tekst: symbol ma zawsze tę samą szerokość, więc układ
+        /// nie przeskakuje przy zmianie stanu. Trzy stany, które rowerzysta
+        /// naprawdę rozróżnia rzutem oka — jadę, stoję, zgubiłem trasę.
+        public var compactSymbol: String {
+            if offRoute { return "exclamationmark.triangle.fill" }
+            if paused { return "pause.fill" }
+            return "bicycle"
+        }
+
+        /// Czy da się narysować trasę.
+        ///
+        /// Dwa punkty to jeszcze nie kształt, a pusty prostokąt na ekranie
+        /// blokady wygląda jak usterka. Bez geometrii widget pokazuje zwykły
+        /// ekran przejazdu z metrykami.
+        public var hasRoute: Bool {
+            routeShape.count > 8
+        }
+
+        /// Kształt trasy jako punkty w kwadracie jednostkowym.
+        ///
+        /// Dekodowanie po stronie widgetu, bo tylko on wie, na jaki prostokąt
+        /// je przeskalować — a przesyłanie gotowych pikseli wymagałoby
+        /// znajomości rozmiaru karty po stronie aplikacji.
+        public var routePoints: [CGPoint] {
+            routeShape.split(separator: ";").compactMap { pair in
+                let parts = pair.split(separator: ",")
+                guard parts.count == 2,
+                      let x = Double(parts[0]),
+                      let y = Double(parts[1])
+                else { return nil }
+                return CGPoint(x: x / 1000, y: y / 1000)
+            }
         }
     }
 

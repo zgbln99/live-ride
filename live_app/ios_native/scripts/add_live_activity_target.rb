@@ -88,7 +88,8 @@ group.new_reference('Info.plist')
 runner_group = project.main_group['Runner'] || project.main_group
 [
   ['RideActivityAttributes.swift', File.join(ios_dir, 'Runner', 'RideActivityAttributes.swift')],
-  ['LiveRideActivityBridge.swift', File.join(ios_dir, 'Runner', 'LiveRideActivityBridge.swift')]
+  ['LiveRideActivityBridge.swift', File.join(ios_dir, 'Runner', 'LiveRideActivityBridge.swift')],
+  ['LiveRideActivityUpdater.swift', File.join(ios_dir, 'Runner', 'LiveRideActivityUpdater.swift')]
 ].each do |name, path|
   abort "Missing #{path}" unless File.exist?(path)
   already = runner.source_build_phase.files.any? do |file|

@@ -24,10 +24,12 @@ void main() {
   });
 
   test('Swift reads every key Dart sends', () {
-    final swift = attributes.readAsStringSync();
+    // Dwa kanały, jeden zestaw pól. Metryki jadą co sekundę przez `update`,
+    // geometria trasy osobno i rzadko przez `route` — ale po stronie Swifta
+    // składają się w jeden stan, więc kontrakt jest wspólny.
     final consumed = RegExp(
       r'payload\["(\w+)"\]',
-    ).allMatches(swift).map((match) => match.group(1)!).toSet();
+    ).allMatches(attributes.readAsStringSync()).map((m) => m.group(1)!).toSet();
 
     final sent = LiveActivityService()
         .buildPayload(
@@ -38,6 +40,8 @@ void main() {
         )
         .keys
         .toSet();
+    // Pola wysyłane osobnym wywołaniem `route`.
+    sent.addAll(['routeShape', 'routeAspect']);
 
     expect(
       sent.difference(consumed),
@@ -51,9 +55,58 @@ void main() {
     );
   });
 
+  test('kolejka aktualizacji składa stan, zamiast go nadpisywać', () {
+    // Geometria trasy przychodzi RAZ. Gdyby most budował stan od zera przy
+    // każdej aktualizacji metryk, ekran blokady gubiłby trasę po sekundzie.
+    final updater = File(
+      'ios_native/Runner/LiveRideActivityUpdater.swift',
+    ).readAsStringSync();
+
+    final merged = RegExp(
+      r'payload\["(\w+)"\]',
+    ).allMatches(updater).map((match) => match.group(1)!).toSet();
+
+    final sent = LiveActivityService()
+        .buildPayload(
+          metrics: const RideMetrics(),
+          paused: false,
+          live: false,
+          metric: true,
+        )
+        .keys
+        .toSet()
+      ..addAll(['routeShape', 'routeAspect'])
+      // `priority` steruje kolejką, a nie treścią karty.
+      ..remove('priority');
+
+    expect(
+      sent.difference(merged),
+      isEmpty,
+      reason: 'pole gubione przy składaniu stanu',
+    );
+  });
+
+  test('aktualizacje idą jedną kolejką, nie osobnymi zadaniami', () {
+    // Każde `Task {}` kończy się w dowolnej kolejności, więc migawka sprzed
+    // sekundy potrafiła nadpisać świeższą. Aktor z jednym oczekującym stanem
+    // jest jedynym sposobem, żeby ostatni stan naprawdę był ostatni.
+    final updater = File(
+      'ios_native/Runner/LiveRideActivityUpdater.swift',
+    ).readAsStringSync();
+    expect(updater, contains('actor LiveRideActivityUpdater'));
+    expect(updater, contains('private var pending:'));
+
+    final bridge = File(
+      'ios_native/Runner/LiveRideActivityBridge.swift',
+    ).readAsStringSync();
+    // Most nie ma prawa wołać activity.update() z pominięciem kolejki.
+    expect(bridge, isNot(contains('await activity.update(')));
+    expect(bridge, contains('updater.submit('));
+  });
+
   test('the bridge answers exactly the methods Dart calls', () {
     final swift = bridge.readAsStringSync();
-    for (final method in ['isSupported', 'start', 'update', 'end']) {
+    for (final method in ['isSupported', 'start', 'update', 'route', 'end']) {
       expect(
         swift.contains('case "$method"'),
         isTrue,
@@ -126,7 +179,14 @@ void main() {
         matches(RegExp(r'^[a-z][a-z0-9.]*[a-z0-9]$')),
         reason: 'maneuver $type produced "$symbol"',
       );
-      expect(payload['maneuver'], 'Turn', reason: 'maneuver $type');
+      // Instrukcja jedzie na ekran blokady po polsku — tak samo jak na
+      // ekran jazdy. Router przysłał „Turn", więc składamy własne zdanie.
+      expect(
+        payload['maneuver'],
+        isNot(contains('Turn')),
+        reason: 'maneuver $type',
+      );
+      expect(payload['maneuver'], isNotEmpty, reason: 'maneuver $type');
     }
   });
 
@@ -154,15 +214,40 @@ void main() {
       final bootstrap = File('bootstrap.sh').readAsStringSync();
       expect(bootstrap, contains('add_live_activity_target.rb'));
     });
+
+    test('każdy plik Swift aplikacji trafia do targetu', () {
+      // Plik skopiowany do ios/Runner, ale nieujęty w fazie kompilacji, nie
+      // istnieje dla kompilatora — a błąd wychodzi dopiero w Xcode, na cudzej
+      // maszynie.
+      final bootstrap = File('bootstrap.sh').readAsStringSync();
+      final ruby = File(
+        'ios_native/scripts/add_live_activity_target.rb',
+      ).readAsStringSync();
+
+      for (final file in Directory('ios_native/Runner').listSync()) {
+        if (!file.path.endsWith('.swift')) continue;
+        final name = file.uri.pathSegments.last;
+        expect(bootstrap, contains(name), reason: '\$name nie jest kopiowany');
+        expect(ruby, contains(name), reason: '\$name nie wchodzi do targetu');
+      }
+    });
   });
 
   test('the recorder, not a screen, owns the activity lifecycle', () {
     final recorder = File('lib/services/ride_recorder.dart').readAsStringSync();
     // A Lock Screen that only lives while the ride screen is mounted is the
     // bug this guards against.
-    expect(recorder, contains('liveActivity.start('));
-    expect(recorder, contains('liveActivity.update('));
-    expect(recorder, contains('liveActivity.end()'));
+    // Odporne na łamanie linii: formatter potrafi rozbić wywołanie na
+    // `liveActivity` i `.start(` w osobnych wierszach, a test ma pilnować
+    // właściciela cyklu życia, nie układu tekstu.
+    final packed = recorder.replaceAll(RegExp(r'\s+'), '');
+    for (final method in ['start(', 'update(', 'end()', 'setRoute(']) {
+      expect(
+        packed.contains('liveActivity.$method'),
+        isTrue,
+        reason: 'rejestrator nie woła $method',
+      );
+    }
 
     final screens = Directory('lib/screens')
         .listSync(recursive: true)

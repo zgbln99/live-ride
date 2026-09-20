@@ -6,6 +6,7 @@ import 'package:geolocator/geolocator.dart';
 import '../i18n/strings.dart';
 import '../core/geo.dart';
 import '../core/ride_metrics_accumulator.dart';
+import '../core/route_preview.dart';
 import '../models/navigation_plan.dart';
 import '../models/ride_metrics.dart';
 import '../models/ride_record.dart';
@@ -232,11 +233,16 @@ class RideRecorder extends ChangeNotifier {
     // aktywność startuje razem z przejazdem i żyje tak długo jak on, nawet
     // gdy komputer rowerowy nie jest na wierzchu.
     unawaited(
-      liveActivity.start(
-        riderName: profile.riderName,
-        title: _defaultRideName(_clock.startedAt!),
-        navigating: plan != null,
-      ),
+      liveActivity
+          .start(
+            riderName: profile.riderName,
+            title: _defaultRideName(_clock.startedAt!),
+            navigating: plan != null,
+          )
+          // Kształt trasy idzie raz, zaraz po starcie aktywności, a nie
+          // z metrykami co sekundę. Zmienia się tylko przy przeliczeniu
+          // trasy, a waży kilkaset bajtów budżetu ActivityKit.
+          .then((_) => _publishRouteShape()),
     );
 
     _ticker = Timer.periodic(const Duration(seconds: 1), (_) {
@@ -734,6 +740,16 @@ class RideRecorder extends ChangeNotifier {
       case AutoPauseAction.none:
         break;
     }
+  }
+
+  /// Wysyła kształt trasy na ekran blokady.
+  ///
+  /// Wołane przy starcie i po każdej zmianie planu. Bez trasy wysyła pusty
+  /// kształt, żeby widget wiedział, że ma pokazać zwykły ekran przejazdu
+  /// zamiast pustego prostokąta po poprzedniej trasie.
+  Future<void> _publishRouteShape() async {
+    final shape = _plan?.shape ?? const <GeoPoint>[];
+    await liveActivity.setRoute(RoutePreview.fromRoute(shape));
   }
 
   /// Karmi trening stanem jazdy raz na sekundę.
