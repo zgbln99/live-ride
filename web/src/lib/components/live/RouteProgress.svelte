@@ -8,13 +8,6 @@
         type RouteProgress,
     } from "$lib/live/live_viewer";
 
-    /**
-     * Ile trasy za nim, ile przed nim, kiedy dojedzie.
-     *
-     * Cała sekcja pojawia się wyłącznie przy jeździe z zaplanowaną trasą.
-     * Przy wolnej jeździe nie ma mety, więc nie ma też postępu — pasek
-     * postępu do celu, którego nikt nie wyznaczył, byłby wymysłem.
-     */
     let {
         routeName,
         totalMeters,
@@ -33,23 +26,26 @@
 </script>
 
 <Section title="Trasa" aside={fmtDistance(totalMeters)}>
-    <div class="lr-panel wrap">
-        {#if routeName}
-            <p class="name">{routeName}</p>
-        {/if}
-
-        {#if progress}
-            <div class="bar">
-                <div class="lr-track">
-                    <span style="width: {percent}%"></span>
-                </div>
-                <span class="percent">{percent}%</span>
-            </div>
-        {/if}
+    <div class="progress-head">
+        <div class="copy">
+            {#if routeName}<p class="name">{routeName}</p>{/if}
+            {#if progress}
+                <p class="summary">
+                    {fmtDistance(progress.alongMeters)} przejechane · {fmtDistance(
+                        progress.remainingMeters,
+                    )} zostało
+                </p>
+            {/if}
+        </div>
+        {#if progress}<span class="percent">{percent}%</span>{/if}
     </div>
 
     {#if progress}
-        <div class="lr-grid">
+        <div class="lr-track" aria-label={`Postęp trasy ${percent}%`}>
+            <span style="width: {percent}%"></span>
+        </div>
+
+        <div class="lr-grid stats">
             <Field label="Przejechano" value={fmtDistance(progress.alongMeters)} />
             <Field label="Pozostało" value={fmtDistance(progress.remainingMeters)} />
             <Field
@@ -73,46 +69,55 @@
 </Section>
 
 <style>
-    .wrap {
-        padding: 12px 14px;
+    .progress-head {
         display: flex;
-        flex-direction: column;
-        gap: 10px;
+        align-items: flex-end;
+        justify-content: space-between;
+        gap: 16px;
+        padding-top: 4px;
+    }
+
+    .copy {
+        min-width: 0;
     }
 
     .name {
         margin: 0;
         font-size: 15px;
-        font-weight: 800;
+        font-weight: 700;
+        letter-spacing: -0.02em;
         color: var(--lr-ink);
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
     }
 
-    .bar {
-        display: flex;
-        align-items: center;
-        gap: 10px;
-    }
-
-    .bar .lr-track {
-        flex: 1;
+    .summary {
+        margin: 4px 0 0;
+        font-size: 11.5px;
+        color: var(--lr-muted);
     }
 
     .percent {
-        font-size: 13px;
-        font-weight: 900;
+        flex: none;
+        font-size: 25px;
+        font-weight: 720;
+        letter-spacing: -0.045em;
+        line-height: 1;
         color: var(--lr-ink);
-        min-width: 38px;
-        text-align: right;
+    }
+
+    .stats {
+        margin-top: 2px;
     }
 
     .off {
         margin: 0;
-        padding: 9px 12px;
-        border: 1px solid rgba(224, 43, 32, 0.4);
-        background: rgba(224, 43, 32, 0.08);
-        border-radius: var(--lr-radius);
-        font-size: 12.5px;
-        font-weight: 700;
-        color: #a5180f;
+        padding: 9px 0;
+        border-top: 1px solid color-mix(in srgb, var(--lr-alert) 35%, var(--lr-line));
+        border-bottom: 1px solid color-mix(in srgb, var(--lr-alert) 35%, var(--lr-line));
+        font-size: 12px;
+        font-weight: 650;
+        color: var(--lr-alert);
     }
 </style>
