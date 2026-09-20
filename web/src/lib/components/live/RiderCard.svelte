@@ -1,15 +1,7 @@
 <script lang="ts">
-    import Avatar from "./Avatar.svelte";
     import StatusBadge from "./StatusBadge.svelte";
     import { ago, type StatusTone } from "$lib/live/live_viewer";
 
-    /**
-     * Kto jedzie i czy w ogóle jedzie — pierwsze pytanie obserwującego.
-     *
-     * Karta istnieje od chwili udostępnienia linku, także zanim przyjdzie
-     * pierwsza pozycja. Wtedy zamiast „ostatnia aktualizacja" pisze wprost,
-     * że czekamy na GPS, żeby nikt nie odczytał braku znacznika jako awarii.
-     */
     let {
         name,
         statusLabel,
@@ -28,58 +20,60 @@
 
     const detail = $derived(
         statusTone === "waiting"
-            ? "Pozycja pojawi się za chwilę."
+            ? "Czekamy na pierwszą pozycję GPS"
             : hasFix
-              ? `Ostatnia aktualizacja: ${ago(ageSeconds)}`
-              : "Brak pozycji.",
+              ? `Aktualizacja ${ago(ageSeconds)}`
+              : "Brak pozycji GPS",
     );
 </script>
 
-<div class="lr-panel card">
-    <Avatar {name} size={44} {colour} />
+<section class="rider" style="--rider-colour: {colour}">
+    <span class="marker" aria-hidden="true"></span>
     <div class="who">
+        <p class="eyebrow">Obserwujesz</p>
         <p class="name">{name}</p>
         <p class="detail">{detail}</p>
     </div>
-    <StatusBadge label={statusLabel} tone={statusTone} />
-</div>
+    <div class="state">
+        <StatusBadge label={statusLabel} tone={statusTone} />
+    </div>
+</section>
 
 <style>
-    .card {
+    .rider {
+        position: relative;
         display: grid;
-        grid-template-columns: auto minmax(0, 1fr);
+        grid-template-columns: 3px minmax(0, 1fr) auto;
+        gap: 0 13px;
         align-items: center;
-        gap: 6px 12px;
-        padding: 12px 14px;
+        padding: 4px 0 14px;
+        border-bottom: 1px solid var(--lr-line);
+    }
+
+    .marker {
+        align-self: stretch;
+        min-height: 48px;
+        background: var(--rider-colour, var(--lr-accent));
     }
 
     .who {
         min-width: 0;
     }
 
-    /* Przy długiej etykiecie stanu („OCZEKIWANIE NA GPS") plakietka nie
-       mieści się obok nazwy i ściskałaby opis do słupka po jednym słowie.
-       Wtedy schodzi pod spód, na pełną szerokość. */
-    .card > :global(.lr-status) {
-        grid-column: 2;
-        justify-self: start;
-    }
-
-    @media (min-width: 380px) {
-        .card {
-            grid-template-columns: auto minmax(0, 1fr) auto;
-        }
-
-        .card > :global(.lr-status) {
-            grid-column: 3;
-        }
+    .eyebrow {
+        margin: 0 0 3px;
+        font-size: 10px;
+        font-weight: 650;
+        letter-spacing: 0.01em;
+        color: var(--lr-muted);
     }
 
     .name {
         margin: 0;
-        font-size: 17px;
-        font-weight: 800;
-        letter-spacing: -0.2px;
+        font-size: 22px;
+        font-weight: 760;
+        letter-spacing: -0.035em;
+        line-height: 1.05;
         color: var(--lr-ink);
         overflow: hidden;
         text-overflow: ellipsis;
@@ -87,8 +81,24 @@
     }
 
     .detail {
-        margin: 2px 0 0;
-        font-size: 12px;
+        margin: 5px 0 0;
+        font-size: 11.5px;
         color: var(--lr-muted);
+    }
+
+    .state {
+        align-self: start;
+        padding-top: 2px;
+    }
+
+    @media (max-width: 380px) {
+        .rider {
+            grid-template-columns: 3px minmax(0, 1fr);
+        }
+
+        .state {
+            grid-column: 2;
+            margin-top: 8px;
+        }
     }
 </style>
