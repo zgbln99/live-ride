@@ -1,59 +1,46 @@
 /*
- * Tokeny Live Ride dla przeglądarki.
+ * Live Ride / public viewer
  *
- * Jeden do jednego z live_app/lib/core/lr_theme.dart. To nie jest „inspiracja
- * aplikacją" — znajomy, który dostał link, ma zobaczyć tę samą aplikację
- * w widoku dla obserwującego, a nie osobny produkt o podobnych kolorach.
- *
- * Reguły, które z tego wynikają i których nie wolno tu złamać:
- *   – jasno; ciemny jest tylko nagłówek i mapa nocą,
- *   – tryb ciemny jest przyciemnieniem tej samej strony, a nie drugim
- *     motywem: te same kreski, ten sam cyjan, te same promienie. Neon na
- *     czarnym tle wygląda jak inna aplikacja i przy jeździe nocą męczy
- *     bardziej niż zwykła szarość,
- *   – włosowe kreski zamiast cieni,
- *   – promień 6 px, nigdy 24,
- *   – cyjan wyłącznie jako akcent, nigdy jako tło powierzchni,
- *   – liczby tabelaryczne wszędzie, gdzie wartość zmienia się w trakcie
- *     czytania — inaczej cały wiersz drga przy każdej aktualizacji.
+ * Ten widok ma przypominać narzędzie do śledzenia przejazdu, nie dashboard
+ * SaaS. Dlatego: płaskie powierzchnie, cienkie separatory, mało promieni,
+ * żadnych gradientów ani dekoracyjnych cieni. Kolor służy stanowi i trasie.
  */
 
 .lr {
-    --lr-ink: #0b1116;
-    --lr-ink-soft: #47555f;
-    --lr-muted: #7c8a95;
-    --lr-line: #d7dee4;
-    --lr-line-strong: #b4c0c9;
+    --lr-ink: #101418;
+    --lr-ink-soft: #4f5963;
+    --lr-muted: #7f8992;
+    --lr-line: #e1e5e8;
+    --lr-line-strong: #c6cdd2;
     --lr-surface: #ffffff;
-    --lr-canvas: #eff2f5;
-    --lr-panel: #f7f9fb;
+    --lr-canvas: #f3f4f5;
+    --lr-panel: #f8f9fa;
 
-    --lr-accent: #00bfd8;
-    --lr-accent-deep: #0090a8;
-    --lr-alert: #e02b20;
-    --lr-go: #00a868;
+    --lr-accent: #08a8b8;
+    --lr-accent-deep: #087f8c;
+    --lr-alert: #d92d20;
+    --lr-go: #0b9f62;
 
-    --lr-night: #07101a;
-    --lr-night-panel: #0e1a24;
-    --lr-night-line: #1d2c38;
+    --lr-night: #0b0f13;
+    --lr-night-panel: #121820;
+    --lr-night-line: #25303a;
 
-    --lr-radius: 6px;
-
-    /* Wysokość mapy: na telefonie ma zostawić miejsce na pierwsze liczby,
-       ale nie schodzić poniżej czytelnego kadru. */
-    --lr-map-height: 42vh;
+    --lr-radius: 3px;
+    --lr-map-height: 44vh;
 
     font-family:
-        "Inter",
+        Inter,
+        ui-sans-serif,
         system-ui,
         -apple-system,
+        BlinkMacSystemFont,
         "Segoe UI",
-        Roboto,
         sans-serif;
     color: var(--lr-ink);
     background: var(--lr-canvas);
-    font-variant-numeric: tabular-nums slashed-zero;
+    font-variant-numeric: tabular-nums;
     -webkit-text-size-adjust: 100%;
+    text-rendering: optimizeLegibility;
 }
 
 .lr *,
@@ -65,55 +52,61 @@
 /* ------------------------------------------------------------- typografia */
 
 .lr-label {
-    font-size: 10.5px;
-    font-weight: 800;
-    letter-spacing: 1.1px;
-    line-height: 1;
-    color: var(--lr-ink-soft);
-    text-transform: uppercase;
+    font-size: 11px;
+    font-weight: 650;
+    letter-spacing: 0.01em;
+    line-height: 1.15;
+    color: var(--lr-muted);
+    text-transform: none;
 }
 
 .lr-value {
-    font-weight: 800;
-    letter-spacing: -0.03em;
-    line-height: 0.94;
+    font-weight: 740;
+    letter-spacing: -0.035em;
+    line-height: 0.98;
     color: var(--lr-ink);
-    font-variant-numeric: tabular-nums slashed-zero;
+    font-variant-numeric: tabular-nums;
 }
 
 .lr-unit {
-    font-size: 12px;
-    font-weight: 700;
-    color: var(--lr-ink-soft);
+    font-size: 11px;
+    font-weight: 600;
+    color: var(--lr-muted);
 }
 
 .lr-body {
     font-size: 13px;
-    line-height: 1.45;
+    line-height: 1.5;
     color: var(--lr-ink-soft);
 }
 
 .lr-section-title {
-    font-size: 11px;
-    font-weight: 900;
-    letter-spacing: 1.4px;
-    color: var(--lr-ink-soft);
-    text-transform: uppercase;
+    font-size: 12.5px;
+    font-weight: 720;
+    letter-spacing: -0.01em;
+    color: var(--lr-ink);
+    text-transform: none;
     margin: 0;
 }
 
 /* ------------------------------------------------------------ powierzchnie */
 
+/*
+ * Najważniejsza zmiana względem starego widoku: sekcje nie są już osobnymi
+ * „kartami”. Kolejne porcje informacji tworzą jedną kartę przejazdu i są
+ * rozdzielane kreską. To usuwa efekt stosu wygenerowanych kafelków.
+ */
 .lr-panel {
-    background: var(--lr-surface);
-    border: 1px solid var(--lr-line);
-    border-radius: var(--lr-radius);
+    background: transparent;
+    border: 0;
+    border-top: 1px solid var(--lr-line);
+    border-radius: 0;
 }
 
 .lr-section {
     display: flex;
     flex-direction: column;
-    gap: 8px;
+    gap: 9px;
 }
 
 .lr-section-head {
@@ -121,7 +114,7 @@
     align-items: baseline;
     justify-content: space-between;
     gap: 12px;
-    padding: 0 2px;
+    padding: 0;
 }
 
 .lr-divider {
@@ -129,18 +122,21 @@
     background: var(--lr-line);
 }
 
-/* --------------------------------------------------------------- plakietki */
+/* --------------------------------------------------------------- statusy */
 
+/* Status to informacja, nie „pill”. */
 .lr-status {
     display: inline-flex;
     align-items: center;
     gap: 6px;
-    padding: 3px 8px;
-    border-radius: var(--lr-radius);
-    border: 1px solid var(--lr-line-strong);
+    padding: 0;
+    border: 0;
+    border-radius: 0;
+    background: transparent;
     font-size: 10.5px;
-    font-weight: 900;
-    letter-spacing: 1px;
+    font-weight: 720;
+    letter-spacing: 0.035em;
+    line-height: 1.2;
     white-space: nowrap;
 }
 
@@ -153,39 +149,32 @@
 }
 
 .lr-status-live {
-    color: #0a7a46;
-    border-color: rgba(0, 168, 104, 0.45);
-    background: rgba(0, 168, 104, 0.1);
+    color: #087749;
 }
+
 .lr-status-live .dot {
     background: var(--lr-go);
-    animation: lr-pulse 2s ease-in-out infinite;
+    animation: lr-pulse 2.2s ease-in-out infinite;
 }
 
 .lr-status-idle {
-    color: #8a5a00;
-    border-color: rgba(200, 140, 0, 0.4);
-    background: rgba(242, 192, 55, 0.16);
+    color: #8a6509;
 }
 
 .lr-status-waiting {
     color: var(--lr-accent-deep);
-    border-color: rgba(0, 144, 168, 0.4);
-    background: rgba(0, 191, 216, 0.12);
 }
+
 .lr-status-waiting .dot {
-    animation: lr-pulse 1.4s ease-in-out infinite;
+    animation: lr-pulse 1.6s ease-in-out infinite;
 }
 
 .lr-status-offline {
     color: var(--lr-muted);
-    background: var(--lr-panel);
 }
 
 .lr-status-ended {
-    color: var(--lr-ink);
-    border-color: var(--lr-line-strong);
-    background: var(--lr-panel);
+    color: var(--lr-ink-soft);
 }
 
 @keyframes lr-pulse {
@@ -194,7 +183,7 @@
         opacity: 1;
     }
     50% {
-        opacity: 0.35;
+        opacity: 0.3;
     }
 }
 
@@ -204,16 +193,18 @@
     }
 }
 
-/* ------------------------------------------------------------------ siatka */
+/* ------------------------------------------------------------------ dane */
 
 .lr-grid {
     display: grid;
     grid-template-columns: repeat(2, minmax(0, 1fr));
-    background: var(--lr-line);
-    gap: 1px;
-    border: 1px solid var(--lr-line);
-    border-radius: var(--lr-radius);
-    overflow: hidden;
+    gap: 0;
+    background: transparent;
+    border: 0;
+    border-top: 1px solid var(--lr-line);
+    border-bottom: 1px solid var(--lr-line);
+    border-radius: 0;
+    overflow: visible;
 }
 
 .lr-grid-4 {
@@ -221,19 +212,36 @@
 }
 
 .lr-cell {
-    background: var(--lr-surface);
-    padding: 11px 12px 12px;
+    background: transparent;
+    padding: 12px 10px 13px;
     display: flex;
     flex-direction: column;
     gap: 7px;
     min-width: 0;
+    border-right: 1px solid var(--lr-line);
+    border-bottom: 1px solid var(--lr-line);
 }
 
-/* Nieparzysta liczba pól zostawiałaby w rogu szarą dziurę wyglądającą jak
-   panel, z którego coś zniknęło. Ostatnie pole zajmuje wtedy całą szerokość
-   — tak samo jak pulpit licznika układa pola pod liczbę, którą ma. */
+.lr-cell:nth-child(2n) {
+    border-right: 0;
+}
+
+.lr-cell:nth-last-child(-n + 2) {
+    border-bottom: 0;
+}
+
+.lr-grid-4 .lr-cell {
+    border-right: 1px solid var(--lr-line);
+    border-bottom: 0;
+}
+
+.lr-grid-4 .lr-cell:last-child {
+    border-right: 0;
+}
+
 .lr-cell:last-child:nth-child(odd) {
     grid-column: 1 / -1;
+    border-right: 0;
 }
 
 .lr-cell-value {
@@ -241,8 +249,6 @@
     align-items: baseline;
     gap: 4px;
     min-width: 0;
-    /* Długa wartość („1 godz. 5 min") ma się zmieścić, a nie wyjść poza
-       kreskę: zawijanie w obrębie komórki, nigdy na sąsiada. */
     flex-wrap: wrap;
     row-gap: 2px;
 }
@@ -261,15 +267,16 @@
     border-radius: var(--lr-radius);
     font: inherit;
     font-size: 12px;
-    font-weight: 800;
-    letter-spacing: 0.4px;
-    padding: 8px 12px;
+    font-weight: 650;
+    letter-spacing: 0;
+    padding: 8px 11px;
     cursor: pointer;
     min-height: 36px;
+    box-shadow: none;
 }
 
 .lr-button:hover {
-    border-color: var(--lr-accent-deep);
+    border-color: var(--lr-ink-soft);
 }
 
 .lr-button[aria-pressed="true"] {
@@ -281,8 +288,8 @@
 /* ------------------------------------------------------------------ paski */
 
 .lr-track {
-    height: 6px;
-    border-radius: 3px;
+    height: 4px;
+    border-radius: 0;
     background: var(--lr-line);
     overflow: hidden;
 }
@@ -291,20 +298,10 @@
     display: block;
     height: 100%;
     background: var(--lr-accent-deep);
-    border-radius: 3px;
+    border-radius: 0;
 }
 
-
-/* ------------------------------------------------------------- tryb ciemny
- *
- * Domyślnie idziemy za systemem. Wybór widza (przycisk w nagłówku) ustawia
- * `data-lr-theme` na elemencie <html> i wtedy wygrywa nad systemem —
- * dlatego reguła systemowa jest zawężona do „nie wybrano jasnego".
- *
- * To jest przyciemnienie, nie drugi motyw: akcent, promienie, grubości kresek
- * i typografia zostają bez zmian. Zmieniają się wyłącznie powierzchnie
- * i kontrast, bo tylko o to chodzi komuś, kto ogląda jazdę po zmroku.
- */
+/* ------------------------------------------------------------- tryb ciemny */
 
 :root:not([data-lr-theme="light"]) .lr {
     color-scheme: dark;
@@ -312,29 +309,29 @@
 
 @media (prefers-color-scheme: dark) {
     :root:not([data-lr-theme="light"]) .lr {
-        --lr-ink: #e8eef3;
-        --lr-ink-soft: #a5b4bf;
-        --lr-muted: #7b8a95;
-        --lr-line: #1d2c38;
-        --lr-line-strong: #2b3e4d;
-        --lr-surface: #0e1a24;
-        --lr-canvas: #07101a;
-        --lr-panel: #0b1620;
-        --lr-accent-deep: #2ad2e8;
+        --lr-ink: #edf1f4;
+        --lr-ink-soft: #a9b1b8;
+        --lr-muted: #7e8993;
+        --lr-line: #273039;
+        --lr-line-strong: #394550;
+        --lr-surface: #11171d;
+        --lr-canvas: #0b0f13;
+        --lr-panel: #151c23;
+        --lr-accent-deep: #45bec9;
     }
 }
 
 :root[data-lr-theme="dark"] .lr {
     color-scheme: dark;
-    --lr-ink: #e8eef3;
-    --lr-ink-soft: #a5b4bf;
-    --lr-muted: #7b8a95;
-    --lr-line: #1d2c38;
-    --lr-line-strong: #2b3e4d;
-    --lr-surface: #0e1a24;
-    --lr-canvas: #07101a;
-    --lr-panel: #0b1620;
-    --lr-accent-deep: #2ad2e8;
+    --lr-ink: #edf1f4;
+    --lr-ink-soft: #a9b1b8;
+    --lr-muted: #7e8993;
+    --lr-line: #273039;
+    --lr-line-strong: #394550;
+    --lr-surface: #11171d;
+    --lr-canvas: #0b0f13;
+    --lr-panel: #151c23;
+    --lr-accent-deep: #45bec9;
 }
 
 :root[data-lr-theme="light"] .lr {
