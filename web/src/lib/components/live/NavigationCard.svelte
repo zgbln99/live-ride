@@ -8,16 +8,6 @@
         type RiderNav,
     } from "$lib/live/live_viewer";
 
-    /**
-     * Manewr, który zawodnik ma przed sobą — ten sam, który widzi on sam.
-     *
-     * Instrukcja przychodzi po polsku z telefonu i nie jest tu tłumaczona ani
-     * składana od nowa: dwie warstwy nawigacji rozjechałyby się na pierwszym
-     * rondzie, a widz nie ma jak sprawdzić, która kłamie.
-     *
-     * Zjechanie z trasy przykrywa manewr, bo manewr policzony na trasie,
-     * z której ktoś zjechał, dotyczy skrzyżowania, którego ten ktoś nie widzi.
-     */
     let {
         nav,
         etaAt = null,
@@ -29,7 +19,7 @@
     const instruction = $derived(nav.instruction?.trim() ?? "");
 </script>
 
-<section class="lr-section">
+<section class="lr-section navigation">
     <header class="lr-section-head">
         <h2 class="lr-section-title">Nawigacja</h2>
         {#if nav.remaining_m !== undefined}
@@ -38,7 +28,7 @@
     </header>
 
     {#if offRoute}
-        <div class="lr-panel card off">
+        <div class="maneuver off">
             <span class="arrow">!</span>
             <div class="text">
                 <span class="instruction">Poza trasą</span>
@@ -50,7 +40,7 @@
             </div>
         </div>
     {:else if instruction}
-        <div class="lr-panel card">
+        <div class="maneuver">
             <span class="arrow">{arrow}</span>
             <div class="text">
                 {#if when}<span class="when">{when}</span>{/if}
@@ -61,79 +51,83 @@
     {/if}
 
     {#if nav.eta_seconds !== undefined || etaAt}
-        <p class="eta">
+        <div class="eta">
             {#if nav.eta_seconds !== undefined}
-                Pozostały czas według trasy: {durationCoarse(nav.eta_seconds)}
+                <span>{durationCoarse(nav.eta_seconds)} według trasy</span>
             {/if}
             {#if etaAt}
-                <span class="at">na mecie ok. {clock(etaAt.toISOString())}</span>
+                <span>meta ok. {clock(etaAt.toISOString())}</span>
             {/if}
-        </p>
+        </div>
     {/if}
 </section>
 
 <style>
+    .navigation {
+        gap: 8px;
+    }
+
     .aside {
-        font-size: 11.5px;
-        font-weight: 700;
+        font-size: 11px;
+        font-weight: 600;
         color: var(--lr-muted);
     }
 
-    .card {
-        display: flex;
+    .maneuver {
+        display: grid;
+        grid-template-columns: 48px minmax(0, 1fr);
         align-items: center;
-        gap: 14px;
-        padding: 14px;
+        gap: 12px;
+        padding: 13px 0;
+        border-top: 1px solid var(--lr-line);
+        border-bottom: 1px solid var(--lr-line);
     }
 
     .arrow {
-        font-size: 34px;
+        font-size: 36px;
         line-height: 1;
-        font-weight: 700;
+        font-weight: 620;
         color: var(--lr-accent-deep);
-        min-width: 40px;
         text-align: center;
     }
 
-    .off .arrow {
+    .off .arrow,
+    .off .instruction {
         color: var(--lr-alert);
     }
 
     .text {
         display: flex;
         flex-direction: column;
-        gap: 2px;
+        gap: 3px;
         min-width: 0;
     }
 
     .when {
-        font-size: 12px;
-        font-weight: 800;
-        letter-spacing: 0.06em;
-        text-transform: uppercase;
+        font-size: 11px;
+        font-weight: 640;
         color: var(--lr-muted);
     }
 
     .instruction {
-        font-size: 17px;
-        font-weight: 800;
-        line-height: 1.25;
+        font-size: 18px;
+        font-weight: 710;
+        letter-spacing: -0.025em;
+        line-height: 1.2;
         color: var(--lr-ink);
     }
 
     .street {
-        font-size: 13px;
-        font-weight: 600;
+        font-size: 12.5px;
+        font-weight: 500;
         color: var(--lr-ink-soft);
     }
 
     .eta {
-        margin: 8px 0 0;
-        font-size: 12px;
+        display: flex;
+        flex-wrap: wrap;
+        gap: 5px 14px;
+        font-size: 11.5px;
         color: var(--lr-muted);
-    }
-
-    .at {
-        margin-left: 6px;
     }
 </style>
