@@ -78,6 +78,41 @@ class LrWordmark extends StatelessWidget {
   );
 }
 
+/// Zamknięcie arkusza — dokładnie jednego.
+///
+/// Arkusz otwarty w trakcie jazdy jest ekranem postawionym NA liczniku, a nie
+/// zamiast niego, więc musi mieć wyjście widoczne od pierwszej sekundy.
+/// Zjechanie palcem w dół nie wystarcza: na iPhonie w rękawiczkach trafia się
+/// w nie raz na trzy próby, a na Androidzie nie jest oczywiste, że w ogóle
+/// istnieje.
+///
+/// Warunek `isCurrent` nie jest ostrożnością na zapas. Bez niego dotknięcie
+/// tego przycisku w chwili, gdy na wierzchu stoi zagnieżdżony arkusz
+/// (udostępnianie, grupa, diagnostyka), zdejmowałoby najpierw tamten,
+/// a potem ten — czyli DWA ekrany naraz, z powrotem do licznika, którego
+/// nikt nie prosił.
+class LrSheetClose extends StatelessWidget {
+  const LrSheetClose({super.key, this.onClose});
+
+  /// Wołane zamiast domyślnego zamknięcia, gdy arkusz ma coś po sobie
+  /// posprzątać.
+  final VoidCallback? onClose;
+
+  static void popOnce(BuildContext context) {
+    final route = ModalRoute.of(context);
+    if (route == null || !route.isCurrent) return;
+    Navigator.of(context).pop();
+  }
+
+  @override
+  Widget build(BuildContext context) => IconButton(
+    tooltip: S.close,
+    icon: const Icon(Icons.close, size: 22),
+    visualDensity: VisualDensity.compact,
+    onPressed: onClose ?? () => popOnce(context),
+  );
+}
+
 /// A flat instrument panel: white, hairline border, minimal radius.
 class LrPanel extends StatelessWidget {
   const LrPanel({

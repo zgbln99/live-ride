@@ -676,7 +676,15 @@ class _RideComputerScreenState extends State<RideComputerScreen> {
   }
 
   Future<void> _openLiveSheet() async {
-    await _holdChrome(() => showLiveSheet(context, _services));
+    // Źródło jedzie jawnie: arkusz ma wiedzieć, że pod nim trwa jazda,
+    // i nazwać wyjście „wróć do nawigacji", a nie „gotowe".
+    await _holdChrome(
+      () => showLiveSheet(
+        context,
+        _services,
+        source: LiveSheetSource.rideComputer,
+      ),
+    );
     if (mounted) setState(() {});
   }
 

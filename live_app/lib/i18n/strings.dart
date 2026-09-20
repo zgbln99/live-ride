@@ -693,6 +693,16 @@ class Strings {
   String get joinCode => 'KOD DOŁĄCZENIA';
   String get spectatorLink => 'LINK DLA WIDZÓW';
   String get sharedInLive => 'UDOSTĘPNIANE W LIVE';
+
+  // --- wyjście z arkusza LIVE --------------------------------------------
+  //
+  // Arkusz otwarty w trakcie jazdy jest ekranem ustawień POSTAWIONYM NA
+  // liczniku — nie zamiast niego. Wyjście musi być widoczne od pierwszej
+  // sekundy i nazwane tak, żeby nikt nie szukał go w rękawiczkach.
+  String get backToNavigation => 'WRÓĆ DO NAWIGACJI';
+  String get doneAction => 'GOTOWE';
+  String get broadcastingActive => 'TRANSMISJA AKTYWNA';
+  String get broadcastingOff => 'TRANSMISJA WYŁĄCZONA';
   String get shareEverything => 'UDOSTĘPNIJ WSZYSTKO';
   String get noHeartRateSensor => 'Brak podłączonego pomiaru tętna.';
   String get noPowerSensor => 'Brak podłączonego miernika mocy.';

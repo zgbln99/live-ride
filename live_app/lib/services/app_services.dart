@@ -1,5 +1,6 @@
 import 'dart:async';
 
+import 'package:bluetooth_low_energy/bluetooth_low_energy.dart';
 import 'package:flutter/widgets.dart';
 
 import '../core/api_client.dart';
@@ -81,13 +82,27 @@ class AppServices {
     required this.recorder,
   });
 
-  factory AppServices.create(ApiClient api, {LiveRideDatabase? database}) {
+  /// [bluetooth] podmienia radio BLE.
+  ///
+  /// Istnieje wyłącznie dla testów: `CentralManager()` sięga do kanału
+  /// platformy i w teście widgetowym rzuca wyjątkiem, zanim cokolwiek
+  /// zdąży się narysować. Produkcja nigdy go nie podaje i dostaje prawdziwe
+  /// radio, tak jak dotąd.
+  factory AppServices.create(
+    ApiClient api, {
+    LiveRideDatabase? database,
+    CentralManager? bluetooth,
+  }) {
     final db = database ?? LiveRideDatabase();
     final gpx = GpxService();
     final profile = ProfileService();
-    final heartRate = HeartRateService();
+    final heartRate = HeartRateService(central: bluetooth);
     final settings = SettingsDao(db);
-    final sensors = SensorHub(heartRate: heartRate, settings: settings);
+    final sensors = SensorHub(
+      central: bluetooth,
+      heartRate: heartRate,
+      settings: settings,
+    );
     final alerts = AlertController(settings: settings);
     final garage = GarageService(BikeDao(db));
     final race = RaceModeController(settings: settings);

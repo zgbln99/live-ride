@@ -70,9 +70,18 @@ class _GroupRideSheetState extends State<_GroupRideSheet> {
           controller: widget.scrollController,
           padding: const EdgeInsets.fromLTRB(20, 0, 20, 28),
           children: [
-            LrSectionHeader(
-              title: S.whatOthersSee,
-              padding: const EdgeInsets.only(bottom: 6),
+            Row(
+              children: [
+                Expanded(
+                  child: LrSectionHeader(
+                    title: S.whatOthersSee,
+                    padding: const EdgeInsets.only(bottom: 6),
+                  ),
+                ),
+                // Zamyka wyłącznie ten arkusz: pod spodem zostaje LIVE,
+                // a pod nim licznik.
+                const LrSheetClose(),
+              ],
             ),
             Text(
               S.privacyExplainer,

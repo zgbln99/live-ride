@@ -12,23 +12,45 @@ import '../widgets/share_sheet.dart';
 import 'group_ride_sheet.dart';
 import 'live_diagnostics_sheet.dart';
 
+/// Skąd otwarto arkusz LIVE.
+///
+/// Przekazywane jawnie, a nie zgadywane ze stosu nawigacji. Stos mówi tylko,
+/// co jest pod spodem — nie mówi, czy zawodnik JEDZIE. Te dwie rzeczy rozeszły
+/// się dokładnie tam, gdzie boli: arkusz otwarty z licznika w trakcie
+/// nawigacji wyglądał identycznie jak otwarty z zakładki LIVE na postoju,
+/// a wyjście z niego znaczyło w obu wypadkach co innego.
+enum LiveSheetSource {
+  /// Otwarty z ekranu jazdy. Pod spodem trwa przejazd i nawigacja.
+  rideComputer,
+
+  /// Otwarty z zakładki LIVE. Nie ma do czego wracać poza listą.
+  liveTab,
+}
+
 /// Start, join, share or end a LIVE session.
 ///
 /// The same sheet is used from the ride computer and from the LIVE tab so the
 /// controls never disagree with each other.
-Future<void> showLiveSheet(BuildContext context, AppServices services) {
+Future<void> showLiveSheet(
+  BuildContext context,
+  AppServices services, {
+  LiveSheetSource source = LiveSheetSource.liveTab,
+}) {
   return showModalBottomSheet<void>(
     context: context,
     showDragHandle: true,
+    // Bez tego arkusz kończy się na połowie ekranu, a prywatność, ustawienia
+    // linku i diagnostyka dawno się tam nie mieszczą.
     isScrollControlled: true,
-    builder: (sheetContext) => _LiveSheet(services: services),
+    builder: (sheetContext) => _LiveSheet(services: services, source: source),
   );
 }
 
 class _LiveSheet extends StatefulWidget {
-  const _LiveSheet({required this.services});
+  const _LiveSheet({required this.services, required this.source});
 
   final AppServices services;
+  final LiveSheetSource source;
 
   @override
   State<_LiveSheet> createState() => _LiveSheetState();
@@ -37,34 +59,104 @@ class _LiveSheet extends StatefulWidget {
 class _LiveSheetState extends State<_LiveSheet> {
   bool _busy = false;
 
+  /// Zamyka WYŁĄCZNIE ten arkusz.
+  ///
+  /// Nie dotyka ani transmisji, ani licznika, ani nawigacji, ani sensorów —
+  /// to jest wyjście z ekranu ustawień, a nie z jazdy.
+  void _close() => LrSheetClose.popOnce(context);
+
   @override
   Widget build(BuildContext context) {
     final live = widget.services.live;
     final session = live.session;
 
     return SafeArea(
-      child: SingleChildScrollView(
-        padding: const EdgeInsets.fromLTRB(20, 0, 20, 24),
+      top: false,
+      child: ConstrainedBox(
+        // Arkusz rośnie z treścią, ale nie ponad ekran: sam nagłówek ma
+        // zostać widoczny nawet wtedy, gdy treść jest dłuższa niż telefon.
+        constraints: BoxConstraints(
+          maxHeight: MediaQuery.sizeOf(context).height * 0.9,
+        ),
         child: Column(
           mainAxisSize: MainAxisSize.min,
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
-            Row(
-              children: [
-                const LrWordmark(compact: true),
-                const Spacer(),
-                if (session != null)
-                  LrStatusChip(
-                    label: S.broadcasting,
-                    color: LR.alert,
-                    filled: true,
-                  ),
-              ],
+            _header(session),
+            // `Flexible`, nie `Expanded`: przy krótkiej treści arkusz ma
+            // zostać niski, a nie rozciągnąć się na cały ekran.
+            Flexible(
+              child: SingleChildScrollView(
+                padding: const EdgeInsets.fromLTRB(20, 16, 20, 24),
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: session == null
+                      ? _beforeStart()
+                      : _whileLive(session),
+                ),
+              ),
             ),
-            const SizedBox(height: 16),
-            if (session == null) ..._beforeStart() else ..._whileLive(session),
           ],
         ),
+      ),
+    );
+  }
+
+  /// Nagłówek, który NIE odjeżdża razem z treścią.
+  ///
+  /// Wyjście z arkusza jest kontrolą bezpieczeństwa: zawodnik dotyka go
+  /// w ruchu, jedną ręką, często w rękawiczkach. Przycisk na końcu dwóch
+  /// ekranów ustawień nie jest wyjściem — jest zagadką.
+  Widget _header(LiveSession? session) {
+    final fromRide = widget.source == LiveSheetSource.rideComputer;
+
+    return Container(
+      padding: const EdgeInsets.fromLTRB(20, 4, 8, 12),
+      decoration: const BoxDecoration(
+        border: Border(bottom: BorderSide(color: LR.line)),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Row(
+            children: [
+              const LrWordmark(compact: true),
+              const Spacer(),
+              LrSheetClose(onClose: _close),
+            ],
+          ),
+          const SizedBox(height: 6),
+          Padding(
+            padding: const EdgeInsets.only(right: 12),
+            child: session == null
+                ? Text(
+                    S.broadcastingOff,
+                    style: LR.fieldLabel.copyWith(color: LR.muted),
+                  )
+                : Align(
+                    alignment: Alignment.centerLeft,
+                    child: LrStatusChip(
+                      label: S.broadcastingActive,
+                      color: LR.alert,
+                      filled: true,
+                    ),
+                  ),
+          ),
+          const SizedBox(height: 12),
+          Padding(
+            padding: const EdgeInsets.only(right: 12),
+            child: FilledButton(
+              onPressed: _close,
+              style: FilledButton.styleFrom(
+                minimumSize: const Size.fromHeight(48),
+              ),
+              // Z licznika wracamy do nawigacji i tak to się nazywa.
+              // Z zakładki LIVE nie ma do czego wracać — zostaje „gotowe".
+              child: Text(fromRide ? S.backToNavigation : S.doneAction),
+            ),
+          ),
+        ],
       ),
     );
   }

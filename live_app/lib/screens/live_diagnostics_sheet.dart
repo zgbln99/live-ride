@@ -94,9 +94,16 @@ class _LiveDiagnosticsState extends State<_LiveDiagnostics> {
       controller: widget.scrollController,
       padding: const EdgeInsets.fromLTRB(20, 0, 20, 28),
       children: [
-        LrSectionHeader(
-          title: S.liveDiagnostics,
-          padding: const EdgeInsets.only(bottom: 4),
+        Row(
+          children: [
+            Expanded(
+              child: LrSectionHeader(
+                title: S.liveDiagnostics,
+                padding: const EdgeInsets.only(bottom: 4),
+              ),
+            ),
+            const LrSheetClose(),
+          ],
         ),
         Text(
           S.diagnosticsSubtitle,

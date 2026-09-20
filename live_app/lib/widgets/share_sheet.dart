@@ -62,7 +62,14 @@ class _ShareSheetState extends State<_ShareSheet> {
           mainAxisSize: MainAxisSize.min,
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
-            Text(widget.title, style: LR.fieldValue(18)),
+            // Zagnieżdżony arkusz zamyka sam siebie i wraca tam, skąd
+            // został otwarty — nigdy dalej.
+            Row(
+              children: [
+                Expanded(child: Text(widget.title, style: LR.fieldValue(18))),
+                const LrSheetClose(),
+              ],
+            ),
             if (widget.subtitle != null) ...[
               const SizedBox(height: 6),
               Text(

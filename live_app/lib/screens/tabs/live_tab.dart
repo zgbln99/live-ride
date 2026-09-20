@@ -266,7 +266,7 @@ class _LiveTabState extends State<LiveTab> {
   );
 
   Future<void> _openSheet(AppServices services) async {
-    await showLiveSheet(context, services);
+    await showLiveSheet(context, services, source: LiveSheetSource.liveTab);
     if (mounted) setState(() {});
   }
 }
